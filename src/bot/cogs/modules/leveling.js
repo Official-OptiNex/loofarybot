@@ -31,6 +31,120 @@ function getEffectiveXpSettings(config) {
   };
 }
 
+// Multiplier for a message: the channel's multiplier (or its parent's, for threads) times the
+// best matching role multiplier. Either side defaults to 1x when nothing is configured.
+function getXpMultiplier(config, channel, member) {
+  const multipliers = config.xpMultipliers || [];
+  if (multipliers.length === 0) return 1;
+
+  const channelIds = [channel.id, channel.parentId].filter(Boolean);
+  const channelEntry = multipliers.find((m) => m.type === 'channel' && channelIds.includes(m.targetId));
+  const channelMult = channelEntry ? channelEntry.multiplier : 1;
+
+  const roleMults = member
+    ? multipliers.filter((m) => m.type === 'role' && member.roles.cache.has(m.targetId)).map((m) => m.multiplier)
+    : [];
+  const roleMult = roleMults.length > 0 ? Math.max(...roleMults) : 1;
+
+  return channelMult * roleMult;
+}
+
+// Keeps the stored `level` in sync with `xp` after an atomic XP change.
+async function syncLevel(guildId, userId, levelXpBase) {
+  const record = await UserLevel.findOne({ guildId, userId });
+  if (!record) return null;
+  const oldLevel = record.level;
+  const newLevel = levelForXp(record.xp, levelXpBase);
+  if (newLevel !== oldLevel) {
+    await UserLevel.updateOne({ _id: record._id }, { $set: { level: newLevel } });
+    record.level = newLevel;
+  }
+  return { record, oldLevel, newLevel };
+}
+
+/**
+ * Grants every milestone role crossed between oldLevel (exclusive) and newLevel (inclusive).
+ * Returns role mentions that couldn't be assigned (usually a hierarchy problem).
+ */
+async function grantMilestoneRoles(guild, userId, config, oldLevel, newLevel) {
+  const milestonesCrossed = (config.levelRoles || []).filter((lr) => lr.level > oldLevel && lr.level <= newLevel);
+  if (milestonesCrossed.length === 0) return [];
+
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) return [];
+
+  const botMember = guild.members.me;
+  const failures = [];
+
+  for (const milestone of milestonesCrossed) {
+    const role = guild.roles.cache.get(milestone.roleId);
+
+    // The bot can only grant roles positioned BELOW its own highest role — this is
+    // the single most common reason a level-up role silently fails to attach.
+    if (role && botMember && botMember.roles.highest.position <= role.position) {
+      failures.push(`<@&${milestone.roleId}>`);
+      console.error(
+        `Cannot assign level-${milestone.level} role (${role.name}) in guild ${guild.id}: ` +
+          `bot's highest role is below it in the hierarchy.`
+      );
+      continue;
+    }
+
+    await member.roles.add(milestone.roleId).catch((err) => {
+      failures.push(`<@&${milestone.roleId}>`);
+      console.error(`Failed to add level-${milestone.level} role to ${member.id}:`, err.message);
+    });
+  }
+  return failures;
+}
+
+/**
+ * Atomically adds (or, with a negative delta, removes) XP, never dropping below 0.
+ * Grants any role rewards crossed on the way up. Used by /levels givexp|takexp and gambling payouts.
+ */
+async function adjustXp(guild, userId, delta, config = null) {
+  config = config || (await getOrCreateConfig(guild.id));
+  const { levelXpBase } = getEffectiveXpSettings(config);
+
+  await UserLevel.updateOne(
+    { guildId: guild.id, userId },
+    [
+      {
+        $set: {
+          xp: { $max: [0, { $add: [{ $ifNull: ['$xp', 0] }, delta] }] },
+          // Pipeline upserts skip schema defaults — fill them so chat XP's cooldown query matches.
+          level: { $ifNull: ['$level', 0] },
+          lastMessageTimestamp: { $ifNull: ['$lastMessageTimestamp', 0] },
+          createdAt: { $ifNull: ['$createdAt', '$$NOW'] }
+        }
+      }
+    ],
+    { upsert: true }
+  );
+
+  const result = await syncLevel(guild.id, userId, levelXpBase);
+  let roleFailures = [];
+  if (result.newLevel > result.oldLevel) {
+    roleFailures = await grantMilestoneRoles(guild, userId, config, result.oldLevel, result.newLevel);
+  }
+  return { ...result, roleFailures };
+}
+
+/**
+ * Atomically takes `amount` XP only if the user has at least that much. Returns false when
+ * they can't afford it — this is what stops double-spending the same XP on parallel bets.
+ */
+async function debitXp(guildId, userId, amount, levelXpBase) {
+  const updated = await UserLevel.findOneAndUpdate(
+    { guildId, userId, xp: { $gte: amount } },
+    { $inc: { xp: -amount } },
+    { new: true }
+  );
+  if (!updated) return false;
+  await syncLevel(guildId, userId, levelXpBase);
+  return true;
+}
+
 /**
  * Called on every message. Applies the per-user cooldown, awards XP, persists it,
  * and — on level-up — assigns any cosmetic roles configured for that milestone.
@@ -42,25 +156,33 @@ async function handleMessageXp(message) {
   if (!config.levelingEnabled) return;
 
   const { xpMin, xpMax, cooldownMs, levelXpBase } = getEffectiveXpSettings(config);
-
+  const guildId = message.guild.id;
+  const userId = message.author.id;
   const now = Date.now();
-  let record = await UserLevel.findOne({ guildId: message.guild.id, userId: message.author.id });
-  if (!record) {
-    record = new UserLevel({ guildId: message.guild.id, userId: message.author.id });
+
+  const multiplier = getXpMultiplier(config, message.channel, message.member);
+  const gained = Math.round((Math.floor(Math.random() * (xpMax - xpMin + 1)) + xpMin) * multiplier);
+  if (gained <= 0) return; // e.g. a 0x multiplier on a bot-spam channel
+
+  // Make sure the record exists, then award XP with a single conditional update so the cooldown
+  // check and the XP write can't race each other (or a gambling payout landing at the same time).
+  const exists = await UserLevel.exists({ guildId, userId });
+  if (!exists) {
+    await UserLevel.create({ guildId, userId }).catch((err) => {
+      if (err.code !== 11000) throw err; // another message created it first — fine
+    });
   }
 
-  if (now - record.lastMessageTimestamp < cooldownMs) return;
+  const updated = await UserLevel.findOneAndUpdate(
+    { guildId, userId, lastMessageTimestamp: { $lte: now - cooldownMs } },
+    { $inc: { xp: gained }, $set: { lastMessageTimestamp: now } },
+    { new: true }
+  );
+  if (!updated) return; // still on cooldown
 
-  const gained = Math.floor(Math.random() * (xpMax - xpMin + 1)) + xpMin;
-  const previousLevel = record.level;
-
-  record.xp += gained;
-  record.lastMessageTimestamp = now;
-  record.level = levelForXp(record.xp, levelXpBase);
-  await record.save();
-
-  if (record.level > previousLevel) {
-    await handleLevelUp(message, config, previousLevel, record.level);
+  const result = await syncLevel(guildId, userId, levelXpBase);
+  if (result && result.newLevel > result.oldLevel) {
+    await handleLevelUp(message, config, result.oldLevel, result.newLevel);
   }
 }
 
@@ -82,36 +204,7 @@ async function handleLevelUp(message, config, oldLevel, newLevel) {
     .send(`🎉 ${message.author}, you leveled up to **Level ${newLevel}**!`)
     .catch(() => null);
 
-  // Assign roles for every milestone crossed (covers users who jump multiple levels at once).
-  const milestonesCrossed = config.levelRoles.filter((lr) => lr.level > oldLevel && lr.level <= newLevel);
-  if (milestonesCrossed.length === 0) return;
-
-  const member = await message.guild.members.fetch(message.author.id).catch(() => null);
-  if (!member) return;
-
-  const botMember = message.guild.members.me;
-  const failures = [];
-
-  for (const milestone of milestonesCrossed) {
-    const role = message.guild.roles.cache.get(milestone.roleId);
-
-    // The bot can only grant roles positioned BELOW its own highest role — this is
-    // the single most common reason a level-up role silently fails to attach.
-    if (role && botMember && botMember.roles.highest.position <= role.position) {
-      failures.push(`<@&${milestone.roleId}>`);
-      console.error(
-        `Cannot assign level-${milestone.level} role (${role.name}) in guild ${message.guild.id}: ` +
-          `bot's highest role is below it in the hierarchy.`
-      );
-      continue;
-    }
-
-    await member.roles.add(milestone.roleId).catch((err) => {
-      failures.push(`<@&${milestone.roleId}>`);
-      console.error(`Failed to add level-${milestone.level} role to ${member.id}:`, err.message);
-    });
-  }
-
+  const failures = await grantMilestoneRoles(message.guild, message.author.id, config, oldLevel, newLevel);
   if (failures.length > 0) {
     announceChannel
       .send(
@@ -150,6 +243,11 @@ module.exports = {
   levelForXp,
   getOrCreateConfig,
   getEffectiveXpSettings,
+  getXpMultiplier,
+  syncLevel,
+  grantMilestoneRoles,
+  adjustXp,
+  debitXp,
   handleMessageXp,
   getLeaderboard,
   getRank

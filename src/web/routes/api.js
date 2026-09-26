@@ -1,7 +1,8 @@
 const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 const { requireAuth, requireGuildAccess } = require('../utils/authMiddleware');
-const { setupHoneypotChannel } = require('../../bot/cogs/modules/honeypot');
+const { setupHoneypotChannel, refreshCounterEmbed, isHttpUrl } = require('../../bot/cogs/modules/honeypot');
+const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
 const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
 const EmbedTemplate = require('../../database/models/EmbedTemplate');
 
@@ -83,16 +84,38 @@ router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, asyn
 
 router.post('/guilds/:guildId/honeypot', requireAuth, requireGuildAccess, async (req, res) => {
   try {
-    const { channelId, action } = req.body;
+    const { channelId, action, embed } = req.body;
     const client = req.app.locals.client;
 
     const config = await getOrCreateConfig(req.guild.id);
     if (action && ['kick', 'softban', 'ban'].includes(action)) {
       config.honeypotAction = action;
-      await config.save();
     }
+    if (embed && typeof embed === 'object') {
+      for (const key of ['imageUrl', 'thumbnailUrl']) {
+        if (embed[key] && !isHttpUrl(embed[key])) {
+          return res.status(400).json({ ok: false, error: `${key === 'imageUrl' ? 'Image' : 'Thumbnail'} URL must start with http(s)://` });
+        }
+      }
+      if (embed.color && !/^#[0-9A-F]{6}$/i.test(embed.color)) {
+        return res.status(400).json({ ok: false, error: 'Color must be a hex code like #ED4245.' });
+      }
+      config.honeypotEmbed = {
+        title: String(embed.title || '').slice(0, 256),
+        description: String(embed.description || '').slice(0, 4000),
+        color: embed.color || '',
+        footer: String(embed.footer || '').slice(0, 2048),
+        imageUrl: embed.imageUrl || '',
+        thumbnailUrl: embed.thumbnailUrl || '',
+        showCounts: embed.showCounts !== false
+      };
+    }
+    await config.save();
+
     if (channelId && channelId !== config.honeypotChannelId) {
       await setupHoneypotChannel(client, req.guild.id, channelId);
+    } else {
+      await refreshCounterEmbed(client, config);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -103,7 +126,17 @@ router.post('/guilds/:guildId/honeypot', requireAuth, requireGuildAccess, async 
 
 router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (req, res) => {
   try {
-    const { enabled, levelRoles, xpMin, xpMax, xpCooldownSeconds, levelXpBase, levelUpChannelId } = req.body;
+    const {
+      enabled,
+      levelRoles,
+      xpMin,
+      xpMax,
+      xpCooldownSeconds,
+      levelXpBase,
+      levelUpChannelId,
+      xpMultipliers,
+      rankCardBoosterOnly
+    } = req.body;
     const config = await getOrCreateConfig(req.guild.id);
 
     if (typeof enabled === 'boolean') config.levelingEnabled = enabled;
@@ -112,6 +145,15 @@ router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (r
         .filter((lr) => lr.level && lr.roleId)
         .map((lr) => ({ level: Number(lr.level), roleId: String(lr.roleId) }));
     }
+    if (Array.isArray(xpMultipliers)) {
+      const seen = new Set();
+      config.xpMultipliers = xpMultipliers
+        .filter((m) => ['channel', 'role'].includes(m.type) && m.targetId && m.multiplier !== '' && m.multiplier != null)
+        .map((m) => ({ type: m.type, targetId: String(m.targetId), multiplier: Math.min(Math.max(Number(m.multiplier), 0), 10) }))
+        .filter((m) => Number.isFinite(m.multiplier))
+        .filter((m) => !seen.has(`${m.type}:${m.targetId}`) && seen.add(`${m.type}:${m.targetId}`));
+    }
+    if (typeof rankCardBoosterOnly === 'boolean') config.rankCardBoosterOnly = rankCardBoosterOnly;
     // Empty string / undefined from the form clears the override back to the global default.
     config.xpMin = xpMin === '' || xpMin == null ? null : Number(xpMin);
     config.xpMax = xpMax === '' || xpMax == null ? null : Number(xpMax);
@@ -135,6 +177,66 @@ router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (r
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- XP Gambling ---
+
+router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { enabled, houseEdge, minBet, maxBet, channelId } = req.body;
+    const edge = Number(houseEdge);
+    const min = Number(minBet);
+    const max = maxBet === '' || maxBet == null || Number(maxBet) === 0 ? null : Number(maxBet);
+
+    if (!Number.isFinite(edge) || edge < 0 || edge > 50) {
+      return res.status(400).json({ ok: false, error: 'House edge must be between 0 and 50%.' });
+    }
+    if (!Number.isInteger(min) || min < 1) return res.status(400).json({ ok: false, error: 'Minimum bet must be at least 1.' });
+    if (max !== null && (!Number.isInteger(max) || max < min)) {
+      return res.status(400).json({ ok: false, error: 'Maximum bet must be a whole number ≥ the minimum (or blank).' });
+    }
+    if (channelId && !req.guild.channels.cache.has(String(channelId))) {
+      return res.status(400).json({ ok: false, error: 'That channel is not in this server.' });
+    }
+
+    const config = await getOrCreateConfig(req.guild.id);
+    config.gamblingEnabled = !!enabled;
+    config.gamblingHouseEdge = edge;
+    config.gamblingMinBet = min;
+    config.gamblingMaxBet = max;
+    config.gamblingChannelId = channelId || null;
+    await config.save();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to save gambling config:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Logging ---
+
+router.post('/guilds/:guildId/logs', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { channelId, events } = req.body;
+    if (channelId) {
+      const channel = req.guild.channels.cache.get(String(channelId));
+      if (!channel || !channel.isTextBased() || channel.isThread()) {
+        return res.status(400).json({ ok: false, error: 'That log channel is not a text channel in this server.' });
+      }
+    }
+    const config = await getOrCreateConfig(req.guild.id);
+    config.logChannelId = channelId || null;
+    if (events && typeof events === 'object') {
+      for (const key of Object.keys(LOG_EVENTS)) {
+        if (typeof events[key] === 'boolean') config.set(`logEvents.${key}`, events[key]);
+      }
+    }
+    await config.save();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to save logging config:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

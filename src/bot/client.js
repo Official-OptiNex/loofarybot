@@ -5,9 +5,11 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates // voice join/leave/move logs
   ],
-  partials: [Partials.Message, Partials.Channel]
+  // Partials let logging still see edits/deletes/leaves for messages & members that aren't cached.
+  partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User]
 });
 
 // In-memory command collection (populated in registerCommands).

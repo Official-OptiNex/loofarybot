@@ -1,6 +1,15 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder
+} = require('discord.js');
 const GuildConfig = require('../../database/models/GuildConfig');
-const { setupHoneypotChannel, refreshCounterEmbed } = require('../cogs/modules/honeypot');
+const { setupHoneypotChannel, refreshCounterEmbed, buildCounterEmbed, isHttpUrl } = require('../cogs/modules/honeypot');
+const { resolveColor } = require('../cogs/modules/giveaways');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
 
 const data = new SlashCommandBuilder()
@@ -29,7 +38,14 @@ const data = new SlashCommandBuilder()
           )
       )
   )
-  .addSubcommand((sub) => sub.setName('status').setDescription('Show current honeypot configuration and counts'));
+  .addSubcommand((sub) => sub.setName('status').setDescription('Show current honeypot configuration and counts'))
+  .addSubcommand((sub) =>
+    sub
+      .setName('embed')
+      .setDescription('Customize (disguise) the trap message — opens an editor')
+      .addBooleanOption((opt) => opt.setName('show_counts').setDescription('Show the kick/ban counters (turn off to disguise it better)'))
+  )
+  .addSubcommand((sub) => sub.setName('embed_reset').setDescription('Reset the trap message to the default look'));
 
 async function execute(interaction, client) {
   const sub = interaction.options.getSubcommand();
@@ -53,6 +69,38 @@ async function execute(interaction, client) {
     return interaction.reply({ content: `✅ Honeypot enforcement action set to **${type}**.`, ephemeral: true });
   }
 
+  if (sub === 'embed') {
+    const config = await getOrCreateConfig(interaction.guildId);
+    const current = config.honeypotEmbed || {};
+    const showCounts = interaction.options.getBoolean('show_counts') ?? current.showCounts !== false;
+
+    const input = (id, label, style, value, max, required = false) => {
+      const t = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(max);
+      if (value) t.setValue(String(value).slice(0, max));
+      return new ActionRowBuilder().addComponents(t);
+    };
+
+    const modal = new ModalBuilder()
+      .setCustomId(`hpembed_modal:${showCounts ? 1 : 0}`)
+      .setTitle('Customize Honeypot Message')
+      .addComponents(
+        input('hp_title', 'Title (blank = default)', TextInputStyle.Short, current.title, 256),
+        input('hp_desc', 'Description (blank = default)', TextInputStyle.Paragraph, current.description, 4000),
+        input('hp_color', 'Color (hex or name, blank = red)', TextInputStyle.Short, current.color, 20),
+        input('hp_footer', 'Footer text (blank = default)', TextInputStyle.Short, current.footer, 2048),
+        input('hp_image', 'Image URL (optional)', TextInputStyle.Short, current.imageUrl, 1000)
+      );
+    return interaction.showModal(modal);
+  }
+
+  if (sub === 'embed_reset') {
+    const config = await getOrCreateConfig(interaction.guildId);
+    config.honeypotEmbed = { title: '', description: '', color: '', footer: '', imageUrl: '', thumbnailUrl: '', showCounts: true };
+    await config.save();
+    await refreshCounterEmbed(client, config);
+    return interaction.reply({ content: '✅ Honeypot message reset to the default look.', ephemeral: true });
+  }
+
   if (sub === 'status') {
     const config = await GuildConfig.findOne({ guildId: interaction.guildId });
     if (!config || !config.honeypotChannelId) {
@@ -72,4 +120,36 @@ async function execute(interaction, client) {
   }
 }
 
-module.exports = { data, execute };
+async function handleModalSubmit(interaction, client) {
+  const showCounts = interaction.customId.split(':')[1] === '1';
+  const get = (id) => interaction.fields.getTextInputValue(id).trim();
+
+  const imageUrl = get('hp_image');
+  if (imageUrl && !isHttpUrl(imageUrl)) {
+    return interaction.reply({ content: '❌ The image URL must start with `http://` or `https://`.', ephemeral: true });
+  }
+  const rawColor = get('hp_color');
+
+  const config = await getOrCreateConfig(interaction.guildId);
+  config.honeypotEmbed = {
+    ...(config.honeypotEmbed?.toObject ? config.honeypotEmbed.toObject() : config.honeypotEmbed || {}),
+    title: get('hp_title'),
+    description: get('hp_desc'),
+    color: rawColor ? resolveColor(rawColor) : '',
+    footer: get('hp_footer'),
+    imageUrl,
+    showCounts
+  };
+  await config.save();
+  await refreshCounterEmbed(client, config);
+
+  return interaction.reply({
+    content: config.honeypotChannelId
+      ? '✅ Honeypot message updated. Preview:'
+      : '✅ Saved. It will be used once you run `/honeypot setup`. Preview:',
+    embeds: [buildCounterEmbed(config)],
+    ephemeral: true
+  });
+}
+
+module.exports = { data, execute, handleModalSubmit };

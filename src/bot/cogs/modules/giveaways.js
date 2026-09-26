@@ -1,20 +1,11 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Giveaway = require('../../../database/models/Giveaway');
+const UserLevel = require('../../../database/models/UserLevel');
+const { parseDuration } = require('../../utils/duration');
 
 // Keys track live setTimeout handles so a redeploy doesn't create duplicate timers,
 // and so /loof delete or /loof end can cancel a pending timer cleanly.
 const activeTimers = new Map(); // messageId -> Timeout
-
-function parseDuration(str) {
-  if (!str) return null;
-  const match = str.trim().match(/^(\d+)([smhd])$/i);
-  if (!match) return null;
-  const num = parseInt(match[1], 10);
-  const unit = match[2].toLowerCase();
-  if (num <= 0) return null;
-  const mult = { s: 1000, m: 60000, h: 3600000, d: 86400000 }[unit];
-  return num * mult;
-}
 
 function formatTime(ms) {
   return `<t:${Math.floor(ms / 1000)}:R>`;
@@ -41,24 +32,75 @@ function resolveColor(input) {
   return '#5865F2';
 }
 
+function hasRequirements(req) {
+  return !!(req && (req.roleId || req.minDaysInServer || req.minLevel));
+}
+
+function describeRequirements(req) {
+  if (!hasRequirements(req)) return '';
+  const parts = [];
+  if (req.roleId) parts.push(`• Have the <@&${req.roleId}> role`);
+  if (req.minDaysInServer) parts.push(`• Be in the server for **${req.minDaysInServer}+ day(s)**`);
+  if (req.minLevel) parts.push(`• Be **Level ${req.minLevel}+**`);
+  return `\n\n**Requirements:**\n${parts.join('\n')}`;
+}
+
 function buildGiveawayEmbed(g) {
+  if (g.type === 'drop') {
+    return new EmbedBuilder()
+      .setTitle(`⚡ Drop: ${g.prize}`)
+      .setDescription(
+        `${g.customDesc}${describeRequirements(g.requirements)}\n\n**Prizes:** ${g.winnerCount} · **First ${g.winnerCount} to click win!**\n` +
+          `**Expires:** ${formatTime(g.endTimestamp)}\n**Hosted By:** <@${g.hostId}>`
+      )
+      .setColor(g.colorHex)
+      .setFooter({ text: `Claimed: ${g.entries.length}/${g.winnerCount}` });
+  }
   return new EmbedBuilder()
     .setTitle(`🎁 Giveaway: ${g.prize}`)
     .setDescription(
-      `${g.customDesc}\n\n**Ends:** ${formatTime(g.endTimestamp)}\n**Winners:** ${g.winnerCount}\n**Hosted By:** <@${g.hostId}>`
+      `${g.customDesc}${describeRequirements(g.requirements)}\n\n**Ends:** ${formatTime(g.endTimestamp)}\n**Winners:** ${g.winnerCount}\n**Hosted By:** <@${g.hostId}>`
     )
     .setColor(g.colorHex)
     .setFooter({ text: `Entries: ${g.entries.length}` })
     .setTimestamp(g.endTimestamp);
 }
 
-function buildEntryRow(emoji, disabled = false) {
+/**
+ * Returns a human-readable reason the member can't enter, or null if they meet every requirement.
+ * Pass `levelsByUser` (userId -> level) to avoid a DB lookup per member when checking in bulk.
+ */
+async function checkRequirements(member, g, levelsByUser = null) {
+  const req = g.requirements;
+  if (!hasRequirements(req)) return null;
+  if (!member) return 'You must be a member of this server.';
+
+  if (req.roleId && !member.roles.cache.has(req.roleId)) {
+    return `You need the <@&${req.roleId}> role to enter.`;
+  }
+  if (req.minDaysInServer) {
+    const days = member.joinedTimestamp ? (Date.now() - member.joinedTimestamp) / 86400000 : 0;
+    if (days < req.minDaysInServer) {
+      return `You need to have been in the server for **${req.minDaysInServer} day(s)** (you're at ${Math.floor(days)}).`;
+    }
+  }
+  if (req.minLevel) {
+    let level;
+    if (levelsByUser) level = levelsByUser.get(member.id) ?? 0;
+    else level = (await UserLevel.findOne({ guildId: member.guild.id, userId: member.id }).lean())?.level ?? 0;
+    if (level < req.minLevel) return `You need to be **Level ${req.minLevel}** (you're Level ${level}).`;
+  }
+  return null;
+}
+
+function buildEntryRow(emoji, disabled = false, type = 'timed') {
+  const isDrop = type === 'drop';
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(disabled ? 'g_ended' : 'g_enter')
-      .setLabel(disabled ? 'Ended' : 'Enter')
+      .setCustomId(disabled ? 'g_ended' : isDrop ? 'g_drop' : 'g_enter')
+      .setLabel(disabled ? 'Ended' : isDrop ? 'Claim!' : 'Enter')
       .setEmoji(disabled ? '🔒' : emoji)
-      .setStyle(disabled ? ButtonStyle.Secondary : ButtonStyle.Primary)
+      .setStyle(disabled ? ButtonStyle.Secondary : isDrop ? ButtonStyle.Success : ButtonStyle.Primary)
       .setDisabled(disabled)
   );
 }
@@ -78,7 +120,10 @@ async function replyOrEdit(interaction, options) {
   return interaction.reply(options);
 }
 
-async function launchGiveaway(client, { interaction, channel, durationMs, winnerCount, prize, pingRole, colorHex, emoji, customDesc }) {
+async function launchGiveaway(
+  client,
+  { interaction, channel, durationMs, winnerCount, prize, pingRole, colorHex, emoji, customDesc, type = 'timed', requirements = {} }
+) {
   const endTimestamp = Date.now() + durationMs;
 
   const draft = {
@@ -89,11 +134,17 @@ async function launchGiveaway(client, { interaction, channel, durationMs, winner
     emoji,
     customDesc,
     hostId: interaction.user.id,
-    entries: []
+    entries: [],
+    type,
+    requirements: {
+      roleId: requirements.roleId || null,
+      minDaysInServer: requirements.minDaysInServer || null,
+      minLevel: requirements.minLevel || null
+    }
   };
 
   const embed = buildGiveawayEmbed(draft);
-  const row = buildEntryRow(emoji);
+  const row = buildEntryRow(emoji, false, type);
   const pingContent = pingRole ? `${pingRole}` : undefined;
 
   try {
@@ -109,7 +160,7 @@ async function launchGiveaway(client, { interaction, channel, durationMs, winner
     scheduleGiveawayEnd(client, msg.id, durationMs);
 
     return await replyOrEdit(interaction, {
-      content: `✅ Giveaway started in ${channel}! [Jump to Message](${msg.url})`
+      content: `✅ ${type === 'drop' ? 'Drop' : 'Giveaway'} started in ${channel}! [Jump to Message](${msg.url})`
     });
   } catch (err) {
     console.error('Error posting giveaway message:', err);
@@ -143,8 +194,10 @@ async function finishGiveawayById(client, messageId) {
 }
 
 async function finishGiveaway(client, g) {
-  g.ended = true;
-  await g.save();
+  // Atomic claim so a timer, the periodic sweep and the last drop click can't all finish it at once.
+  const claimed = await Giveaway.findOneAndUpdate({ _id: g._id, ended: false }, { $set: { ended: true } }, { new: true });
+  if (!claimed) return;
+  g = claimed;
   clearScheduledEnd(g.messageId);
 
   const channel = await client.channels.fetch(g.channelId).catch(() => null);
@@ -153,15 +206,23 @@ async function finishGiveaway(client, g) {
   const msg = await channel.messages.fetch(g.messageId).catch(() => null);
 
   let winners = [];
-  if (g.entries.length > 0) {
-    const shuffled = [...g.entries].sort(() => 0.5 - Math.random());
+  if (g.type === 'drop') {
+    // Drop winners are simply whoever claimed in time.
+    winners = [...g.entries];
+  } else if (g.entries.length > 0) {
+    let pool = [...g.entries];
+    // Requirements may have been added after people entered — only draw from eligible entrants.
+    if (hasRequirements(g.requirements) && channel.guild) {
+      pool = await filterEligible(channel.guild, g, pool);
+    }
+    const shuffled = pool.sort(() => 0.5 - Math.random());
     winners = shuffled.slice(0, Math.min(g.winnerCount, shuffled.length));
   }
   const winnerMentions = winners.length > 0 ? winners.map((id) => `<@${id}>`).join(', ') : 'No valid entries.';
 
   if (msg) {
     const endedEmbed = new EmbedBuilder()
-      .setTitle(`🎁 Giveaway Ended: ${g.prize}`)
+      .setTitle(`${g.type === 'drop' ? '⚡ Drop' : '🎁 Giveaway'} Ended: ${g.prize}`)
       .setDescription(`**Winners:** ${winnerMentions}\n**Hosted By:** <@${g.hostId}>`)
       .setColor('#2B2D31')
       .setTimestamp();
@@ -171,12 +232,29 @@ async function finishGiveaway(client, g) {
 
   if (winners.length > 0) {
     channel.send(`🎉 Congratulations ${winnerMentions}! You won **${g.prize}**!`).catch(() => null);
+  } else if (g.type === 'drop') {
+    channel.send(`⚡ The drop for **${g.prize}** expired with no claims.`).catch(() => null);
   } else {
     channel.send(`Giveaway for **${g.prize}** ended, but there were no valid entries.`).catch(() => null);
   }
 }
 
+async function filterEligible(guild, g, userIds) {
+  const levelsByUser = new Map();
+  if (g.requirements.minLevel) {
+    const records = await UserLevel.find({ guildId: guild.id, userId: { $in: userIds } }, { userId: 1, level: 1 }).lean();
+    records.forEach((r) => levelsByUser.set(r.userId, r.level));
+  }
+  const eligible = [];
+  for (const userId of userIds) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member && !(await checkRequirements(member, g, levelsByUser))) eligible.push(userId);
+  }
+  return eligible;
+}
+
 async function handleButtonInteraction(interaction) {
+  if (interaction.customId === 'g_drop') return handleDropClaim(interaction);
   if (interaction.customId !== 'g_enter') return;
 
   const g = await Giveaway.findOne({ messageId: interaction.message.id });
@@ -185,17 +263,48 @@ async function handleButtonInteraction(interaction) {
   }
 
   const userId = interaction.user.id;
-  const idx = g.entries.indexOf(userId);
-  if (idx !== -1) {
-    g.entries.splice(idx, 1);
-    await g.save();
-    await updateEmbedEntries(interaction.message, g);
+  if (g.entries.includes(userId)) {
+    const updated = await Giveaway.findOneAndUpdate({ _id: g._id }, { $pull: { entries: userId } }, { new: true });
+    await updateEmbedEntries(interaction.message, updated);
     return interaction.reply({ content: 'You left the giveaway.', ephemeral: true });
   }
-  g.entries.push(userId);
-  await g.save();
-  await updateEmbedEntries(interaction.message, g);
+
+  const reason = await checkRequirements(interaction.member, g);
+  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true });
+
+  const updated = await Giveaway.findOneAndUpdate({ _id: g._id, ended: false }, { $addToSet: { entries: userId } }, { new: true });
+  if (!updated) return interaction.reply({ content: '❌ This giveaway has ended.', ephemeral: true });
+  await updateEmbedEntries(interaction.message, updated);
   return interaction.reply({ content: '🎉 You entered the giveaway!', ephemeral: true });
+}
+
+async function handleDropClaim(interaction) {
+  const g = await Giveaway.findOne({ messageId: interaction.message.id });
+  if (!g || g.ended) return interaction.reply({ content: '⌛ Too late — this drop is over.', ephemeral: true });
+
+  const userId = interaction.user.id;
+  if (g.entries.includes(userId)) return interaction.reply({ content: "✅ You've already claimed this drop.", ephemeral: true });
+
+  const reason = await checkRequirements(interaction.member, g);
+  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true });
+
+  // Single atomic update: only succeeds while there's still a free slot and the user hasn't claimed,
+  // so simultaneous clicks can never hand out more prizes than winnerCount.
+  const updated = await Giveaway.findOneAndUpdate(
+    { _id: g._id, ended: false, entries: { $ne: userId }, $expr: { $lt: [{ $size: '$entries' }, '$winnerCount'] } },
+    { $push: { entries: userId } },
+    { new: true }
+  );
+  if (!updated) return interaction.reply({ content: '⌛ Too slow — every prize was already claimed!', ephemeral: true });
+
+  const position = updated.entries.indexOf(userId) + 1;
+  await interaction.reply({ content: `⚡ You claimed prize #${position} of **${updated.prize}**!`, ephemeral: true });
+
+  if (updated.entries.length >= updated.winnerCount) {
+    await finishGiveaway(interaction.client, updated);
+  } else {
+    await interaction.message.edit({ embeds: [buildGiveawayEmbed(updated)] }).catch(() => null);
+  }
 }
 
 async function updateEmbedEntries(message, giveaway) {
@@ -231,6 +340,9 @@ module.exports = {
   resolveColor,
   buildGiveawayEmbed,
   buildEntryRow,
+  hasRequirements,
+  describeRequirements,
+  checkRequirements,
   replyOrEdit,
   launchGiveaway,
   finishGiveaway,

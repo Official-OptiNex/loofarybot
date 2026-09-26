@@ -1,5 +1,14 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
-const { getOrCreateConfig, getRank, getLeaderboard, xpForLevel, getEffectiveXpSettings } = require('../cogs/modules/leveling');
+const {
+  getOrCreateConfig,
+  getRank,
+  getLeaderboard,
+  xpForLevel,
+  getEffectiveXpSettings,
+  adjustXp
+} = require('../cogs/modules/leveling');
+const UserLevel = require('../../database/models/UserLevel');
+const { resolveColor } = require('../cogs/modules/giveaways');
 
 const data = new SlashCommandBuilder()
   .setName('levels')
@@ -61,11 +70,100 @@ const data = new SlashCommandBuilder()
           .setRequired(false)
       )
   )
+  .addSubcommandGroup((group) =>
+    group
+      .setName('multiplier')
+      .setDescription('Bonus XP multipliers for channels or roles (Admin only)')
+      .addSubcommand((sub) =>
+        sub
+          .setName('add')
+          .setDescription('Set an XP multiplier for a channel or a role')
+          .addNumberOption((opt) =>
+            opt.setName('multiplier').setDescription('e.g. 2 = double XP, 0.5 = half, 0 = no XP').setMinValue(0).setMaxValue(10).setRequired(true)
+          )
+          .addChannelOption((opt) => opt.setName('channel').setDescription('Channel (threads use their parent channel)'))
+          .addRoleOption((opt) => opt.setName('role').setDescription('Role (e.g. Server Booster)'))
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName('remove')
+          .setDescription('Remove a channel or role multiplier')
+          .addChannelOption((opt) => opt.setName('channel').setDescription('Channel'))
+          .addRoleOption((opt) => opt.setName('role').setDescription('Role'))
+      )
+      .addSubcommand((sub) => sub.setName('list').setDescription('List every XP multiplier'))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('givexp')
+      .setDescription('Give XP to a member (Admin only)')
+      .addUserOption((opt) => opt.setName('user').setDescription('Member').setRequired(true))
+      .addIntegerOption((opt) => opt.setName('amount').setDescription('XP to give').setMinValue(1).setRequired(true))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('takexp')
+      .setDescription('Take XP from a member (Admin only)')
+      .addUserOption((opt) => opt.setName('user').setDescription('Member').setRequired(true))
+      .addIntegerOption((opt) => opt.setName('amount').setDescription('XP to take').setMinValue(1).setRequired(true))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('resetxp')
+      .setDescription("Reset a member's XP and level to 0 (Admin only)")
+      .addUserOption((opt) => opt.setName('user').setDescription('Member').setRequired(true))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('card')
+      .setDescription('Customize your /levels rank card')
+      .addStringOption((opt) => opt.setName('color').setDescription('Accent color (hex like #FF5733 or a name like gold)'))
+      .addStringOption((opt) => opt.setName('background').setDescription('Image URL shown on your card (https://...)'))
+      .addStringOption((opt) => opt.setName('text').setDescription('A short bio/tagline shown on your card').setMaxLength(200))
+      .addBooleanOption((opt) => opt.setName('reset').setDescription('Reset your card to the default look'))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('cardaccess')
+      .setDescription('Choose who can customize rank cards (Admin only)')
+      .addBooleanOption((opt) => opt.setName('boosters_only').setDescription('Only server boosters can use /levels card').setRequired(true))
+  )
   .addSubcommand((sub) => sub.setName('xpconfig_show').setDescription('Show current XP tuning for this server'));
 
 // Admin-only subcommands. Discord only lets us gate an entire command (not a single
 // subcommand) via setDefaultMemberPermissions, so we enforce this at runtime instead.
-const ADMIN_ONLY_SUBCOMMANDS = ['setrole', 'removerole', 'toggle', 'xpconfig', 'announcechannel'];
+const ADMIN_ONLY_SUBCOMMANDS = [
+  'setrole',
+  'removerole',
+  'toggle',
+  'xpconfig',
+  'announcechannel',
+  'givexp',
+  'takexp',
+  'resetxp',
+  'cardaccess',
+  'add',
+  'remove',
+  'list'
+];
+
+function progressBar(current, total, size = 12) {
+  const ratio = total > 0 ? Math.min(Math.max(current / total, 0), 1) : 0;
+  const filled = Math.round(ratio * size);
+  return `${'▰'.repeat(filled)}${'▱'.repeat(size - filled)} ${Math.round(ratio * 100)}%`;
+}
+
+function isHttpsUrl(str) {
+  try {
+    return new URL(str).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function describeMultiplier(m) {
+  return `${m.type === 'channel' ? `<#${m.targetId}>` : `<@&${m.targetId}>`} → **${m.multiplier}x**`;
+}
 
 function checkRoleHierarchy(guild, role) {
   const botMember = guild.members.me;
@@ -74,6 +172,7 @@ function checkRoleHierarchy(guild, role) {
 }
 
 async function execute(interaction) {
+  const group = interaction.options.getSubcommandGroup(false);
   const sub = interaction.options.getSubcommand();
 
   if (ADMIN_ONLY_SUBCOMMANDS.includes(sub) && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
@@ -89,15 +188,21 @@ async function execute(interaction) {
       return interaction.reply({ content: `${target.username} hasn't earned any XP yet.`, ephemeral: true });
     }
     const { record, rank } = result;
+    const levelStartXp = record.level > 0 ? xpForLevel(record.level, levelXpBase) : 0;
     const nextLevelXp = xpForLevel(record.level + 1, levelXpBase);
+    const card = record.card || {};
     const embed = new EmbedBuilder()
-      .setTitle(`${target.username}'s Rank`)
-      .setColor('#5865F2')
+      .setAuthor({ name: `${target.username}'s Rank`, iconURL: target.displayAvatarURL({ size: 64 }) })
+      .setColor(card.color || '#5865F2')
+      .setThumbnail(target.displayAvatarURL({ size: 128 }))
       .addFields(
         { name: 'Level', value: `${record.level}`, inline: true },
         { name: 'XP', value: `${record.xp} / ${nextLevelXp}`, inline: true },
-        { name: 'Server Rank', value: `#${rank}`, inline: true }
+        { name: 'Server Rank', value: `#${rank}`, inline: true },
+        { name: 'Progress', value: progressBar(record.xp - levelStartXp, nextLevelXp - levelStartXp) }
       );
+    if (card.text) embed.setDescription(card.text);
+    if (card.backgroundUrl) embed.setImage(card.backgroundUrl);
     return interaction.reply({ embeds: [embed] });
   }
 
@@ -185,6 +290,129 @@ async function execute(interaction) {
         `✅ XP settings updated.\n` +
         `**Min XP:** ${effective.xpMin} • **Max XP:** ${effective.xpMax} • ` +
         `**Cooldown:** ${effective.cooldownMs / 1000}s • **Level curve base:** ${effective.levelXpBase}`,
+      ephemeral: true
+    });
+  }
+
+  if (group === 'multiplier') {
+    const config = await getOrCreateConfig(interaction.guildId);
+    const channel = interaction.options.getChannel('channel');
+    const role = interaction.options.getRole('role');
+
+    if (sub === 'list') {
+      const list = config.xpMultipliers || [];
+      return interaction.reply({
+        content: list.length ? `**XP multipliers:**\n${list.map(describeMultiplier).join('\n')}` : 'No XP multipliers are set.',
+        ephemeral: true,
+        allowedMentions: { parse: [] }
+      });
+    }
+
+    if ((channel ? 1 : 0) + (role ? 1 : 0) !== 1) {
+      return interaction.reply({ content: '❌ Pick exactly one: a `channel` or a `role`.', ephemeral: true });
+    }
+    const type = channel ? 'channel' : 'role';
+    const targetId = (channel || role).id;
+    const existing = config.xpMultipliers.find((m) => m.type === type && m.targetId === targetId);
+
+    if (sub === 'add') {
+      const multiplier = interaction.options.getNumber('multiplier');
+      if (existing) existing.multiplier = multiplier;
+      else config.xpMultipliers.push({ type, targetId, multiplier });
+      await config.save();
+      return interaction.reply({
+        content: `✅ ${describeMultiplier({ type, targetId, multiplier })}` +
+          (type === 'role' ? '\nIf a member has several multiplier roles, the highest one applies (then × the channel multiplier).' : ''),
+        ephemeral: true,
+        allowedMentions: { parse: [] }
+      });
+    }
+
+    if (sub === 'remove') {
+      if (!existing) return interaction.reply({ content: '❌ No multiplier is set for that.', ephemeral: true });
+      config.xpMultipliers = config.xpMultipliers.filter((m) => m !== existing);
+      await config.save();
+      return interaction.reply({ content: '✅ Multiplier removed.', ephemeral: true });
+    }
+  }
+
+  if (sub === 'givexp' || sub === 'takexp') {
+    const target = interaction.options.getUser('user');
+    const amount = interaction.options.getInteger('amount');
+    if (target.bot) return interaction.reply({ content: "❌ Bots don't earn XP.", ephemeral: true });
+    const result = await adjustXp(interaction.guild, target.id, sub === 'givexp' ? amount : -amount);
+    const levelChange =
+      result.newLevel !== result.oldLevel ? ` (Level ${result.oldLevel} → **${result.newLevel}**)` : ` (Level ${result.newLevel})`;
+    const warn = result.roleFailures.length
+      ? `\n⚠️ Couldn't assign ${result.roleFailures.join(', ')} — move LoofaryBot's role above it.`
+      : '';
+    return interaction.reply({
+      content: `✅ ${sub === 'givexp' ? 'Gave' : 'Took'} **${amount} XP** ${sub === 'givexp' ? 'to' : 'from'} ${target}. ` +
+        `They now have **${result.record.xp} XP**${levelChange}.${warn}`,
+      ephemeral: true
+    });
+  }
+
+  if (sub === 'resetxp') {
+    const target = interaction.options.getUser('user');
+    await UserLevel.updateOne({ guildId: interaction.guildId, userId: target.id }, { $set: { xp: 0, level: 0 } });
+    return interaction.reply({ content: `✅ Reset ${target}'s XP and level to 0. (Earned role rewards were kept.)`, ephemeral: true });
+  }
+
+  if (sub === 'cardaccess') {
+    const config = await getOrCreateConfig(interaction.guildId);
+    config.rankCardBoosterOnly = interaction.options.getBoolean('boosters_only');
+    await config.save();
+    return interaction.reply({
+      content: `✅ Rank card customization is now available to **${config.rankCardBoosterOnly ? 'server boosters only' : 'everyone'}**.`,
+      ephemeral: true
+    });
+  }
+
+  if (sub === 'card') {
+    const config = await getOrCreateConfig(interaction.guildId);
+    const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+    if (config.rankCardBoosterOnly && !interaction.member?.premiumSince && !isAdmin) {
+      return interaction.reply({ content: '💎 Rank card customization is a **server booster** perk here.', ephemeral: true });
+    }
+
+    const color = interaction.options.getString('color');
+    const background = interaction.options.getString('background');
+    const text = interaction.options.getString('text');
+    const reset = interaction.options.getBoolean('reset');
+
+    const update = {};
+    if (reset) {
+      update['card.color'] = null;
+      update['card.backgroundUrl'] = null;
+      update['card.text'] = null;
+    } else {
+      if (!color && !background && !text) {
+        return interaction.reply({ content: '❌ Give at least one of `color`, `background`, `text` — or `reset`.', ephemeral: true });
+      }
+      if (color) {
+        const hex = resolveColor(color);
+        if (hex === '#5865F2' && !/blurple|5865f2/i.test(color)) {
+          return interaction.reply({ content: '❌ Unknown color. Use a hex code like `#FF5733` or a name like `gold`.', ephemeral: true });
+        }
+        update['card.color'] = hex;
+      }
+      if (background) {
+        if (!isHttpsUrl(background)) {
+          return interaction.reply({ content: '❌ The background must be an `https://` image link.', ephemeral: true });
+        }
+        update['card.backgroundUrl'] = background;
+      }
+      if (text) update['card.text'] = text;
+    }
+
+    await UserLevel.updateOne(
+      { guildId: interaction.guildId, userId: interaction.user.id },
+      { $set: update, $setOnInsert: { xp: 0, level: 0, lastMessageTimestamp: 0 } },
+      { upsert: true }
+    );
+    return interaction.reply({
+      content: reset ? '✅ Your rank card was reset.' : '✅ Rank card updated — check it with `/levels rank`.',
       ephemeral: true
     });
   }
