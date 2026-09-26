@@ -5,7 +5,8 @@ const {
   ButtonBuilder,
   ButtonStyle,
   TextDisplayBuilder,
-  MessageFlags
+  MessageFlags,
+  ComponentType
 } = require('discord.js');
 const { getOrCreateConfig, getEffectiveXpSettings, adjustXp, debitXp } = require('./leveling');
 const UserLevel = require('../../../database/models/UserLevel');
@@ -242,6 +243,71 @@ function startGame(interaction, game, ctx) {
   return game;
 }
 
+// ---------------------------------------------------------------- Spectators vs. the player
+// Everyone can watch a game live on its public message, but every button there is disabled, so
+// nobody else can press anything. The player drives the game from a private copy (only they see it).
+
+const toJSON = (c) => (c && typeof c.toJSON === 'function' ? c.toJSON() : c);
+
+function disableButtons(node) {
+  if (Array.isArray(node)) return node.map(disableButtons);
+  if (!node || typeof node !== 'object') return node;
+  const out = { ...node };
+  if (out.type === ComponentType.Button && out.style !== ButtonStyle.Link) out.disabled = true;
+  if (out.components) out.components = disableButtons(out.components.map(toJSON));
+  if (out.accessory) out.accessory = disableButtons(toJSON(out.accessory));
+  return out;
+}
+
+const isV2 = (payload) => ((payload.flags ?? 0) & MessageFlags.IsComponentsV2) !== 0;
+
+// Adds a small line of text under the game (a TextDisplay for Components V2 messages, content otherwise).
+function withNote(payload, note) {
+  if (isV2(payload)) return { ...payload, components: [...(payload.components || []).map(toJSON), { type: ComponentType.TextDisplay, content: note }] };
+  return { ...payload, content: note };
+}
+
+// Once the game is over the note goes away (edits keep old text unless content is cleared explicitly).
+const clearNote = (payload) => (isV2(payload) ? payload : { ...payload, content: payload.content ?? null });
+
+function spectatorView(game, payload) {
+  const view = { ...payload, components: disableButtons((payload.components || []).map(toJSON)), allowedMentions: { parse: [] } };
+  return game.finished ? clearNote(view) : withNote(view, `-# 👀 Watching live — only <@${game.userId}> can play this game.`);
+}
+
+function playerView(game, payload) {
+  return game.finished ? clearNote(payload) : withNote(payload, '-# 🎮 Your controls — only you can see these buttons. Everyone else watches the public board.');
+}
+
+/** Posts a new game: the public (watch-only) board, then the player's private controls. */
+async function showGame(interaction, game) {
+  const payload = game.render();
+  await interaction.reply(spectatorView(game, payload));
+  game.message = await interaction.fetchReply().catch(() => null);
+  if (game.finished) return; // e.g. a blackjack natural settles straight away
+  const flags = (payload.flags ?? 0) | MessageFlags.Ephemeral;
+  let controls = null;
+  try {
+    controls = await interaction.followUp({ ...playerView(game, payload), flags });
+  } catch (err) {
+    console.error('Could not send private game controls:', err.message);
+  }
+  if (controls) {
+    game.editControls = (p) => interaction.webhook.editMessage(controls, playerView(game, p));
+  } else if (game.message) {
+    // Couldn't send the private copy — fall back to playable buttons on the public message.
+    await game.message.edit(payload).catch(() => null);
+    game.publicControls = true;
+  }
+}
+
+/** Shows a state change on both copies (used when the bot itself ends a game: idle timeout, restart). */
+async function syncViews(game, payload) {
+  if (!payload) return;
+  if (game.message) await game.message.edit(game.publicControls ? payload : spectatorView(game, payload)).catch(() => null);
+  if (game.editControls) await game.editControls(payload).catch(() => null);
+}
+
 function touchGame(game) {
   clearTimeout(game.timer);
   game.timer = setTimeout(() => expireGame(game).catch(console.error), IDLE_TIMEOUT_MS);
@@ -264,13 +330,11 @@ function hasActiveGame(guildId, userId) {
 async function expireGame(game) {
   if (game.finished) return;
   if (game.onExpire) {
-    const rendered = await game.onExpire();
-    if (game.message && rendered) await game.message.edit(rendered).catch(() => null);
+    await syncViews(game, await game.onExpire());
     return;
   }
   if (game.canCashOut()) {
-    const rendered = await cashOut(game, '⏰ Auto-cashed out after inactivity.');
-    if (game.message) await game.message.edit(rendered).catch(() => null);
+    await syncViews(game, await cashOut(game, '⏰ Auto-cashed out after inactivity.'));
     return;
   }
   // Nothing won yet — refund the bet instead of eating it.
@@ -278,7 +342,7 @@ async function expireGame(game) {
   await refundStake(game);
   await settle(game, game.paidStake);
   game.status = 'refunded';
-  if (game.message) await game.message.edit(game.render(`⏰ Timed out before any move — ${refundWord(game)}.`)).catch(() => null);
+  await syncViews(game, game.render(`⏰ Timed out before any move — ${refundWord(game)}.`));
 }
 
 async function cashOut(game, note = '') {
@@ -384,8 +448,7 @@ async function startMines(interaction, bet, mineCount) {
   if (!ctx) return;
 
   const game = startGame(interaction, createMinesGame(ctx.bet, mineCount, ctx.config, ctx.settings), ctx);
-  await interaction.reply(game.render());
-  game.message = await interaction.fetchReply().catch(() => null);
+  await showGame(interaction, game);
 }
 
 async function handleMinesClick(interaction, game, action) {
@@ -505,8 +568,7 @@ async function startHighLow(interaction, bet) {
   if (!ctx) return;
 
   const game = startGame(interaction, createHighLowGame(ctx.bet, ctx.config, ctx.settings), ctx);
-  await interaction.reply(game.render());
-  game.message = await interaction.fetchReply().catch(() => null);
+  await showGame(interaction, game);
 }
 
 async function handleHighLowClick(interaction, game, action) {
@@ -705,8 +767,7 @@ async function startBlackjack(interaction, bet) {
   const game = startGame(interaction, createBlackjackGame(ctx.bet, ctx.config, ctx.settings), ctx);
   // A natural on either side settles immediately.
   if (isBlackjack(game.player) || isBlackjack(game.dealer)) await resolveBlackjack(game);
-  await interaction.reply(game.render());
-  if (!game.finished) game.message = await interaction.fetchReply().catch(() => null);
+  await showGame(interaction, game);
 }
 
 async function handleBlackjackClick(interaction, game, action) {
@@ -768,7 +829,7 @@ async function settleAllForShutdown() {
         game.status = 'refunded';
         rendered = game.render(`🔧 The bot restarted — ${refundWord(game)}.`);
       }
-      if (game.message && rendered) await game.message.edit(rendered).catch(() => null);
+      await syncViews(game, rendered);
       await game.betWrite;
     })
   );
@@ -821,6 +882,15 @@ async function handleGambleButton(interaction) {
   // Ignore double-clicks while the previous click is still being processed.
   if (game.busy) return interaction.deferUpdate().catch(() => null);
   game.busy = true;
+  // The click came from the player's private controls: update those, and mirror the new state
+  // onto the public board (buttons disabled) so everyone keeps watching live.
+  const updateControls = interaction.update.bind(interaction);
+  interaction.update = async (payload) => {
+    const result = await updateControls(game.publicControls ? payload : playerView(game, payload));
+    if (!game.publicControls && game.message) await game.message.edit(spectatorView(game, payload)).catch(() => null);
+    return result;
+  };
+  if (!game.publicControls) game.editControls = (p) => interaction.editReply(playerView(game, p));
   try {
     if (prefix === 'gm') return await handleMinesClick(interaction, game, action);
     if (prefix === 'hl') return await handleHighLowClick(interaction, game, action);
@@ -843,5 +913,6 @@ module.exports = {
   refundOrphanedBets,
   handValue,
   blackjackReturn,
-  handleGambleButton
+  handleGambleButton,
+  _test: { spectatorView, playerView, disableButtons }
 };
