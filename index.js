@@ -7,6 +7,7 @@ const registerReadyEvent = require('./src/bot/events/ready');
 const registerInteractionCreateEvent = require('./src/bot/events/interactionCreate');
 const registerMessageCreateEvent = require('./src/bot/events/messageCreate');
 const registerGuildMemberAddEvent = require('./src/bot/events/guildMemberAdd');
+const registerGuildMemberRemoveEvent = require('./src/bot/events/guildMemberRemove');
 const { registerLoggingEvents } = require('./src/bot/cogs/modules/logging');
 
 async function main() {
@@ -16,6 +17,7 @@ async function main() {
   registerInteractionCreateEvent(client);
   registerMessageCreateEvent(client);
   registerGuildMemberAddEvent(client);
+  registerGuildMemberRemoveEvent(client);
   registerLoggingEvents(client);
 
   await client.login(BOT_TOKEN);

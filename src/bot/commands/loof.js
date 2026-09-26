@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const Giveaway = require('../../database/models/Giveaway');
 const { isAuthorized } = require('../utils/permissions');
+const { buildHelpMessage } = require('../cogs/modules/help');
 const {
   parseDuration,
   formatTime,
@@ -93,7 +94,7 @@ const data = new SlashCommandBuilder()
       .addIntegerOption((opt) => opt.setName('new_winners').setDescription('Updated winner count').setRequired(false))
   )
   .addSubcommand((sub) => sub.setName('ping').setDescription('Check bot websocket and API latency'))
-  .addSubcommand((sub) => sub.setName('help').setDescription('Show help and available commands'));
+  .addSubcommand((sub) => sub.setName('help').setDescription('Browse every LoofaryBot command by category'));
 
 // Every one of these subcommands does at least one Discord API call plus a database round trip
 // before it can reply — deferring immediately guarantees Discord's 3-second ack window is never
@@ -111,7 +112,13 @@ function readRequirementOptions(interaction) {
 }
 
 async function execute(interaction, client) {
-  if (!isAuthorized(interaction)) {
+  const requested = interaction.options.getSubcommand();
+  // Help and ping are for everyone; everything else manages giveaways.
+  if (requested === 'help') {
+    return interaction.reply({ ...buildHelpMessage(client, interaction.guildId), ephemeral: true });
+  }
+
+  if (requested !== 'ping' && !isAuthorized(interaction)) {
     return interaction.reply({
       content: '❌ Only Administrators or @loofary can use LoofaryBot commands.',
       ephemeral: true
@@ -130,28 +137,6 @@ async function execute(interaction, client) {
     return interaction.editReply({
       content: `🏓 **Pong!**\n• API Latency: \`${roundtrip}ms\`\n• WebSocket Latency: \`${Math.round(client.ws.ping)}ms\``
     });
-  }
-
-  if (sub === 'help') {
-    const helpEmbed = new EmbedBuilder()
-      .setTitle('LoofaryBot Commands & Usage')
-      .setColor('#5865F2')
-      .setDescription(
-        '`/loof start` - Starts a giveaway with option arguments.\n' +
-          '`/loof create` - Opens an interactive popup modal to configure a giveaway.\n' +
-          '`/loof drop` - First-to-click drop: the first N people to press Claim win instantly.\n' +
-          '`/loof requirements` - Require a role, days in the server, or an XP level to enter.\n' +
-          '`/loof end` - Forces an active giveaway to end early.\n' +
-          '`/loof reroll` - Selects a new winner from an ended giveaway.\n' +
-          '`/loof delete` - Removes a giveaway message and cancels the draw.\n' +
-          '`/loof list` - Displays active giveaways on the server.\n' +
-          '`/loof edit` - Modifies prize details or winner counts on a live giveaway.\n' +
-          '`/loof ping` - Checks bot API latency and WebSocket status.\n' +
-          '`/loof help` - Shows this help menu.\n\n' +
-          'See also: `/honeypot` and `/levels` for the moderation and XP systems, ' +
-          'and the web dashboard for the embed builder.'
-      );
-    return interaction.reply({ embeds: [helpEmbed], ephemeral: true });
   }
 
   if (sub === 'start') {

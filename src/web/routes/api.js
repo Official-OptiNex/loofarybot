@@ -6,6 +6,7 @@ const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
 const { syncJoins, getJoinStats } = require('../../bot/cogs/modules/joinTracking');
 const { sendWelcome } = require('../../bot/cogs/modules/welcome');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
+const LogEntry = require('../../database/models/LogEntry');
 const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
 const EmbedTemplate = require('../../database/models/EmbedTemplate');
 
@@ -87,13 +88,14 @@ router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, asyn
 
 router.post('/guilds/:guildId/honeypot', requireAuth, requireGuildAccess, async (req, res) => {
   try {
-    const { channelId, action, embed } = req.body;
+    const { channelId, action, embed, dmEnabled } = req.body;
     const client = req.app.locals.client;
 
     const config = await getOrCreateConfig(req.guild.id);
     if (action && ['kick', 'softban', 'ban'].includes(action)) {
       config.honeypotAction = action;
     }
+    if (typeof dmEnabled === 'boolean') config.honeypotDmEnabled = dmEnabled;
     if (embed && typeof embed === 'object') {
       for (const key of ['imageUrl', 'thumbnailUrl']) {
         if (embed[key] && !isHttpUrl(embed[key])) {
@@ -241,6 +243,74 @@ router.post('/guilds/:guildId/logs', requireAuth, requireGuildAccess, async (req
   } catch (err) {
     console.error('Failed to save logging config:', err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Module on/off switches (sidebar, overview cards and each module page header) ---
+
+const MODULE_FIELDS = {
+  honeypot: 'honeypotEnabled',
+  leveling: 'levelingEnabled',
+  autorole: 'autoRoleEnabled',
+  gambling: 'gamblingEnabled',
+  logs: 'logsEnabled'
+};
+
+router.post('/guilds/:guildId/modules/:module', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { module } = req.params;
+    const enabled = req.body.enabled === true;
+
+    if (module === 'welcome') {
+      const welcome = await WelcomeConfig.findOne({ guildId: req.guild.id });
+      if (enabled && !welcome?.channelId) {
+        return res.status(400).json({ ok: false, error: 'Pick a welcome channel on the Welcome page first.' });
+      }
+      await WelcomeConfig.updateOne({ guildId: req.guild.id }, { $set: { enabled } }, { upsert: true });
+      return res.json({ ok: true, enabled });
+    }
+
+    const field = MODULE_FIELDS[module];
+    if (!field) return res.status(404).json({ ok: false, error: 'Unknown module.' });
+    const config = await getOrCreateConfig(req.guild.id);
+    config[field] = enabled;
+    await config.save();
+
+    // Tell the admin when a module is on but still needs setting up to do anything.
+    let note = null;
+    if (enabled && module === 'honeypot' && !config.honeypotChannelId) note = 'Pick a trap channel to arm it.';
+    if (enabled && module === 'autorole' && !config.autoRoleId) note = 'Pick a role to hand out.';
+    res.json({ ok: true, enabled, note });
+  } catch (err) {
+    console.error('Failed to toggle module:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Server log viewer ---
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+router.get('/guilds/:guildId/logs', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const pageSize = 25;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const filter = { guildId: req.guild.id };
+    if (req.query.type && Object.keys(LOG_EVENTS).includes(req.query.type)) filter.type = req.query.type;
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    if (q) {
+      const rx = new RegExp(escapeRegex(q), 'i');
+      filter.$or = [{ userTag: rx }, { userId: q }, { summary: rx }, { before: rx }, { after: rx }, { channelName: rx }];
+    }
+
+    const [entries, total] = await Promise.all([
+      LogEntry.find(filter).sort({ createdAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean(),
+      LogEntry.countDocuments(filter)
+    ]);
+    res.json({ entries, total, page, totalPages: Math.max(1, Math.ceil(total / pageSize)) });
+  } catch (err) {
+    console.error('Failed to load logs:', err);
+    res.status(500).json({ error: 'Failed to load logs.' });
   }
 });
 

@@ -8,6 +8,7 @@ const {
   MessageFlags
 } = require('discord.js');
 const { getOrCreateConfig, getEffectiveXpSettings, adjustXp, debitXp } = require('./leveling');
+const UserLevel = require('../../../database/models/UserLevel');
 
 const GRID_SIZE = 25; // 5x5 mines board
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
@@ -32,6 +33,25 @@ function getGamblingSettings(config) {
 }
 
 const fmtMult = (m) => `${m.toFixed(2)}x`;
+const fmtNum = (n) => Number(n).toLocaleString('en-US');
+
+async function fetchBalance(guildId, userId) {
+  const record = await UserLevel.findOne({ guildId, userId }, { xp: 1, level: 1 }).lean();
+  return { xp: record?.xp ?? 0, level: record?.level ?? 0 };
+}
+
+// "💳 Balance: 1,234 XP · Level 7 (+92 this game)" — shown on every finished game, win or lose.
+function balanceText(balance, net) {
+  if (!balance) return '';
+  const change = net === 0 ? '±0' : `${net > 0 ? '+' : '−'}${fmtNum(Math.abs(net))}`;
+  return `💳 **Balance:** \`${fmtNum(balance.xp)} XP\` · Level **${balance.level}** · this game: **${change} XP**`;
+}
+
+// Settles a finished interactive game: records the net result and the player's fresh balance.
+async function settle(game, returned) {
+  game.net = returned - game.bet;
+  game.balance = await fetchBalance(game.guildId, game.userId);
+}
 
 function levelNote(result) {
   if (!result) return '';
@@ -81,18 +101,20 @@ async function playCoinflip(interaction, bet, side) {
   const multiplier = 2 * (1 - ctx.settings.edge);
   const winnings = won ? Math.floor(bet * multiplier) : 0;
   const levelResult = await payout(interaction.guild, interaction.user.id, winnings, ctx.config);
+  const balance = await fetchBalance(interaction.guildId, interaction.user.id);
 
   const embed = new EmbedBuilder()
     .setTitle(`🪙 Coinflip — ${result === 'heads' ? 'Heads' : 'Tails'}!`)
     .setColor(won ? '#57F287' : '#ED4245')
     .setDescription(
-      `${interaction.user} bet **${bet} XP** on **${side}**.\n` +
+      `${interaction.user} bet **${fmtNum(bet)} XP** on **${side}**.\n` +
         (won
-          ? `✅ You won **${winnings} XP** (${fmtMult(multiplier)}).`
-          : `❌ You lost **${bet} XP**.`) +
-        levelNote(levelResult)
+          ? `✅ You won **${fmtNum(winnings)} XP** (${fmtMult(multiplier)}).`
+          : `❌ You lost **${fmtNum(bet)} XP**.`) +
+        levelNote(levelResult) +
+        `\n\n${balanceText(balance, winnings - bet)}`
     );
-  return interaction.reply({ embeds: [embed] });
+  return interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
 }
 
 // ---------------------------------------------------------------- Shared game lifecycle
@@ -130,6 +152,11 @@ function hasActiveGame(guildId, userId) {
 
 async function expireGame(game) {
   if (game.finished) return;
+  if (game.onExpire) {
+    const rendered = await game.onExpire();
+    if (game.message && rendered) await game.message.edit(rendered).catch(() => null);
+    return;
+  }
   if (game.canCashOut()) {
     const rendered = await cashOut(game, '⏰ Auto-cashed out after inactivity.');
     if (game.message) await game.message.edit(rendered).catch(() => null);
@@ -138,6 +165,7 @@ async function expireGame(game) {
   // Nothing won yet — refund the bet instead of eating it.
   endGame(game);
   await payout(game.guild, game.userId, game.bet, game.config);
+  await settle(game, game.bet);
   game.status = 'refunded';
   if (game.message) await game.message.edit(game.render('⏰ Timed out before any move — your bet was refunded.')).catch(() => null);
 }
@@ -146,6 +174,7 @@ async function cashOut(game, note = '') {
   endGame(game);
   const winnings = Math.floor(game.bet * game.currentMultiplier());
   const levelResult = await payout(game.guild, game.userId, winnings, game.config);
+  await settle(game, winnings);
   game.status = 'cashed';
   game.winnings = winnings;
   return game.render(`${note ? `${note}\n` : ''}💰 Cashed out **${winnings} XP** (${fmtMult(game.currentMultiplier())}).${levelNote(levelResult)}`);
@@ -193,6 +222,7 @@ function renderMines(game, note) {
   }
   if (game.status === 'lost') header += `\n💥 You hit a mine and lost **${game.bet} XP**.`;
   if (note) header += `\n${note}`;
+  if (game.balance) header += `\n\n${balanceText(game.balance, game.net)}`;
 
   const rows = [];
   for (let r = 0; r < 5; r++) {
@@ -261,6 +291,7 @@ async function handleMinesClick(interaction, game, action) {
     endGame(game);
     game.status = 'lost';
     game.hitIndex = idx;
+    await settle(game, 0);
     return interaction.update(game.render());
   }
 
@@ -320,6 +351,7 @@ function renderHighLow(game, note) {
   if (game.history.length > 0) lines.push(`**History:** ${game.history.slice(-10).join(' → ')}`);
   if (game.status === 'lost') lines.push(`❌ Wrong call — you lost **${game.bet} XP**.`);
   if (note) lines.push(note);
+  if (game.balance) lines.push('', balanceText(game.balance, game.net));
 
   const embed = new EmbedBuilder()
     .setTitle('🃏 High-Low')
@@ -389,11 +421,203 @@ async function handleHighLowClick(interaction, game, action) {
   if (!won) {
     endGame(game);
     game.status = 'lost';
+    await settle(game, 0);
     return interaction.update(game.render());
   }
   game.fairMultiplier /= p;
   game.correct += 1;
   return interaction.update(game.render(`✅ ${cardLabel(next)} — correct!`));
+}
+
+// ---------------------------------------------------------------- Blackjack
+
+// 6-deck shoe, dealer stands on all 17s, blackjack pays 3:2, no splits. The house edge is taken
+// from the winnings (not the returned stake), so a win at 4% edge pays 1.96x the bet.
+const BJ_DECKS = 6;
+
+function buildShoe() {
+  const shoe = [];
+  for (let d = 0; d < BJ_DECKS; d++) for (let v = 1; v <= 13; v++) for (const suit of SUITS) shoe.push({ value: v, suit });
+  for (let i = shoe.length - 1; i > 0; i--) {
+    const j = randInt(i + 1);
+    [shoe[i], shoe[j]] = [shoe[j], shoe[i]];
+  }
+  return shoe;
+}
+
+function handValue(cards) {
+  let total = 0;
+  let aces = 0;
+  for (const c of cards) {
+    if (c.value === 1) {
+      aces += 1;
+      total += 11;
+    } else total += Math.min(c.value, 10);
+  }
+  while (total > 21 && aces > 0) {
+    total -= 10;
+    aces -= 1;
+  }
+  return { total, soft: aces > 0 };
+}
+
+const isBlackjack = (cards) => cards.length === 2 && handValue(cards).total === 21;
+const showHand = (cards) => cards.map(cardLabel).join('  ');
+
+function createBlackjackGame(bet, config, settings) {
+  const shoe = buildShoe();
+  const game = {
+    kind: 'blackjack',
+    bet,
+    config,
+    edge: settings.edge,
+    shoe,
+    player: [shoe.pop(), shoe.pop()],
+    dealer: [shoe.pop(), shoe.pop()],
+    doubled: false,
+    status: 'playing',
+    outcome: null
+  };
+  game.currentMultiplier = () => 1;
+  game.canCashOut = () => false;
+  game.onExpire = async () => {
+    // Idle hands stand automatically rather than forfeiting the bet.
+    await resolveBlackjack(game, '⏰ Auto-stood after inactivity.');
+    return game.render();
+  };
+  game.render = (note = '') => renderBlackjack(game, note);
+  return game;
+}
+
+// Amount returned to the player (stake included) for each outcome.
+function blackjackReturn(game, outcome) {
+  const winnings = (mult) => Math.floor(game.bet * mult * (1 - game.edge));
+  switch (outcome) {
+    case 'blackjack':
+      return game.bet + winnings(1.5);
+    case 'win':
+    case 'dealer_bust':
+      return game.bet + winnings(1);
+    case 'push':
+      return game.bet;
+    default:
+      return 0;
+  }
+}
+
+const BJ_OUTCOME_TEXT = {
+  blackjack: '🂡 **Blackjack!**',
+  win: '✅ **You win!**',
+  dealer_bust: '💥 **Dealer busts — you win!**',
+  push: '🤝 **Push** — your bet is returned.',
+  lose: '❌ **Dealer wins.**',
+  bust: '💥 **Bust!** You went over 21.',
+  dealer_blackjack: '🂡 **Dealer has blackjack.**'
+};
+
+async function resolveBlackjack(game, note = '') {
+  if (game.finished) return;
+  endGame(game);
+  const player = handValue(game.player).total;
+  let outcome;
+
+  if (player > 21) outcome = 'bust';
+  else if (isBlackjack(game.player) && !isBlackjack(game.dealer)) outcome = 'blackjack';
+  else if (isBlackjack(game.dealer) && !isBlackjack(game.player)) outcome = 'dealer_blackjack';
+  else {
+    while (handValue(game.dealer).total < 17) game.dealer.push(game.shoe.pop());
+    const dealer = handValue(game.dealer).total;
+    if (dealer > 21) outcome = 'dealer_bust';
+    else if (player > dealer) outcome = 'win';
+    else if (player === dealer) outcome = 'push';
+    else outcome = 'lose';
+  }
+
+  const returned = blackjackReturn(game, outcome);
+  const levelResult = await payout(game.guild, game.userId, returned, game.config);
+  game.outcome = outcome;
+  game.status = ['blackjack', 'win', 'dealer_bust'].includes(outcome) ? 'won' : outcome === 'push' ? 'push' : 'lost';
+  game.note = [note, BJ_OUTCOME_TEXT[outcome] + (returned > game.bet ? ` +${fmtNum(returned - game.bet)} XP` : ''), levelNote(levelResult).trim()]
+    .filter(Boolean)
+    .join('\n');
+  await settle(game, returned);
+}
+
+function renderBlackjack(game, note) {
+  const over = game.status !== 'playing';
+  const player = handValue(game.player);
+  const dealerShown = over ? game.dealer : [game.dealer[0]];
+  const dealerValue = handValue(dealerShown);
+
+  const embed = new EmbedBuilder()
+    .setTitle('🃏 Blackjack')
+    .setColor(game.status === 'won' ? '#57F287' : game.status === 'lost' ? '#ED4245' : game.status === 'push' ? '#FEE75C' : '#5865F2')
+    .setDescription(`<@${game.userId}> · **Bet:** ${fmtNum(game.bet)} XP${game.doubled ? ' (doubled)' : ''}`)
+    .addFields(
+      {
+        name: `Dealer — ${over ? dealerValue.total : `${dealerValue.total} + ?`}`,
+        value: `${showHand(dealerShown)}${over ? '' : '  🂠'}`,
+        inline: true
+      },
+      { name: `You — ${player.total}${player.soft && player.total < 21 ? ' (soft)' : ''}`, value: showHand(game.player), inline: true }
+    )
+    .setFooter({ text: 'Dealer stands on 17 · Blackjack pays 3:2 · 6-deck shoe' });
+
+  const text = [note, game.note, game.balance ? balanceText(game.balance, game.net) : ''].filter(Boolean).join('\n\n');
+  if (text) embed.addFields({ name: '​', value: text });
+
+  const canDouble = !over && game.player.length === 2 && !game.doubled;
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`bj:${game.id}:hit`).setLabel('Hit').setEmoji('➕').setStyle(ButtonStyle.Primary).setDisabled(over),
+    new ButtonBuilder().setCustomId(`bj:${game.id}:stand`).setLabel('Stand').setEmoji('✋').setStyle(ButtonStyle.Secondary).setDisabled(over),
+    new ButtonBuilder()
+      .setCustomId(`bj:${game.id}:double`)
+      .setLabel(`Double (+${fmtNum(game.bet)} XP)`)
+      .setEmoji('💰')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(!canDouble)
+  );
+  return { embeds: [embed], components: [row], allowedMentions: { parse: [] } };
+}
+
+async function startBlackjack(interaction, bet) {
+  if (hasActiveGame(interaction.guildId, interaction.user.id)) {
+    return interaction.reply({ content: '❌ Finish your current game first.', ephemeral: true });
+  }
+  const ctx = await placeBet(interaction, bet);
+  if (!ctx) return;
+
+  const game = startGame(interaction, createBlackjackGame(bet, ctx.config, ctx.settings));
+  // A natural on either side settles immediately.
+  if (isBlackjack(game.player) || isBlackjack(game.dealer)) await resolveBlackjack(game);
+  await interaction.reply(game.render());
+  if (!game.finished) game.message = await interaction.fetchReply().catch(() => null);
+}
+
+async function handleBlackjackClick(interaction, game, action) {
+  touchGame(game);
+  if (action === 'hit') {
+    game.player.push(game.shoe.pop());
+    if (handValue(game.player).total >= 21) await resolveBlackjack(game);
+    return interaction.update(game.render());
+  }
+  if (action === 'stand') {
+    await resolveBlackjack(game);
+    return interaction.update(game.render());
+  }
+  if (action === 'double') {
+    if (game.player.length !== 2 || game.doubled) return interaction.deferUpdate();
+    const { levelXpBase } = getEffectiveXpSettings(game.config);
+    if (!(await debitXp(game.guildId, game.userId, game.bet, levelXpBase))) {
+      return interaction.reply({ content: `❌ You need another **${fmtNum(game.bet)} XP** to double down.`, ephemeral: true });
+    }
+    game.bet *= 2;
+    game.doubled = true;
+    game.player.push(game.shoe.pop());
+    await resolveBlackjack(game);
+    return interaction.update(game.render());
+  }
+  return interaction.deferUpdate();
 }
 
 // ---------------------------------------------------------------- Button router
@@ -413,6 +637,7 @@ async function handleGambleButton(interaction) {
   try {
     if (prefix === 'gm') return await handleMinesClick(interaction, game, action);
     if (prefix === 'hl') return await handleHighLowClick(interaction, game, action);
+    if (prefix === 'bj') return await handleBlackjackClick(interaction, game, action);
   } finally {
     game.busy = false;
   }
@@ -426,5 +651,8 @@ module.exports = {
   playCoinflip,
   startMines,
   startHighLow,
+  startBlackjack,
+  handValue,
+  blackjackReturn,
   handleGambleButton
 };
