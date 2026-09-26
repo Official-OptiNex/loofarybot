@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select a Server | LoofaryBot</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand">🎁 LoofaryBot</div>
+    <div>
+      <span class="muted">Logged in as <%= user.username %></span>
+      <a class="btn secondary" href="/auth/logout" style="margin-left:1rem;">Logout</a>
+    </div>
+  </nav>
+  <div class="container">
+    <h1>Your Servers</h1>
+    <p class="muted">Only servers where you have Manage Server permission <em>and</em> LoofaryBot is present are shown.</p>
+
+    <% if (guilds.length === 0) { %>
+      <div class="card">
+        <p>No manageable servers found. Make sure LoofaryBot has been invited to your server and that you have
+          Administrator or Manage Server permission there.</p>
+      </div>
+    <% } else { %>
+      <div class="grid">
+        <% guilds.forEach(g => { %>
+          <a class="guild-card" href="/dashboard/<%= g.id %>">
+            <% if (g.icon) { %>
+              <img src="https://cdn.discordapp.com/icons/<%= g.id %>/<%= g.icon %>.png" width="40" height="40" style="border-radius:50%;">
+            <% } %>
+            <span><%= g.name %></span>
+          </a>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</body>
+</html>

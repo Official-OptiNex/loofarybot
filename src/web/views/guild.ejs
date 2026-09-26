@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= guild.name %> | LoofaryBot</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand">🎁 LoofaryBot</div>
+    <a class="btn secondary" href="/dashboard">← All Servers</a>
+  </nav>
+  <div class="container">
+    <h1><%= guild.name %></h1>
+    <p><a class="btn" href="/dashboard/<%= guild.id %>/embed">🖌️ Open Embed Builder</a></p>
+
+    <div class="card">
+      <h2>🍯 Honeypot Trap</h2>
+      <p class="muted">Anyone who posts in this channel is instantly punished. A live counter embed is posted there.</p>
+      <label for="hpChannel">Trap Channel</label>
+      <select id="hpChannel">
+        <option value="">— Select a channel —</option>
+        <% channels.forEach(c => { %>
+          <option value="<%= c.id %>" <%= config.honeypotChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+        <% }) %>
+      </select>
+      <label for="hpAction">Enforcement Action</label>
+      <select id="hpAction">
+        <option value="kick" <%= config.honeypotAction === 'kick' ? 'selected' : '' %>>Kick</option>
+        <option value="softban" <%= config.honeypotAction === 'softban' ? 'selected' : '' %>>Soft Ban (purge messages)</option>
+        <option value="ban" <%= config.honeypotAction === 'ban' ? 'selected' : '' %>>Permanent Ban</option>
+      </select>
+      <p class="muted" style="margin-top:0.75rem;">
+        Current counts — Kicks: <strong><%= config.honeypotKicks || 0 %></strong>,
+        Soft Bans: <strong><%= config.honeypotSoftbans || 0 %></strong>,
+        Bans: <strong><%= config.honeypotBans || 0 %></strong>
+      </p>
+      <button class="btn" style="margin-top:1rem;" onclick="saveHoneypot()">Save Honeypot Settings</button>
+    </div>
+
+    <div class="card">
+      <h2>📈 Leveling</h2>
+      <label style="display:flex; align-items:center; gap:0.5rem;">
+        <input type="checkbox" id="lvlEnabled" style="width:auto;" <%= config.levelingEnabled === false ? '' : 'checked' %>>
+        Enable XP gain from chat messages
+      </label>
+
+      <h3 style="margin-top:1.5rem;">Level-Up Role Rewards</h3>
+      <div id="levelRoleRows">
+        <% (config.levelRoles || []).forEach(lr => { %>
+          <div class="field-row level-role-row">
+            <input type="number" min="1" class="lr-level" value="<%= lr.level %>" placeholder="Level">
+            <select class="lr-role">
+              <% roles.forEach(r => { %>
+                <option value="<%= r.id %>" <%= r.id === lr.roleId ? 'selected' : '' %>><%= r.name %></option>
+              <% }) %>
+            </select>
+            <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
+          </div>
+        <% }) %>
+      </div>
+      <button class="btn secondary" type="button" onclick="addLevelRoleRow()">+ Add Role Reward</button>
+      <br>
+      <button class="btn" style="margin-top:1rem;" onclick="saveLevels()">Save Leveling Settings</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const guildId = '<%= guild.id %>';
+    const roles = <%- JSON.stringify(roles) %>;
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.display = 'block';
+      setTimeout(() => (t.style.display = 'none'), 2500);
+    }
+
+    function addLevelRoleRow() {
+      const container = document.getElementById('levelRoleRows');
+      const row = document.createElement('div');
+      row.className = 'field-row level-role-row';
+      row.innerHTML = `
+        <input type="number" min="1" class="lr-level" placeholder="Level">
+        <select class="lr-role">${roles.map((r) => `<option value="${r.id}">${r.name}</option>`).join('')}</select>
+        <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
+      `;
+      container.appendChild(row);
+    }
+
+    async function saveHoneypot() {
+      const channelId = document.getElementById('hpChannel').value;
+      const action = document.getElementById('hpAction').value;
+      const res = await fetch(`/api/guilds/${guildId}/honeypot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId, action })
+      });
+      showToast(res.ok ? '✅ Honeypot settings saved.' : '❌ Failed to save.');
+    }
+
+    async function saveLevels() {
+      const enabled = document.getElementById('lvlEnabled').checked;
+      const levelRoles = [...document.querySelectorAll('.level-role-row')].map((row) => ({
+        level: row.querySelector('.lr-level').value,
+        roleId: row.querySelector('.lr-role').value
+      }));
+      const res = await fetch(`/api/guilds/${guildId}/levels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, levelRoles })
+      });
+      showToast(res.ok ? '✅ Leveling settings saved.' : '❌ Failed to save.');
+    }
+  </script>
+</body>
+</html>

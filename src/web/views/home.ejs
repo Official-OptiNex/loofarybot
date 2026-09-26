@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoofaryBot Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand">🎁 LoofaryBot</div>
+    <% if (user) { %>
+      <a class="btn" href="/dashboard">Go to Dashboard</a>
+    <% } else { %>
+      <a class="btn" href="/auth/discord">Login with Discord</a>
+    <% } %>
+  </nav>
+  <div class="container">
+    <h1>LoofaryBot Dashboard</h1>
+    <p class="muted">Bot online as <strong><%= botTag %></strong>. Manage giveaways, the honeypot anti-raid trap,
+      the leveling system, and build embeds — all from the web.</p>
+    <div class="grid" style="margin-top:2rem;">
+      <div class="card"><h3>🎁 Giveaways</h3><p class="muted">Persistent giveaways that survive redeploys.</p></div>
+      <div class="card"><h3>🍯 Honeypot</h3><p class="muted">Instant kick/ban trap channel with a live counter.</p></div>
+      <div class="card"><h3>📈 Leveling</h3><p class="muted">XP, levels, and automatic role rewards.</p></div>
+      <div class="card"><h3>🖌️ Embed Builder</h3><p class="muted">Discohook-style visual embed editor.</p></div>
+    </div>
+  </div>
+</body>
+</html>

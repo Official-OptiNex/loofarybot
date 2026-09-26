@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Embed Builder | <%= guild.name %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand">🎁 LoofaryBot</div>
+    <a class="btn secondary" href="/dashboard/<%= guild.id %>">← <%= guild.name %></a>
+  </nav>
+  <div class="container" style="display:grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <div>
+      <h1>Embed Builder</h1>
+
+      <label for="channel">Send To Channel</label>
+      <select id="channel">
+        <option value="">— Select a channel —</option>
+        <% channels.forEach(c => { %>
+          <option value="<%= c.id %>">#<%= c.name %></option>
+        <% }) %>
+      </select>
+
+      <label for="title">Title</label>
+      <input id="title" maxlength="256" placeholder="Embed title">
+
+      <label for="description">Description</label>
+      <textarea id="description" maxlength="4096" placeholder="Embed description... supports **markdown**"></textarea>
+
+      <label for="color">Color</label>
+      <input id="color" type="color" value="#5865f2">
+
+      <label for="imageUrl">Image URL</label>
+      <input id="imageUrl" placeholder="https://...">
+
+      <label for="thumbnailUrl">Thumbnail URL</label>
+      <input id="thumbnailUrl" placeholder="https://...">
+
+      <label for="footer">Footer</label>
+      <input id="footer" maxlength="2048" placeholder="Footer text">
+
+      <h3 style="margin-top:1.5rem;">Fields</h3>
+      <div id="fieldRows"></div>
+      <button class="btn secondary" type="button" onclick="addFieldRow()">+ Add Field</button>
+
+      <br><br>
+      <button class="btn" onclick="sendEmbed()">🚀 Send Embed</button>
+    </div>
+
+    <div>
+      <h2>Live Preview</h2>
+      <div class="discord-embed-preview" id="preview">
+        <div class="title" id="pTitle"></div>
+        <div class="desc" id="pDesc"></div>
+        <div id="pFields"></div>
+        <img id="pImage" style="display:none;">
+        <div class="muted" id="pFooter" style="margin-top:0.5rem; font-size:0.8rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const guildId = '<%= guild.id %>';
+
+    function addFieldRow(name = '', value = '', inline = false) {
+      const container = document.getElementById('fieldRows');
+      const row = document.createElement('div');
+      row.className = 'field-row field-entry';
+      row.innerHTML = `
+        <input class="f-name" placeholder="Field name" value="${name}">
+        <input class="f-value" placeholder="Field value" value="${value}">
+        <label style="display:flex; align-items:center; gap:0.3rem; flex:0 0 auto;">
+          <input type="checkbox" class="f-inline" style="width:auto;" ${inline ? 'checked' : ''}> Inline
+        </label>
+        <button class="btn secondary" type="button" onclick="this.parentElement.remove(); updatePreview();">✕</button>
+      `;
+      container.appendChild(row);
+      row.querySelectorAll('input').forEach((el) => el.addEventListener('input', updatePreview));
+    }
+
+    function updatePreview() {
+      const title = document.getElementById('title').value;
+      const desc = document.getElementById('description').value;
+      const color = document.getElementById('color').value;
+      const footer = document.getElementById('footer').value;
+      const image = document.getElementById('imageUrl').value;
+
+      document.getElementById('preview').style.borderLeftColor = color;
+      document.getElementById('pTitle').textContent = title;
+      document.getElementById('pDesc').textContent = desc;
+      document.getElementById('pFooter').textContent = footer;
+
+      const img = document.getElementById('pImage');
+      if (image) { img.src = image; img.style.display = 'block'; } else { img.style.display = 'none'; }
+
+      const fieldsHtml = [...document.querySelectorAll('.field-entry')]
+        .map((row) => {
+          const name = row.querySelector('.f-name').value;
+          const value = row.querySelector('.f-value').value;
+          if (!name && !value) return '';
+          return `<div style="margin-top:0.5rem;"><strong>${name}</strong><br>${value}</div>`;
+        })
+        .join('');
+      document.getElementById('pFields').innerHTML = fieldsHtml;
+    }
+
+    ['title', 'description', 'color', 'footer', 'imageUrl'].forEach((id) =>
+      document.getElementById(id).addEventListener('input', updatePreview)
+    );
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.display = 'block';
+      setTimeout(() => (t.style.display = 'none'), 3000);
+    }
+
+    async function sendEmbed() {
+      const channelId = document.getElementById('channel').value;
+      if (!channelId) return showToast('❌ Select a channel first.');
+
+      const fields = [...document.querySelectorAll('.field-entry')].map((row) => ({
+        name: row.querySelector('.f-name').value,
+        value: row.querySelector('.f-value').value,
+        inline: row.querySelector('.f-inline').checked
+      }));
+
+      const payload = {
+        channelId,
+        title: document.getElementById('title').value,
+        description: document.getElementById('description').value,
+        color: document.getElementById('color').value,
+        footer: document.getElementById('footer').value,
+        imageUrl: document.getElementById('imageUrl').value,
+        thumbnailUrl: document.getElementById('thumbnailUrl').value,
+        fields
+      };
+
+      const res = await fetch(`/dashboard/${guildId}/embed/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      showToast(res.ok ? '✅ Embed sent!' : `❌ ${data.error || 'Failed to send embed.'}`);
+    }
+
+    updatePreview();
+  </script>
+</body>
+</html>

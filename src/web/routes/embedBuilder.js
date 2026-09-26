@@ -1,0 +1,54 @@
+const express = require('express');
+const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { requireAuth, requireGuildAccess } = require('../utils/authMiddleware');
+
+const router = express.Router();
+
+router.get('/:guildId/embed', requireAuth, requireGuildAccess, (req, res) => {
+  const me = req.guild.members.me;
+  const channels = req.guild.channels.cache
+    .filter((c) => c.isTextBased() && !c.isThread() && me && c.permissionsFor(me)?.has(PermissionFlagsBits.SendMessages))
+    .map((c) => ({ id: c.id, name: c.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  res.render('embedBuilder', { guild: req.guild, channels });
+});
+
+router.post('/:guildId/embed/send', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { channelId, title, description, color, fields, footer, imageUrl, thumbnailUrl } = req.body;
+
+    const me = req.guild.members.me;
+    const channel = req.guild.channels.cache.get(channelId);
+    if (!channel || !channel.isTextBased()) {
+      return res.status(400).json({ ok: false, error: 'Invalid channel.' });
+    }
+    if (!me || !channel.permissionsFor(me)?.has(PermissionFlagsBits.SendMessages)) {
+      return res.status(403).json({ ok: false, error: "The bot doesn't have permission to send messages there." });
+    }
+
+    const embed = new EmbedBuilder();
+    if (title) embed.setTitle(String(title).slice(0, 256));
+    if (description) embed.setDescription(String(description).slice(0, 4096));
+    if (color) embed.setColor(color);
+    if (footer) embed.setFooter({ text: String(footer).slice(0, 2048) });
+    if (imageUrl) embed.setImage(imageUrl);
+    if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
+
+    if (Array.isArray(fields)) {
+      const cleanFields = fields
+        .filter((f) => f && f.name && f.value)
+        .slice(0, 25)
+        .map((f) => ({ name: String(f.name).slice(0, 256), value: String(f.value).slice(0, 1024), inline: !!f.inline }));
+      if (cleanFields.length) embed.addFields(cleanFields);
+    }
+
+    await channel.send({ embeds: [embed] });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to send embed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to send embed. Check that all URLs and the color are valid.' });
+  }
+});
+
+module.exports = router;
