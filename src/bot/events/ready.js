@@ -35,6 +35,8 @@ const unlockdownCommand = require('../commands/unlockdown');
 const reactionroleCommand = require('../commands/reactionrole');
 const pollCommand = require('../commands/poll');
 const remindCommand = require('../commands/remind');
+const alertsCommand = require('../commands/alerts');
+const dailyCommand = require('../commands/daily');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -51,7 +53,9 @@ const ALL_COMMANDS = [
   unlockdownCommand,
   reactionroleCommand,
   pollCommand,
-  remindCommand
+  remindCommand,
+  alertsCommand,
+  dailyCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -87,5 +91,17 @@ module.exports = function registerReadyEvent(client) {
     setInterval(sweep, 10 * 1000);
 
     pruneDepartedMembers(client).catch(console.error);
+
+    // Twitch go-live / YouTube upload alerts.
+    require('../cogs/modules/socialAlerts').startPolling(client);
+
+    // Daily automatic settings + XP backups (last 7 kept per server).
+    require('../cogs/modules/backups').startDailyBackups(client);
+
+    // Refund bets from games that were interrupted by a crash (a clean shutdown settles them itself).
+    require('../cogs/modules/gambling')
+      .refundOrphanedBets(client)
+      .then((n) => n && console.log(`Refunded ${n} interrupted game bet(s).`))
+      .catch(console.error);
   });
 };

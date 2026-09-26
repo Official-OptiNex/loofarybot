@@ -9,6 +9,7 @@ const {
 } = require('discord.js');
 const { getOrCreateConfig, getEffectiveXpSettings, adjustXp, debitXp } = require('./leveling');
 const UserLevel = require('../../../database/models/UserLevel');
+const ActiveBet = require('../../../database/models/ActiveBet');
 
 const GRID_SIZE = 25; // 5x5 mines board
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
@@ -129,6 +130,17 @@ function startGame(interaction, game) {
   activeGames.set(game.id, game);
   activeByUser.set(`${game.guildId}:${game.userId}`, game.id);
   touchGame(game);
+  // Persist the stake so a crash or redeploy mid-game can refund it.
+  // Writes are chained through game.betWrite so create → update → delete always land in order
+  // (a delete racing ahead of its create would leave a stray record that gets refunded later).
+  game.betWrite = ActiveBet.create({
+    gameId: game.id,
+    guildId: game.guildId,
+    userId: game.userId,
+    kind: game.kind,
+    amount: game.bet,
+    channelId: interaction.channelId
+  }).catch((err) => console.error('Failed to record active bet:', err.message));
   return game;
 }
 
@@ -140,6 +152,7 @@ function touchGame(game) {
 function endGame(game) {
   game.finished = true;
   clearTimeout(game.timer);
+  game.betWrite = Promise.resolve(game.betWrite).then(() => ActiveBet.deleteOne({ gameId: game.id }).catch(() => null));
   activeGames.delete(game.id);
   if (activeByUser.get(`${game.guildId}:${game.userId}`) === game.id) {
     activeByUser.delete(`${game.guildId}:${game.userId}`);
@@ -613,11 +626,77 @@ async function handleBlackjackClick(interaction, game, action) {
     }
     game.bet *= 2;
     game.doubled = true;
+    game.betWrite = Promise.resolve(game.betWrite).then(() =>
+      ActiveBet.updateOne({ gameId: game.id }, { $set: { amount: game.bet } }).catch(() => null)
+    );
     game.player.push(game.shoe.pop());
     await resolveBlackjack(game);
     return interaction.update(game.render());
   }
   return interaction.deferUpdate();
+}
+
+// ---------------------------------------------------------------- Restarts
+
+/**
+ * Called on SIGTERM (Render redeploys/restarts): every open game is cashed out if it has winnings,
+ * otherwise refunded, and its message is updated so the player knows what happened.
+ */
+async function settleAllForShutdown() {
+  const games = [...activeGames.values()];
+  await Promise.allSettled(
+    games.map(async (game) => {
+      if (game.finished) return;
+      let rendered;
+      if (game.kind === 'blackjack') {
+        // Mid-hand blackjack can't be fairly finished for the player — give the stake back.
+        endGame(game);
+        await payout(game.guild, game.userId, game.bet, game.config);
+        await settle(game, game.bet);
+        game.status = 'refunded';
+        game.note = '🔧 The bot restarted mid-hand — your bet was refunded.';
+        rendered = game.render();
+      } else if (game.canCashOut()) {
+        rendered = await cashOut(game, '🔧 The bot restarted — you were cashed out automatically.');
+      } else {
+        endGame(game);
+        await payout(game.guild, game.userId, game.bet, game.config);
+        await settle(game, game.bet);
+        game.status = 'refunded';
+        rendered = game.render('🔧 The bot restarted — your bet was refunded.');
+      }
+      if (game.message && rendered) await game.message.edit(rendered).catch(() => null);
+      await game.betWrite;
+    })
+  );
+  return games.length;
+}
+
+/**
+ * Called at startup: refunds stakes left behind by a crash (games that never settled) and tells
+ * the player in the channel where they were playing.
+ */
+async function refundOrphanedBets(client) {
+  const orphans = await ActiveBet.find({}).lean();
+  for (const bet of orphans) {
+    const claimed = await ActiveBet.findOneAndDelete({ _id: bet._id });
+    if (!claimed) continue;
+    const guild = client.guilds.cache.get(bet.guildId);
+    if (!guild) continue;
+    try {
+      await adjustXp(guild, bet.userId, bet.amount);
+      const channel = bet.channelId ? guild.channels.cache.get(bet.channelId) : null;
+      await channel
+        ?.send({
+          content: `♻️ <@${bet.userId}> the bot restarted during your ${bet.kind} game — your **${fmtNum(bet.amount)} XP** bet was refunded.`,
+          allowedMentions: { users: [bet.userId] }
+        })
+        .catch(() => null);
+    } catch (err) {
+      console.error(`Failed to refund orphaned bet ${bet.gameId}:`, err.message);
+    }
+  }
+  return orphans.length;
 }
 
 // ---------------------------------------------------------------- Button router
@@ -652,6 +731,8 @@ module.exports = {
   startMines,
   startHighLow,
   startBlackjack,
+  settleAllForShutdown,
+  refundOrphanedBets,
   handValue,
   blackjackReturn,
   handleGambleButton

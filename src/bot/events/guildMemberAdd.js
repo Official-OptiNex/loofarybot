@@ -1,6 +1,7 @@
 const GuildConfig = require('../../database/models/GuildConfig');
 const { recordJoin } = require('../cogs/modules/joinTracking');
 const { sendWelcome } = require('../cogs/modules/welcome');
+const { reportError, reportIssue } = require('../utils/errorReporter');
 
 async function applyAutoRole(member) {
   const config = await GuildConfig.findOne({ guildId: member.guild.id }).lean();
@@ -9,8 +10,12 @@ async function applyAutoRole(member) {
   const role = member.guild.roles.cache.get(config.autoRoleId);
   const botMember = member.guild.members.me;
   if (!role || !botMember || botMember.roles.highest.position <= role.position) {
-    console.error(
-      `Auto-role skipped for ${member.id} in guild ${member.guild.id}: role missing or bot's role is too low in the hierarchy.`
+    reportIssue(
+      member.guild.id,
+      'Auto-role could not be given',
+      role
+        ? `LoofaryBot's role is below **${role.name}** in Server Settings → Roles, so new members aren't getting it. Move LoofaryBot's role above it.`
+        : 'The configured auto-role no longer exists. Pick a new one on the dashboard.'
     );
     return;
   }
@@ -26,7 +31,12 @@ module.exports = function registerGuildMemberAddEvent(client) {
     // Independent steps: a failure in one (e.g. a bad welcome channel) must not skip the others.
     const results = await Promise.allSettled([recordJoin(member), applyAutoRole(member), sendWelcome(member)]);
     for (const r of results) {
-      if (r.status === 'rejected') console.error('Error in guildMemberAdd handler:', r.reason);
+      if (r.status === 'rejected') reportError(r.reason, { guildId: member.guild.id, context: 'Member join handling failed' });
+    }
+    // sendWelcome resolves with a reason when it couldn't post; only real setup problems are worth an alert.
+    const welcomeProblem = results[2].status === 'fulfilled' ? results[2].value : null;
+    if (welcomeProblem && !/disabled|empty/i.test(welcomeProblem)) {
+      reportIssue(member.guild.id, 'Welcome message not sent', welcomeProblem);
     }
   });
 };

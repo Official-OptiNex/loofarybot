@@ -29,6 +29,7 @@ module.exports = [
     blurb: 'Members earn XP for chatting, level up, and unlock role rewards.',
     tab: 'leveling',
     commands: [
+      { usage: '/daily', perm: null, description: 'Claim daily XP — consecutive days build a streak for bigger rewards.' },
       { usage: '/levels rank', perm: null, description: "See your (or someone's) level, XP and server rank." },
       { usage: '/levels leaderboard', perm: null, description: 'The server XP leaderboard.' },
       { usage: '/levels card', perm: null, description: 'Customize your rank card color, background and tagline.' },
@@ -59,6 +60,19 @@ module.exports = [
       { usage: '/gamble highlow', perm: null, description: 'Call higher or lower to build a multiplier, then cash out.' },
       { usage: '/gamble info', perm: null, description: 'Payouts, house edge and bet limits.' },
       { usage: '/gamble config', perm: 'Admin', description: 'Enable gambling, set the house edge, limits and channel.' }
+    ]
+  },
+  {
+    id: 'alerts',
+    group: 'Creator Alerts',
+    icon: '📡',
+    blurb: 'Twitch go-live and YouTube upload alerts with custom embeds and pings.',
+    tab: 'alerts',
+    commands: [
+      { usage: '/alerts add', perm: 'Manage Server', description: 'Follow a Twitch or YouTube channel and pick where alerts go.' },
+      { usage: '/alerts list', perm: 'Manage Server', description: 'Every followed channel and whether it is live.' },
+      { usage: '/alerts test', perm: 'Manage Server', description: 'Post a sample alert (no one is pinged).' },
+      { usage: '/alerts remove', perm: 'Manage Server', description: 'Stop following a channel.' }
     ]
   },
   {

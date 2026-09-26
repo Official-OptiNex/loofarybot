@@ -1,10 +1,11 @@
 const express = require('express');
 const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { requireAuth, requireGuildAccess } = require('../utils/authMiddleware');
+const { requireAuth, requireGuildAccess, requirePage } = require('../utils/authMiddleware');
+const { auditTrail } = require('../utils/audit');
 
 const router = express.Router();
 
-router.get('/:guildId/embed', requireAuth, requireGuildAccess, (req, res) => {
+router.get('/:guildId/embed', requireAuth, requireGuildAccess, requirePage('embed'), (req, res) => {
   const me = req.guild.members.me;
   const channels = req.guild.channels.cache
     .filter((c) => c.isTextBased() && !c.isThread() && me && c.permissionsFor(me)?.has(PermissionFlagsBits.SendMessages))
@@ -20,7 +21,7 @@ router.get('/:guildId/embed', requireAuth, requireGuildAccess, (req, res) => {
   res.render('embedBuilder', { guild: req.guild, channels, bot });
 });
 
-router.post('/:guildId/embed/send', requireAuth, requireGuildAccess, async (req, res) => {
+router.post('/:guildId/embed/send', requireAuth, requireGuildAccess, requirePage('embed'), auditTrail, async (req, res) => {
   try {
     const { channelId, content, title, description, color, fields, footer, imageUrl, thumbnailUrl } = req.body;
 

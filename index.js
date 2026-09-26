@@ -10,7 +10,10 @@ const registerGuildMemberAddEvent = require('./src/bot/events/guildMemberAdd');
 const registerGuildMemberRemoveEvent = require('./src/bot/events/guildMemberRemove');
 const { registerLoggingEvents } = require('./src/bot/cogs/modules/logging');
 
+const { registerProcessHandlers } = require('./src/bot/utils/errorReporter');
+
 async function main() {
+  registerProcessHandlers(client);
   await connectDB();
 
   registerReadyEvent(client);
@@ -27,6 +30,28 @@ async function main() {
   // bot's READY event has populated the cache, which happens within seconds.
   startWebServer(client);
 }
+
+// Render sends SIGTERM before stopping the instance (redeploys, restarts). Settle open games so no
+// one loses a bet, then disconnect cleanly. Render allows ~30s; we cap our work well under that.
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received — settling open games and shutting down.`);
+  const { settleAllForShutdown } = require('./src/bot/cogs/modules/gambling');
+  const timeout = new Promise((resolve) => setTimeout(resolve, 15000));
+  try {
+    const settled = await Promise.race([settleAllForShutdown(), timeout]);
+    if (typeof settled === 'number') console.log(`Settled ${settled} open game(s).`);
+  } catch (err) {
+    console.error('Error settling games on shutdown:', err);
+  }
+  await client.destroy().catch(() => null);
+  await require('mongoose').disconnect().catch(() => null);
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 main().catch((err) => {
   console.error('Fatal startup error:', err);

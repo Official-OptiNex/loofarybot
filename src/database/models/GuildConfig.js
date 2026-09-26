@@ -82,6 +82,15 @@ const GuildConfigSchema = new mongoose.Schema(
     levelUpChannelId: { type: String, default: null },
     xpMultipliers: { type: [XpMultiplierSchema], default: [] },
     rankCardBoosterOnly: { type: Boolean, default: false },
+    // /daily streak rewards. XP = base + min(bonusPerDay × (streak − 1), maxBonus) (+ milestone bonus).
+    daily: {
+      enabled: { type: Boolean, default: true },
+      baseXp: { type: Number, default: 50 },
+      bonusPerDay: { type: Number, default: 10 },
+      maxBonus: { type: Number, default: 200 },
+      milestoneEvery: { type: Number, default: 7 },
+      milestoneBonus: { type: Number, default: 250 }
+    },
     // Cosmetic name-color roles: members hold the color role for the highest tier they've reached.
     levelColors: {
       enabled: { type: Boolean, default: false },
@@ -102,6 +111,17 @@ const GuildConfigSchema = new mongoose.Schema(
 
     // --- Logging ---
     logsEnabled: { type: Boolean, default: true },
+    // Staff channel for bot problems (missing permissions, failed role changes, errors).
+    alertsChannelId: { type: String, default: null },
+
+    // --- Go-live / upload alerts (subscriptions live in AlertSubscription) ---
+    socialAlertsEnabled: { type: Boolean, default: true },
+
+    // --- Dashboard access for moderators (admins always have full access) ---
+    dashboardAccess: {
+      modRoleIds: { type: [String], default: [] },
+      modPages: { type: [String], default: ['leaderboard', 'commands', 'logviewer'] }
+    },
     logChannelId: { type: String, default: null },
     logEvents: {
       messageEdit: { type: Boolean, default: true },

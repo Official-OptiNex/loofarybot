@@ -162,7 +162,11 @@ async function applyMemberColor(guild, member, level, config) {
 
   const tier = tierFor(settings, level);
   const target = tier ? await ensureTierRole(guild, config, tier).catch((err) => {
-    console.error(`Could not create level ${tier} color role in ${guild.id}:`, err.message);
+    require('../../utils/errorReporter').reportIssue(
+      guild.id,
+      'Level color role could not be created',
+      `Creating the Level ${tier} color role failed: ${err.message}. LoofaryBot needs the Manage Roles permission.`
+    );
     return null;
   }) : null;
 
@@ -188,7 +192,11 @@ async function onLevelChange(guildId, userId, newLevel) {
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member) return;
   await applyMemberColor(guild, member, newLevel, config).catch((err) =>
-    console.error(`Level color update failed for ${userId} in ${guildId}:`, err.message)
+    require('../../utils/errorReporter').reportIssue(
+      guildId,
+      'Level color could not be updated',
+      `Updating <@${userId}>'s color role failed: ${err.message}. Check that LoofaryBot's role is above the level color roles.`
+    )
   );
 }
 

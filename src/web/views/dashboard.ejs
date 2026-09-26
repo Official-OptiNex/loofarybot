@@ -19,7 +19,7 @@
     <div class="page-header">
       <h1>Your Servers</h1>
     </div>
-    <p class="muted">Only servers where you have Manage Server permission <em>and</em> LoofaryBot is present are shown.</p>
+    <p class="muted">Servers where LoofaryBot is present and you have Manage Server permission — or a dashboard moderator role — are shown.</p>
 
     <div class="stat-strip">
       <div class="stat-pill"><span class="value"><%= guilds.length %></span><span class="label">Manageable servers</span></div>
@@ -46,6 +46,7 @@
             <div class="guild-card-stats">
               <span>👥 <%= g.memberCount %></span>
               <span>💬 <%= g.channelCount %></span>
+              <% if (g.accessLevel === 'mod') { %><span class="badge boost">Moderator</span><% } %>
             </div>
           </a>
         <% }) %>

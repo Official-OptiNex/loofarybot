@@ -45,6 +45,9 @@ Copy `.env.example` to `.env` for local dev, or set these in Render's dashboard.
 | `CLIENT_SECRET` | for dashboard login | Discord application client secret |
 | `REDIRECT_URI` | for dashboard login | e.g. `https://your-app.onrender.com/auth/discord/callback` |
 | `SESSION_SECRET` | for dashboard login | Any long random string |
+| `TWITCH_CLIENT_ID` | for Twitch alerts | From a free app at dev.twitch.tv/console/apps |
+| `TWITCH_CLIENT_SECRET` | for Twitch alerts | Same app (YouTube alerts need nothing) |
+| `ERROR_ALERT_CHANNEL_ID` | no | A channel (in any server the bot is in) that gets every error with details |
 | `PORT` | no | Render sets this automatically |
 
 Without `CLIENT_SECRET`/`REDIRECT_URI`/`SESSION_SECRET`, the bot and giveaways/honeypot/leveling
@@ -195,6 +198,31 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - **Sync Join Data** backfills history from every current member's join date (members who left
   can't be recovered, and rejoiners only report their latest join). Limited to once per 5 minutes.
 
+### Creator Alerts (`/alerts …` or the dashboard's **Alerts** page)
+- Twitch go-live and YouTube upload alerts, each with its own channel, ping role (or @everyone),
+  message and embed (placeholders `{name}` `{title}` `{url}` `{game}`), and a pause switch.
+- Twitch is checked every 2 minutes (needs `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET`); when a
+  stream ends, its alert is edited to "Stream ended · streamed for 2h 5m" without a second ping.
+- YouTube uses the channel's public RSS feed every 5 minutes — no API key. Following a channel
+  never announces its old videos, and at most 3 new videos are posted per check.
+- Alerts in announcement channels are auto-published to followers.
+
+### Daily streaks (`/daily`)
+- Claim XP once per UTC day. Consecutive days add a streak bonus (default +10/day, capped at
+  +200) and a milestone bonus every 7 days (+250). Configure it on Leveling → 🔥 Daily streaks.
+- The streak shows on `/levels rank`. Claims go through normal XP, so role rewards and level
+  colors apply.
+
+### Server Settings (dashboard, admins only)
+- **Mod access:** pick moderator roles and which pages they can use (e.g. Log viewer and
+  Leaderboard only). Mods see a limited dashboard; everything else is hidden and blocked by the API.
+- **Bot alerts:** a staff channel where LoofaryBot reports problems it can't fix itself (missing
+  permissions, a role above the bot, a deleted channel, errors). Repeats are grouped.
+- **Change history:** every dashboard change, who made it (admin or mod) and when — kept 180 days.
+- **Backups:** automatic daily backups (last 7) plus manual ones, each with settings and member XP.
+  Download any backup, restore it (XP optional), or export/import settings as a JSON file. A safety
+  backup is taken before every import or restore.
+
 ### Member data
 - When someone leaves, their XP/level/rank card, reminders in that server and entries in running
   giveaways are deleted, so they drop off the leaderboard. Anyone who left while the bot was
@@ -218,7 +246,10 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 
 ## 7. Notes & Limitations
 
-- Web sessions use in-memory storage and reset on redeploy (you'll just need to log back in);
-  swap in `connect-mongo` in `src/web/server.js` if you want sessions to persist too.
+- Dashboard logins are stored in MongoDB (`web_sessions`), so they survive redeploys. Keep
+  `SESSION_SECRET` set to the same long random value — changing it logs everyone out.
+- Redeploys and restarts settle open gambling games: winnings are cashed out, otherwise the bet
+  is refunded (blackjack hands are always refunded). A crash is caught up on the next startup —
+  the bet is refunded and the player is told in the channel.
 - Render's free tier has an ephemeral filesystem — this is exactly why giveaways, honeypot
   counts, and level data all live in MongoDB Atlas rather than local files.
