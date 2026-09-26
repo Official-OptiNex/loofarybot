@@ -1,7 +1,6 @@
 const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 const { requireAuth, requireGuildAccess } = require('../utils/authMiddleware');
-const GuildConfig = require('../../database/models/GuildConfig');
 const { setupHoneypotChannel } = require('../../bot/cogs/modules/honeypot');
 const { getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 
@@ -15,6 +14,40 @@ router.get('/guilds/:guildId/channels', requireAuth, requireGuildAccess, (req, r
     .map((c) => ({ id: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
   res.json({ channels });
+});
+
+// GET everything the embed builder's live @/#/: autocomplete needs: members, channels, roles, emojis.
+router.get('/guilds/:guildId/mentionable', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    // Members aren't always fully cached — fetch (bounded) so autocomplete has real data
+    // to search even in servers the bot just joined or hasn't seen much traffic in.
+    await req.guild.members.fetch({ limit: 1000 }).catch(() => null);
+
+    const users = req.guild.members.cache
+      .filter((m) => !m.user.bot)
+      .map((m) => ({ id: m.id, name: m.displayName, username: m.user.username }))
+      .slice(0, 1000);
+
+    const channels = req.guild.channels.cache
+      .filter((c) => c.isTextBased() && !c.isThread())
+      .map((c) => ({ id: c.id, name: c.name }));
+
+    const roles = req.guild.roles.cache
+      .filter((r) => r.name !== '@everyone' && !r.managed)
+      .map((r) => ({ id: r.id, name: r.name }));
+
+    const emojis = req.guild.emojis.cache.map((e) => ({
+      id: e.id,
+      name: e.name,
+      animated: e.animated,
+      url: e.imageURL({ size: 32 })
+    }));
+
+    res.json({ users, channels, roles, emojis });
+  } catch (err) {
+    console.error('Failed to load mentionable data:', err);
+    res.status(500).json({ error: 'Failed to load server data.' });
+  }
 });
 
 router.post('/guilds/:guildId/honeypot', requireAuth, requireGuildAccess, async (req, res) => {
@@ -39,14 +72,21 @@ router.post('/guilds/:guildId/honeypot', requireAuth, requireGuildAccess, async 
 
 router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (req, res) => {
   try {
-    const { enabled, levelRoles } = req.body; // levelRoles: [{level, roleId}]
+    const { enabled, levelRoles, xpMin, xpMax, xpCooldownSeconds, levelXpBase } = req.body;
     const config = await getOrCreateConfig(req.guild.id);
+
     if (typeof enabled === 'boolean') config.levelingEnabled = enabled;
     if (Array.isArray(levelRoles)) {
       config.levelRoles = levelRoles
         .filter((lr) => lr.level && lr.roleId)
         .map((lr) => ({ level: Number(lr.level), roleId: String(lr.roleId) }));
     }
+    // Empty string / undefined from the form clears the override back to the global default.
+    config.xpMin = xpMin === '' || xpMin == null ? null : Number(xpMin);
+    config.xpMax = xpMax === '' || xpMax == null ? null : Number(xpMax);
+    config.xpCooldownSeconds = xpCooldownSeconds === '' || xpCooldownSeconds == null ? null : Number(xpCooldownSeconds);
+    config.levelXpBase = levelXpBase === '' || levelXpBase == null ? null : Number(levelXpBase);
+
     await config.save();
     res.json({ ok: true });
   } catch (err) {

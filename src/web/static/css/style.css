@@ -63,3 +63,42 @@ h1, h2, h3 { font-weight: 800; }
   position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--bg-card); border: 1px solid var(--border-color);
   padding: 0.8rem 1.2rem; border-radius: 10px; display: none;
 }
+
+/* Guild dashboard header + tabs */
+.guild-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+.tabs { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1.5rem; }
+.tab-btn {
+  background: none; border: none; color: var(--text-muted); padding: 0.75rem 1.1rem; cursor: pointer;
+  font-size: 0.95rem; font-weight: 600; border-bottom: 2px solid transparent;
+}
+.tab-btn:hover { color: var(--text-main); }
+.tab-btn.active { color: var(--text-main); border-bottom-color: var(--accent-blurple); }
+.tab-panel.hidden { display: none; }
+.cmd-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);
+}
+.cmd-row:last-child { border-bottom: none; }
+.cmd-row code {
+  background: rgba(88, 101, 242, 0.12); color: var(--accent-blurple); padding: 3px 8px;
+  border-radius: 6px; font-family: monospace; font-size: 0.85rem; white-space: nowrap;
+}
+
+/* Embed builder autocomplete dropdown */
+.autocomplete-wrapper { position: relative; }
+.autocomplete-dropdown {
+  position: absolute; z-index: 20; background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: 8px; max-height: 220px; overflow-y: auto; width: 100%; margin-top: 2px; display: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.autocomplete-dropdown.visible { display: block; }
+.autocomplete-item {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.8rem; cursor: pointer; font-size: 0.9rem;
+}
+.autocomplete-item:hover, .autocomplete-item.highlighted { background: var(--bg-hover); }
+.autocomplete-item img { width: 18px; height: 18px; border-radius: 4px; }
+.mention-pill {
+  background: rgba(88, 101, 242, 0.25); color: #C9CDFB; border-radius: 4px; padding: 0 3px; font-weight: 500;
+}
+.channel-pill { background: rgba(88, 101, 242, 0.15); color: #B8C2FF; border-radius: 4px; padding: 0 3px; }
+.custom-emoji { height: 1.35em; vertical-align: middle; }

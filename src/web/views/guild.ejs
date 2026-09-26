@@ -12,57 +12,143 @@
     <a class="btn secondary" href="/dashboard">← All Servers</a>
   </nav>
   <div class="container">
-    <h1><%= guild.name %></h1>
-    <p><a class="btn" href="/dashboard/<%= guild.id %>/embed">🖌️ Open Embed Builder</a></p>
-
-    <div class="card">
-      <h2>🍯 Honeypot Trap</h2>
-      <p class="muted">Anyone who posts in this channel is instantly punished. A live counter embed is posted there.</p>
-      <label for="hpChannel">Trap Channel</label>
-      <select id="hpChannel">
-        <option value="">— Select a channel —</option>
-        <% channels.forEach(c => { %>
-          <option value="<%= c.id %>" <%= config.honeypotChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
-        <% }) %>
-      </select>
-      <label for="hpAction">Enforcement Action</label>
-      <select id="hpAction">
-        <option value="kick" <%= config.honeypotAction === 'kick' ? 'selected' : '' %>>Kick</option>
-        <option value="softban" <%= config.honeypotAction === 'softban' ? 'selected' : '' %>>Soft Ban (purge messages)</option>
-        <option value="ban" <%= config.honeypotAction === 'ban' ? 'selected' : '' %>>Permanent Ban</option>
-      </select>
-      <p class="muted" style="margin-top:0.75rem;">
-        Current counts — Kicks: <strong><%= config.honeypotKicks || 0 %></strong>,
-        Soft Bans: <strong><%= config.honeypotSoftbans || 0 %></strong>,
-        Bans: <strong><%= config.honeypotBans || 0 %></strong>
-      </p>
-      <button class="btn" style="margin-top:1rem;" onclick="saveHoneypot()">Save Honeypot Settings</button>
+    <div class="guild-header">
+      <% if (guild.iconURL()) { %>
+        <img src="<%= guild.iconURL({ size: 64 }) %>" width="56" height="56" style="border-radius:50%;">
+      <% } %>
+      <div>
+        <h1 style="margin:0;"><%= guild.name %></h1>
+        <p class="muted" style="margin:0.2rem 0 0;"><%= guild.memberCount %> members</p>
+      </div>
+      <a class="btn" href="/dashboard/<%= guild.id %>/embed" style="margin-left:auto;">🖌️ Embed Builder</a>
     </div>
 
-    <div class="card">
-      <h2>📈 Leveling</h2>
-      <label style="display:flex; align-items:center; gap:0.5rem;">
-        <input type="checkbox" id="lvlEnabled" style="width:auto;" <%= config.levelingEnabled === false ? '' : 'checked' %>>
-        Enable XP gain from chat messages
-      </label>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="overview">Overview</button>
+      <button class="tab-btn" data-tab="honeypot">🍯 Honeypot</button>
+      <button class="tab-btn" data-tab="leveling">📈 Leveling</button>
+      <button class="tab-btn" data-tab="commands">📜 Commands</button>
+    </div>
 
-      <h3 style="margin-top:1.5rem;">Level-Up Role Rewards</h3>
-      <div id="levelRoleRows">
-        <% (config.levelRoles || []).forEach(lr => { %>
-          <div class="field-row level-role-row">
-            <input type="number" min="1" class="lr-level" value="<%= lr.level %>" placeholder="Level">
-            <select class="lr-role">
-              <% roles.forEach(r => { %>
-                <option value="<%= r.id %>" <%= r.id === lr.roleId ? 'selected' : '' %>><%= r.name %></option>
-              <% }) %>
-            </select>
-            <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
-          </div>
-        <% }) %>
+    <!-- OVERVIEW -->
+    <div class="tab-panel" id="tab-overview">
+      <div class="grid">
+        <div class="card">
+          <h3>🍯 Honeypot</h3>
+          <% if (config.honeypotChannelId) { %>
+            <p class="muted">Trap: <#<%= config.honeypotChannelId %>><br>Action: <strong><%= config.honeypotAction %></strong></p>
+            <p class="muted">Kicks: <%= config.honeypotKicks || 0 %> · Soft Bans: <%= config.honeypotSoftbans || 0 %> · Bans: <%= config.honeypotBans || 0 %></p>
+          <% } else { %>
+            <p class="muted">Not set up yet — see the Honeypot tab.</p>
+          <% } %>
+        </div>
+        <div class="card">
+          <h3>📈 Leveling</h3>
+          <p class="muted">Status: <strong><%= config.levelingEnabled === false ? 'Disabled' : 'Enabled' %></strong></p>
+          <p class="muted">XP per message: <strong><%= effectiveXp.xpMin %>–<%= effectiveXp.xpMax %></strong>,
+            cooldown <strong><%= effectiveXp.cooldownMs / 1000 %>s</strong></p>
+          <p class="muted"><%= (config.levelRoles || []).length %> role reward(s) configured.</p>
+        </div>
       </div>
-      <button class="btn secondary" type="button" onclick="addLevelRoleRow()">+ Add Role Reward</button>
-      <br>
-      <button class="btn" style="margin-top:1rem;" onclick="saveLevels()">Save Leveling Settings</button>
+    </div>
+
+    <!-- HONEYPOT -->
+    <div class="tab-panel hidden" id="tab-honeypot">
+      <div class="card">
+        <h2>🍯 Honeypot Trap</h2>
+        <p class="muted">Anyone who posts in this channel is instantly punished. A live counter embed is posted there.</p>
+        <label for="hpChannel">Trap Channel</label>
+        <select id="hpChannel">
+          <option value="">— Select a channel —</option>
+          <% channels.forEach(c => { %>
+            <option value="<%= c.id %>" <%= config.honeypotChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+        <label for="hpAction">Enforcement Action</label>
+        <select id="hpAction">
+          <option value="kick" <%= config.honeypotAction === 'kick' ? 'selected' : '' %>>Kick</option>
+          <option value="softban" <%= config.honeypotAction === 'softban' ? 'selected' : '' %>>Soft Ban (purge messages)</option>
+          <option value="ban" <%= config.honeypotAction === 'ban' ? 'selected' : '' %>>Permanent Ban</option>
+        </select>
+        <p class="muted" style="margin-top:0.75rem;">
+          Current counts — Kicks: <strong><%= config.honeypotKicks || 0 %></strong>,
+          Soft Bans: <strong><%= config.honeypotSoftbans || 0 %></strong>,
+          Bans: <strong><%= config.honeypotBans || 0 %></strong>
+        </p>
+        <button class="btn" style="margin-top:1rem;" onclick="saveHoneypot()">Save Honeypot Settings</button>
+      </div>
+    </div>
+
+    <!-- LEVELING -->
+    <div class="tab-panel hidden" id="tab-leveling">
+      <div class="card">
+        <h2>📈 Leveling</h2>
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input type="checkbox" id="lvlEnabled" style="width:auto;" <%= config.levelingEnabled === false ? '' : 'checked' %>>
+          Enable XP gain from chat messages
+        </label>
+
+        <h3 style="margin-top:1.5rem;">XP Tuning</h3>
+        <p class="muted">Leave a field blank to use the site-wide default shown as its placeholder.</p>
+        <div class="field-row">
+          <div>
+            <label for="xpMin">Min XP / message</label>
+            <input type="number" id="xpMin" min="0" placeholder="<%= effectiveXp.xpMin %>" value="<%= config.xpMin ?? '' %>">
+          </div>
+          <div>
+            <label for="xpMax">Max XP / message</label>
+            <input type="number" id="xpMax" min="0" placeholder="<%= effectiveXp.xpMax %>" value="<%= config.xpMax ?? '' %>">
+          </div>
+        </div>
+        <div class="field-row">
+          <div>
+            <label for="xpCooldown">Cooldown (seconds)</label>
+            <input type="number" id="xpCooldown" min="0" placeholder="<%= effectiveXp.cooldownMs / 1000 %>" value="<%= config.xpCooldownSeconds ?? '' %>">
+          </div>
+          <div>
+            <label for="levelXpBase">Level curve base (higher = slower)</label>
+            <input type="number" id="levelXpBase" min="1" placeholder="<%= effectiveXp.levelXpBase %>" value="<%= config.levelXpBase ?? '' %>">
+          </div>
+        </div>
+
+        <h3 style="margin-top:1.5rem;">Level-Up Role Rewards</h3>
+        <div id="levelRoleRows">
+          <% (config.levelRoles || []).forEach(lr => {
+               const role = roles.find(r => r.id === lr.roleId);
+          %>
+            <div class="field-row level-role-row">
+              <input type="number" min="1" class="lr-level" value="<%= lr.level %>" placeholder="Level">
+              <select class="lr-role">
+                <% roles.forEach(r => { %>
+                  <option value="<%= r.id %>" <%= r.id === lr.roleId ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
+                <% }) %>
+              </select>
+              <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
+            </div>
+            <% if (role && !role.assignable) { %>
+              <p class="muted" style="color:#FEE75C; margin-top:-0.3rem;">⚠️ LoofaryBot's role is below <%= role.name %> — move LoofaryBot's role higher in Server Settings → Roles.</p>
+            <% } %>
+          <% }) %>
+        </div>
+        <button class="btn secondary" type="button" onclick="addLevelRoleRow()">+ Add Role Reward</button>
+        <br>
+        <button class="btn" style="margin-top:1rem;" onclick="saveLevels()">Save Leveling Settings</button>
+      </div>
+    </div>
+
+    <!-- COMMANDS -->
+    <div class="tab-panel hidden" id="tab-commands">
+      <% commandReference.forEach(group => { %>
+        <div class="card">
+          <h3><%= group.group %></h3>
+          <% group.commands.forEach(cmd => { %>
+            <div class="cmd-row">
+              <code><%= cmd.usage %></code>
+              <span class="muted"><%= cmd.description %></span>
+            </div>
+          <% }) %>
+        </div>
+      <% }) %>
     </div>
   </div>
 
@@ -72,11 +158,27 @@
     const guildId = '<%= guild.id %>';
     const roles = <%- JSON.stringify(roles) %>;
 
+    // --- Tabs ---
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+      });
+    });
+
     function showToast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg;
       t.style.display = 'block';
       setTimeout(() => (t.style.display = 'none'), 2500);
+    }
+
+    function roleOptionsHtml(selectedId) {
+      return roles
+        .map((r) => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}${r.assignable ? '' : ' ⚠️ (bot cannot assign this)'}</option>`)
+        .join('');
     }
 
     function addLevelRoleRow() {
@@ -85,7 +187,7 @@
       row.className = 'field-row level-role-row';
       row.innerHTML = `
         <input type="number" min="1" class="lr-level" placeholder="Level">
-        <select class="lr-role">${roles.map((r) => `<option value="${r.id}">${r.name}</option>`).join('')}</select>
+        <select class="lr-role">${roleOptionsHtml(null)}</select>
         <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
       `;
       container.appendChild(row);
@@ -108,12 +210,20 @@
         level: row.querySelector('.lr-level').value,
         roleId: row.querySelector('.lr-role').value
       }));
+      const payload = {
+        enabled,
+        levelRoles,
+        xpMin: document.getElementById('xpMin').value,
+        xpMax: document.getElementById('xpMax').value,
+        xpCooldownSeconds: document.getElementById('xpCooldown').value,
+        levelXpBase: document.getElementById('levelXpBase').value
+      };
       const res = await fetch(`/api/guilds/${guildId}/levels`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled, levelRoles })
+        body: JSON.stringify(payload)
       });
-      showToast(res.ok ? '✅ Leveling settings saved.' : '❌ Failed to save.');
+      showToast(res.ok ? '✅ Leveling settings saved. Reload to see updated hierarchy warnings.' : '❌ Failed to save.');
     }
   </script>
 </body>

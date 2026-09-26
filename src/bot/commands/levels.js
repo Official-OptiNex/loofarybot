@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { getOrCreateConfig, getRank, getLeaderboard, xpForLevel } = require('../cogs/modules/leveling');
+const { getOrCreateConfig, getRank, getLeaderboard, xpForLevel, getEffectiveXpSettings } = require('../cogs/modules/leveling');
 
 const data = new SlashCommandBuilder()
   .setName('levels')
@@ -20,14 +20,41 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub
+      .setName('removerole')
+      .setDescription('Remove a level-up role reward (Admin only)')
+      .addIntegerOption((opt) => opt.setName('level').setDescription('Milestone level to clear').setRequired(true))
+  )
+  .addSubcommand((sub) =>
+    sub
       .setName('toggle')
       .setDescription('Enable or disable XP gain for this server (Admin only)')
       .addBooleanOption((opt) => opt.setName('enabled').setDescription('Turn leveling on or off').setRequired(true))
-  );
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('xpconfig')
+      .setDescription('Tune XP-per-message and leveling speed for this server (Admin only)')
+      .addIntegerOption((opt) => opt.setName('min_xp').setDescription('Minimum XP per message').setRequired(false))
+      .addIntegerOption((opt) => opt.setName('max_xp').setDescription('Maximum XP per message').setRequired(false))
+      .addIntegerOption((opt) => opt.setName('cooldown_seconds').setDescription('Seconds between XP-earning messages').setRequired(false))
+      .addIntegerOption((opt) =>
+        opt
+          .setName('level_base')
+          .setDescription('Higher = slower leveling curve (default 100)')
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sub) => sub.setName('xpconfig_show').setDescription('Show current XP tuning for this server'));
 
-// setrole/toggle are admin-only. Discord only lets us gate an entire command (not a single
+// Admin-only subcommands. Discord only lets us gate an entire command (not a single
 // subcommand) via setDefaultMemberPermissions, so we enforce this at runtime instead.
-const ADMIN_ONLY_SUBCOMMANDS = ['setrole', 'toggle'];
+const ADMIN_ONLY_SUBCOMMANDS = ['setrole', 'removerole', 'toggle', 'xpconfig'];
+
+function checkRoleHierarchy(guild, role) {
+  const botMember = guild.members.me;
+  if (!botMember || !role) return true;
+  return botMember.roles.highest.position > role.position;
+}
 
 async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
@@ -38,12 +65,14 @@ async function execute(interaction) {
 
   if (sub === 'rank') {
     const target = interaction.options.getUser('user') || interaction.user;
+    const config = await getOrCreateConfig(interaction.guildId);
+    const { levelXpBase } = getEffectiveXpSettings(config);
     const result = await getRank(interaction.guildId, target.id);
     if (!result) {
       return interaction.reply({ content: `${target.username} hasn't earned any XP yet.`, ephemeral: true });
     }
     const { record, rank } = result;
-    const nextLevelXp = xpForLevel(record.level + 1);
+    const nextLevelXp = xpForLevel(record.level + 1, levelXpBase);
     const embed = new EmbedBuilder()
       .setTitle(`${target.username}'s Rank`)
       .setColor('#5865F2')
@@ -77,7 +106,26 @@ async function execute(interaction) {
       config.levelRoles.push({ level, roleId: role.id });
     }
     await config.save();
-    return interaction.reply({ content: `✅ Level ${level} will now grant ${role}.`, ephemeral: true });
+
+    const hierarchyOk = checkRoleHierarchy(interaction.guild, role);
+    const warning = hierarchyOk
+      ? ''
+      : `\n⚠️ **Heads up:** LoofaryBot's own role is currently positioned *below* ${role} in Server Settings → Roles, ` +
+        `so it won't actually be able to grant this role until you drag LoofaryBot's role above it.`;
+
+    return interaction.reply({ content: `✅ Level ${level} will now grant ${role}.${warning}`, ephemeral: true });
+  }
+
+  if (sub === 'removerole') {
+    const level = interaction.options.getInteger('level');
+    const config = await getOrCreateConfig(interaction.guildId);
+    const before = config.levelRoles.length;
+    config.levelRoles = config.levelRoles.filter((lr) => lr.level !== level);
+    if (config.levelRoles.length === before) {
+      return interaction.reply({ content: `No role reward was set for level ${level}.`, ephemeral: true });
+    }
+    await config.save();
+    return interaction.reply({ content: `✅ Removed the role reward for level ${level}.`, ephemeral: true });
   }
 
   if (sub === 'toggle') {
@@ -86,6 +134,49 @@ async function execute(interaction) {
     config.levelingEnabled = enabled;
     await config.save();
     return interaction.reply({ content: `✅ Leveling is now **${enabled ? 'enabled' : 'disabled'}**.`, ephemeral: true });
+  }
+
+  if (sub === 'xpconfig') {
+    const minXp = interaction.options.getInteger('min_xp');
+    const maxXp = interaction.options.getInteger('max_xp');
+    const cooldown = interaction.options.getInteger('cooldown_seconds');
+    const levelBase = interaction.options.getInteger('level_base');
+
+    if (minXp !== null && maxXp !== null && minXp > maxXp) {
+      return interaction.reply({ content: '❌ `min_xp` cannot be greater than `max_xp`.', ephemeral: true });
+    }
+
+    const config = await getOrCreateConfig(interaction.guildId);
+    if (minXp !== null) config.xpMin = minXp;
+    if (maxXp !== null) config.xpMax = maxXp;
+    if (cooldown !== null) config.xpCooldownSeconds = cooldown;
+    if (levelBase !== null) config.levelXpBase = levelBase;
+    await config.save();
+
+    const effective = getEffectiveXpSettings(config);
+    return interaction.reply({
+      content:
+        `✅ XP settings updated.\n` +
+        `**Min XP:** ${effective.xpMin} • **Max XP:** ${effective.xpMax} • ` +
+        `**Cooldown:** ${effective.cooldownMs / 1000}s • **Level curve base:** ${effective.levelXpBase}`,
+      ephemeral: true
+    });
+  }
+
+  if (sub === 'xpconfig_show') {
+    const config = await getOrCreateConfig(interaction.guildId);
+    const effective = getEffectiveXpSettings(config);
+    const embed = new EmbedBuilder()
+      .setTitle('XP Configuration')
+      .setColor('#5865F2')
+      .addFields(
+        { name: 'Min XP / message', value: `${effective.xpMin}`, inline: true },
+        { name: 'Max XP / message', value: `${effective.xpMax}`, inline: true },
+        { name: 'Cooldown', value: `${effective.cooldownMs / 1000}s`, inline: true },
+        { name: 'Level curve base', value: `${effective.levelXpBase}`, inline: true },
+        { name: 'Leveling enabled', value: config.levelingEnabled ? 'Yes' : 'No', inline: true }
+      );
+    return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 }
 

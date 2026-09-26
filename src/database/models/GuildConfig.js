@@ -26,7 +26,12 @@ const GuildConfigSchema = new mongoose.Schema(
 
     // --- Leveling ---
     levelingEnabled: { type: Boolean, default: true },
-    levelRoles: { type: [LevelRoleSchema], default: [] }
+    levelRoles: { type: [LevelRoleSchema], default: [] },
+    // Per-guild overrides. null/undefined means "use the global default from config.js".
+    xpMin: { type: Number, default: null },
+    xpMax: { type: Number, default: null },
+    xpCooldownSeconds: { type: Number, default: null },
+    levelXpBase: { type: Number, default: null }
   },
   { timestamps: true }
 );
