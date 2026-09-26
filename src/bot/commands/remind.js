@@ -1,11 +1,12 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const Reminder = require('../../database/models/Reminder');
 const { parseDuration, formatDuration } = require('../utils/duration');
+const { durationChoices, relative, clip } = require('../utils/autocomplete');
 
 const MAX_REMINDER_MS = 365 * 86400000;
 const MAX_ACTIVE_PER_USER = 25;
 
-const whenOption = (opt) => opt.setName('in').setDescription('When (e.g. 10m, 2h, 1d12h, 1w)').setRequired(true);
+const whenOption = (opt) => opt.setName('in').setDescription('When (e.g. 10m, 2h, 1d12h, 1w)').setRequired(true).setAutocomplete(true);
 const messageOption = (opt) => opt.setName('message').setDescription('What to remind about').setMaxLength(1000).setRequired(true);
 
 const data = new SlashCommandBuilder()
@@ -27,7 +28,7 @@ const data = new SlashCommandBuilder()
     sub
       .setName('cancel')
       .setDescription('Cancel one of your reminders')
-      .addIntegerOption((opt) => opt.setName('number').setDescription('Number from /remind list').setMinValue(1).setRequired(true))
+      .addIntegerOption((opt) => opt.setName('number').setDescription('Which reminder — pick from the list').setMinValue(1).setRequired(true).setAutocomplete(true))
   );
 
 async function listForUser(userId) {
@@ -91,4 +92,11 @@ async function execute(interaction) {
   }
 }
 
-module.exports = { data, execute };
+async function autocomplete(interaction) {
+  const focused = interaction.options.getFocused(true);
+  if (focused.name === 'in') return interaction.respond(durationChoices(focused.value));
+  const reminders = await listForUser(interaction.user.id);
+  return interaction.respond(reminders.slice(0, 25).map((r, i) => ({ name: clip(`${i + 1}. ${relative(r.remindAt)} — ${r.message}`, 100), value: i + 1 })));
+}
+
+module.exports = { data, execute, autocomplete };

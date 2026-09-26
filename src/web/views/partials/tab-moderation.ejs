@@ -4,7 +4,7 @@
         <div class="hero-icon red">🛡️</div>
         <div>
           <h1>Moderation</h1>
-          <p>Lock channels or the whole server, lift lockdowns, and bulk-delete messages — the same as <code>/lockdown</code>, <code>/unlockdown</code> and <code>/purge</code>.</p>
+          <p>Lock channels or the whole server, bulk-delete messages and keep channels media-only — the same as <code>/lockdown</code>, <code>/unlockdown</code>, <code>/purge</code> and <code>/mediaonly</code>.</p>
           <div class="hero-status" id="modStatus"></div>
         </div>
       </div>
@@ -54,5 +54,18 @@
             <button class="btn danger" id="pgBtn" onclick="runPurge()">Delete messages</button>
           </div>
         </div>
+      </div>
+
+      <div class="card" style="margin-top:1.25rem;">
+        <h3 style="margin-top:0;">📸 Media-only channels</h3>
+        <p class="muted" style="font-size:0.84rem; margin-top:0;">Posts without an image, video or file are removed automatically (with a short notice that deletes itself). Chat inside threads is always allowed. Same as <code>/mediaonly</code>.</p>
+        <div class="mo-form">
+          <select id="moChannel" aria-label="Channel"><%- channelOptions(null, '— Pick a channel —') %></select>
+          <label class="switch sm" title="YouTube, Tenor GIFs, image links… count as media"><input type="checkbox" id="moLinks" checked><span class="track"></span><span>Links count as media</span></label>
+          <label class="switch sm" title="Open a comment thread on every post"><input type="checkbox" id="moThread"><span class="track"></span><span>Comment thread on each post</span></label>
+          <label class="switch sm" title="Members with Manage Messages can post anything"><input type="checkbox" id="moStaff" checked><span class="track"></span><span>Staff can post anything</span></label>
+          <button class="btn" id="moSaveBtn" onclick="saveMediaOnly()">Make media-only</button>
+        </div>
+        <div id="moList" class="muted" style="margin-top:0.9rem;">Loading…</div>
       </div>
     </div>

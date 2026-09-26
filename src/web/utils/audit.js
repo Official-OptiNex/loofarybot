@@ -26,7 +26,7 @@ function fieldSummary(body) {
 function describe(req) {
   const route = req.route?.path || '';
   const b = req.body || {};
-  const tail = route.replace('/guilds/:guildId', '').replace(/^\//, '');
+  const tail = route.replace(/^\/(guilds\/)?:guildId/, '').replace(/^\//, ''); // API routes and /dashboard/:guildId/… pages
   const map = {
     honeypot: ['Honeypot', 'Updated honeypot settings', fieldSummary(b)],
     levels: ['Leveling', 'Updated leveling settings', fieldSummary(b)],

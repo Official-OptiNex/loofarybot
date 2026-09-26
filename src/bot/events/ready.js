@@ -37,6 +37,7 @@ const pollCommand = require('../commands/poll');
 const remindCommand = require('../commands/remind');
 const alertsCommand = require('../commands/alerts');
 const dailyCommand = require('../commands/daily');
+const mediaonlyCommand = require('../commands/mediaonly');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -55,7 +56,8 @@ const ALL_COMMANDS = [
   pollCommand,
   remindCommand,
   alertsCommand,
-  dailyCommand
+  dailyCommand,
+  mediaonlyCommand
 ];
 
 module.exports = function registerReadyEvent(client) {

@@ -15,6 +15,12 @@ const EmbedTemplateSchema = new mongoose.Schema(
     name: { type: String, required: true },
     createdBy: { type: String, required: true },
 
+    // The saved message in Discord's own JSON format ({ content, embeds: [...] }) — the same format
+    // Discohook and webhooks use, so templates can be imported and exported as-is.
+    data: { type: mongoose.Schema.Types.Mixed, default: null },
+
+    // Legacy single-embed fields from the original builder. Read (and converted) when `data` is empty.
+
     content: { type: String, default: '' },
     title: { type: String, default: '' },
     description: { type: String, default: '' },

@@ -8,6 +8,7 @@ const INVITE_PERMISSIONS = new PermissionsBitField([
   PermissionFlagsBits.ViewChannel,
   PermissionFlagsBits.SendMessages,
   PermissionFlagsBits.SendMessagesInThreads,
+  PermissionFlagsBits.CreatePublicThreads, // media-only comment threads
   PermissionFlagsBits.EmbedLinks,
   PermissionFlagsBits.AttachFiles,
   PermissionFlagsBits.ReadMessageHistory,

@@ -136,6 +136,7 @@ function onManageTabShown(tab) {
   }
   if (tab === 'moderation') {
     loadModeration();
+    loadMediaOnly();
     attachMemberPicker(document.getElementById('pgUser'));
   }
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
@@ -189,10 +190,13 @@ function renderGiveawayList() {
       const winners = g.ended
         ? `<div class="item-meta">🏆 ${g.winners.length ? g.winners.map((w) => pill('@' + (w.name || 'unknown-user'))).join(' ') : 'No winners'}</div>`
         : '';
+      const dup = `<button class="btn secondary small" title="Start a new one with the same settings" onclick="openGiveawayEditor('${g.messageId}', { copy: true })">⧉ Duplicate</button>`;
       const actions = g.ended
         ? `${isDrop ? '' : `<button class="btn secondary small" onclick="rerollGiveaway('${g.messageId}', this)">🎲 Reroll</button>`}
+           ${dup}
            <button class="btn danger small" onclick="deleteGiveaway('${g.messageId}')">Delete</button>`
         : `<button class="btn secondary small" onclick="openGiveawayEditor('${g.messageId}')">Edit</button>
+           ${dup}
            <button class="btn secondary small" onclick="endGiveaway('${g.messageId}', this)">End now</button>
            <button class="btn danger small" onclick="deleteGiveaway('${g.messageId}')">Delete</button>`;
       return `<div class="card item-card">
@@ -231,32 +235,37 @@ function applyGiveawayTypeUi() {
   renderGiveawayPreview();
 }
 
-function openGiveawayEditor(messageId = null) {
-  const g = messageId ? gwState.running.find((x) => x.messageId === messageId) : null;
+// openGiveawayEditor() → new; (id) → edit a running one; (id, { copy: true }) → new, prefilled from any giveaway.
+function openGiveawayEditor(messageId = null, { copy = false } = {}) {
+  const source = messageId ? [...gwState.running, ...gwState.ended].find((x) => x.messageId === messageId) : null;
+  const g = copy ? null : source; // the giveaway being edited (null when creating)
+  const from = source || null; // where the form's values come from
   const editor = document.getElementById('gwEditor');
   editor.style.display = '';
-  document.getElementById('gwEditorTitle').textContent = g ? `Edit “${g.prize}”` : 'New giveaway';
+  document.getElementById('gwEditorTitle').textContent = g ? `Edit “${g.prize}”` : copy ? `New giveaway (copy of “${from.prize}”)` : 'New giveaway';
   document.getElementById('gwSaveBtn').textContent = g ? 'Save changes' : 'Start giveaway';
   document.getElementById('gwId').value = g ? g.messageId : '';
-  document.querySelector(`input[name="gwType"][value="${g ? g.type : 'timed'}"]`).checked = true;
+  document.querySelector(`input[name="gwType"][value="${from ? from.type : 'timed'}"]`).checked = true;
   document.querySelectorAll('input[name="gwType"]').forEach((r) => (r.disabled = !!g));
   document.getElementById('gwTypeCards').style.opacity = g ? '0.6' : '';
   document.getElementById('gwChannelRow').style.display = g ? 'none' : '';
   document.getElementById('gwPingRow').style.display = g ? 'none' : '';
-  document.getElementById('gwChannel').value = g ? g.channelId : document.getElementById('gwChannel').value;
-  document.getElementById('gwPrize').value = g ? g.prize : '';
+  if (from && channels.some((c) => c.id === from.channelId)) document.getElementById('gwChannel').value = from.channelId;
+  document.getElementById('gwPrize').value = from ? from.prize : '';
   document.getElementById('gwDuration').value = '';
-  document.getElementById('gwWinners').value = g ? g.winnerCount : 1;
+  document.getElementById('gwWinners').value = from ? from.winnerCount : 1;
   document.getElementById('gwPing').value = '';
-  document.getElementById('gwColor').value = g ? g.colorHex : '#5865F2';
-  document.getElementById('gwEmoji').value = g && g.type !== 'drop' ? g.emoji : '';
-  document.getElementById('gwDesc').value = g ? g.customDesc : '';
-  const req = (g && g.requirements) || {};
-  document.getElementById('gwReqRole').value = req.roleId || '';
+  document.getElementById('gwColor').value = from && /^#[0-9a-f]{6}$/i.test(from.colorHex) ? from.colorHex.toLowerCase() : '#5865f2';
+  document.getElementById('gwEmoji').value = from && from.type !== 'drop' ? from.emoji : '';
+  // Show the saved text unless it's just the default (the placeholder already shows that).
+  document.getElementById('gwDesc').value = from && from.customDesc !== GW_DEFAULT_DESC[from.type] ? from.customDesc : '';
+  const req = (from && from.requirements) || {};
+  document.getElementById('gwReqRole').value = req.roleId && roles.some((r) => r.id === req.roleId) ? req.roleId : '';
   document.getElementById('gwReqDays').value = req.minDaysInServer || '';
   document.getElementById('gwReqLevel').value = req.minLevel || '';
   applyGiveawayTypeUi();
   editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById(g ? 'gwPrize' : 'gwDuration').focus({ preventScroll: true });
 }
 
 function closeGiveawayEditor() {
@@ -328,7 +337,14 @@ async function saveGiveaway() {
   const data = await withButton(
     document.getElementById('gwSaveBtn'),
     () => manageApi('POST', id ? `giveaways/${id}` : 'giveaways', f),
-    id ? '✅ Giveaway updated.' : f.type === 'drop' ? '⚡ Drop posted!' : '🎉 Giveaway started!'
+    (d) =>
+      id
+        ? d.messageMissing
+          ? "⚠️ Saved — but its message was deleted in Discord, so there's nothing to update there."
+          : '✅ Giveaway updated.'
+        : f.type === 'drop'
+          ? '⚡ Drop posted!'
+          : '🎉 Giveaway started!'
   );
   if (!data) return;
   closeGiveawayEditor();
@@ -829,6 +845,71 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('input[name="ldScope"]').forEach((r) => r.addEventListener('change', sync));
   sync();
 });
+
+/* ------------------------------------------------------------------ Media-only channels */
+
+const moState = { rules: [] };
+
+async function loadMediaOnly() {
+  const list = document.getElementById('moList');
+  if (!list) return;
+  try {
+    const data = await manageApi('GET', 'mediaonly');
+    moState.rules = data.rules;
+    list.innerHTML = data.rules.length
+      ? data.rules
+          .map((r) => {
+            const bits = [r.allowLinks ? 'attachments or links' : 'attachments only', r.autoThread ? 'comment threads' : null, r.staffBypass ? 'staff exempt' : 'applies to staff'].filter(Boolean);
+            return `<div class="locked-row">
+              <span>📸 #${esc(r.name)} <span class="muted" style="font-size:0.8rem;">· ${bits.join(' · ')}</span>${r.missing.length ? ` <span class="status-chip off"><span class="dot"></span>Missing ${esc(r.missing.join(', '))}</span>` : ''}</span>
+              <span class="item-actions">
+                <button class="btn secondary small" onclick="editMediaOnly('${r.channelId}')">Edit</button>
+                <button class="btn secondary small" onclick="removeMediaOnly('${r.channelId}', this)">Turn off</button>
+              </span>
+            </div>`;
+          })
+          .join('')
+      : '<p class="muted" style="margin:0; font-size:0.85rem;">No media-only channels yet.</p>';
+  } catch (err) {
+    list.textContent = `❌ ${err.message}`;
+  }
+}
+
+function editMediaOnly(channelId) {
+  const r = moState.rules.find((x) => x.channelId === channelId);
+  if (!r) return;
+  document.getElementById('moChannel').value = r.channelId;
+  document.getElementById('moLinks').checked = r.allowLinks;
+  document.getElementById('moThread').checked = r.autoThread;
+  document.getElementById('moStaff').checked = r.staffBypass;
+  document.getElementById('moSaveBtn').textContent = 'Save changes';
+  document.getElementById('moChannel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function saveMediaOnly() {
+  const channelId = document.getElementById('moChannel').value;
+  if (!channelId) return showToast('❌ Pick a channel.');
+  const data = await withButton(
+    document.getElementById('moSaveBtn'),
+    () =>
+      manageApi('POST', 'mediaonly', {
+        channelId,
+        allowLinks: document.getElementById('moLinks').checked,
+        autoThread: document.getElementById('moThread').checked,
+        staffBypass: document.getElementById('moStaff').checked
+      }),
+    (d) => `📸 ${channelLabel(channelId)} is media-only.${d.missing.length ? ` ⚠️ LoofaryBot is missing ${d.missing.join(', ')} there.` : ''}`
+  );
+  if (!data) return;
+  document.getElementById('moSaveBtn').textContent = 'Make media-only';
+  loadMediaOnly();
+}
+
+async function removeMediaOnly(channelId, btn) {
+  if (!confirm(`Turn off media-only in ${channelLabel(channelId)}?`)) return;
+  const data = await withButton(btn, () => manageApi('DELETE', `mediaonly/${channelId}`), '✅ Media-only turned off.');
+  if (data) loadMediaOnly();
+}
 
 /* ------------------------------------------------------------------ Member XP (leaderboard page) */
 

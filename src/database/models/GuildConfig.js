@@ -139,6 +139,22 @@ const GuildConfigSchema = new mongoose.Schema(
     // --- Lockdown ---
     lockdownOverwrites: { type: [LockdownOverwriteSchema], default: [] },
 
+    // --- Media-only channels: posts without an attachment (or link, if allowed) are removed ---
+    mediaOnlyChannels: {
+      type: [
+        new mongoose.Schema(
+          {
+            channelId: { type: String, required: true },
+            allowLinks: { type: Boolean, default: true }, // links count as media (YouTube, Tenor, image URLs…)
+            autoThread: { type: Boolean, default: false }, // open a comment thread on every post
+            staffBypass: { type: Boolean, default: true } // Manage Messages members can post anything
+          },
+          { _id: false }
+        )
+      ],
+      default: []
+    },
+
     // --- Auto-Role ---
     autoRoleId: { type: String, default: null },
     autoRoleEnabled: { type: Boolean, default: true }

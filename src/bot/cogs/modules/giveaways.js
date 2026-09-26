@@ -156,12 +156,12 @@ async function postGiveaway(
   return { message: msg, giveaway };
 }
 
-async function launchGiveaway(client, { interaction, pingRole, ...options }) {
+async function launchGiveaway(client, { interaction, pingRole, ping, ...options }) {
   try {
     const { message } = await postGiveaway(client, {
       ...options,
       hostId: interaction.user.id,
-      ping: pingRole ? `${pingRole}` : null
+      ping: ping ?? (pingRole ? `${pingRole}` : null)
     });
     return await replyOrEdit(interaction, {
       content: `✅ ${options.type === 'drop' ? 'Drop' : 'Giveaway'} started in ${options.channel}! [Jump to Message](${message.url})`

@@ -14,6 +14,7 @@ const giveaways = require('../../bot/cogs/modules/giveaways');
 const reactionRoles = require('../../bot/cogs/modules/reactionRoles');
 const polls = require('../../bot/cogs/modules/polls');
 const lockdownModule = require('../../bot/cogs/modules/lockdown');
+const mediaOnly = require('../../bot/cogs/modules/mediaOnly');
 const levelColors = require('../../bot/cogs/modules/levelColors');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const { parseDuration } = require('../../bot/utils/duration');
@@ -155,7 +156,8 @@ router.post('/guilds/:guildId/giveaways/:messageId', ...guard('giveaways'), asyn
 
   g.prize = prize;
   g.winnerCount = winnerCount;
-  g.customDesc = str(b.description, 1000) || g.customDesc;
+  // An emptied description goes back to the default text, the same as when creating one.
+  g.customDesc = str(b.description, 1000) || (g.type === 'drop' ? 'Be quick — first come, first served!' : 'Click the button below to enter!');
   g.colorHex = giveaways.resolveColor(b.color || g.colorHex);
   if (g.type !== 'drop' && b.emoji) g.emoji = str(b.emoji, 64);
   g.requirements = readRequirements(req.guild, b.requirements);
@@ -484,6 +486,38 @@ router.post('/guilds/:guildId/moderation/purge', ...guard('moderation'), async (
   } catch (err) {
     bad(res, `Discord refused the purge. (${err.message})`);
   }
+});
+
+// ---------------------------------------------------------------- Media-only channels (/mediaonly)
+
+router.get('/guilds/:guildId/mediaonly', ...guard('moderation'), async (req, res) => {
+  const config = await getOrCreateConfig(req.guild.id);
+  const rules = (config.mediaOnlyChannels || [])
+    .map((r) => (r.toObject ? r.toObject() : r))
+    .filter((r) => req.guild.channels.cache.has(r.channelId))
+    .map((r) => ({ ...r, name: req.guild.channels.cache.get(r.channelId).name, missing: mediaOnly.missingPermissions(req.guild.channels.cache.get(r.channelId), r) }));
+  res.json({ rules });
+});
+
+router.post('/guilds/:guildId/mediaonly', ...guard('moderation'), async (req, res) => {
+  const b = req.body || {};
+  const channel = req.guild.channels.cache.get(String(b.channelId || ''));
+  if (!channel || !mediaOnly.MEDIA_CHANNEL_TYPES.includes(channel.type)) return bad(res, 'Pick a text or announcement channel.');
+  const { rule, updated } = await mediaOnly.setMediaOnly(req.guild.id, channel.id, {
+    allowLinks: !!b.allowLinks,
+    autoThread: !!b.autoThread,
+    staffBypass: !!b.staffBypass
+  });
+  res.locals.audit = { section: 'Moderation', action: `${updated ? 'Updated' : 'Made'} #${channel.name} media-only`, detail: mediaOnly.describeRule(rule) };
+  res.json({ ok: true, rule, missing: mediaOnly.missingPermissions(channel, rule) });
+});
+
+router.delete('/guilds/:guildId/mediaonly/:channelId', ...guard('moderation'), async (req, res) => {
+  const removed = await mediaOnly.removeMediaOnly(req.guild.id, String(req.params.channelId));
+  if (!removed) return bad(res, "That channel isn't media-only.", 404);
+  const name = req.guild.channels.cache.get(req.params.channelId)?.name || 'deleted-channel';
+  res.locals.audit = { section: 'Moderation', action: `Turned off media-only in #${name}`, detail: '' };
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------- Member XP (/levels givexp · takexp · resetxp)

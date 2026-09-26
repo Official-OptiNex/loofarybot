@@ -7,364 +7,137 @@
   <link rel="stylesheet" href="/css/style.css">
   <script src="/js/theme.js"></script>
 </head>
-<body>
-  <nav>
-    <div class="brand">🎁 LoofaryBot</div>
-    <a class="btn secondary" href="/dashboard/<%= guild.id %>">← <%= guild.name %></a>
-  </nav>
-  <div class="container split" style="gap: 2rem;">
-    <div>
-      <h1>Embed Builder</h1>
-      <p class="muted">Type <code>@</code>, <code>#</code>, or <code>:</code> in any text field for live autocomplete of members, channels, and emoji.</p>
+<body class="site">
+  <%- include('partials/site-bar') %>
 
-      <div class="card" style="padding:1rem;">
-        <label for="templateSelect" style="margin-top:0;">Saved Templates</label>
-        <div class="field-row">
-          <select id="templateSelect">
-            <option value="">— New / unsaved —</option>
-          </select>
-          <button class="btn secondary" type="button" onclick="loadSelectedTemplate()">Load</button>
-          <button class="btn secondary" type="button" onclick="deleteSelectedTemplate()">Delete</button>
-        </div>
-        <button class="btn" type="button" style="margin-top:0.6rem;" onclick="saveAsTemplate()">💾 Save As Template</button>
+  <main class="site-main eb-main">
+    <div class="page-heading">
+      <div>
+        <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
+        <h1 style="font-size:1.45rem; margin-top:0.2rem;">Embed Builder</h1>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Build messages with up to 10 embeds. Saves use Discord's JSON format, so you can import from and export to Discohook. Type <code>@</code>, <code>#</code> or <code>:</code> for autocomplete.</p>
       </div>
-
-      <label for="channel">Send To Channel</label>
-      <select id="channel">
-        <option value="">— Select a channel —</option>
-        <% channels.forEach(c => { %>
-          <option value="<%= c.id %>">#<%= c.name %></option>
-        <% }) %>
-      </select>
-
-      <label for="content">Message Text (optional — this is the only place @mentions actually notify)</label>
-      <div class="autocomplete-wrapper">
-        <textarea id="content" maxlength="2000" placeholder="e.g. @Announcements new giveaway is live!"></textarea>
-        <div class="autocomplete-dropdown" id="ac-content"></div>
-      </div>
-      <p class="muted" style="font-size:0.8rem; margin-top:0.3rem;">
-        Discord only sends a ping/notification from real mention tokens typed here — text inside the embed below never pings anyone.
-      </p>
-
-      <label for="title" style="margin-top:1.25rem;">Embed Title (optional)</label>
-      <div class="autocomplete-wrapper">
-        <input id="title" maxlength="256" placeholder="Embed title">
-        <div class="autocomplete-dropdown" id="ac-title"></div>
-      </div>
-
-      <label for="description">Embed Description</label>
-      <div class="autocomplete-wrapper">
-        <textarea id="description" maxlength="4096" placeholder="Embed description... supports **markdown**"></textarea>
-        <div class="autocomplete-dropdown" id="ac-description"></div>
-      </div>
-
-      <label for="color">Color</label>
-      <input id="color" type="color" value="#5865f2">
-
-      <label for="imageUrl">Image URL</label>
-      <input id="imageUrl" placeholder="https://...">
-
-      <label for="thumbnailUrl">Thumbnail URL</label>
-      <input id="thumbnailUrl" placeholder="https://...">
-
-      <label for="footer">Footer</label>
-      <div class="autocomplete-wrapper">
-        <input id="footer" maxlength="2048" placeholder="Footer text">
-        <div class="autocomplete-dropdown" id="ac-footer"></div>
-      </div>
-
-      <h3 style="margin-top:1.5rem;">Fields</h3>
-      <div id="fieldRows"></div>
-      <button class="btn secondary" type="button" onclick="addFieldRow()">+ Add Field</button>
-
-      <br><br>
-      <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
-        <button class="btn" onclick="sendEmbed()">🚀 Send</button>
-        <button class="btn secondary" onclick="useAsWelcome()">👋 Use as Welcome Message</button>
-      </div>
-      <p class="muted" style="font-size:0.8rem; margin-top:0.6rem;">
-        Welcome messages support <code>{user}</code>, <code>{username}</code>, <code>{server}</code> and
-        <code>{membercount}</code>, and <code>{avatar}</code> as the thumbnail URL. Embed fields aren't used for welcomes.
-      </p>
-    </div>
-
-    <div>
-      <h2>Live Preview</h2>
-      <div class="discord-message-preview">
-        <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="<%= bot.name %>">
-        <div class="discord-message-body">
-          <div class="discord-message-header">
-            <span class="discord-bot-name"><%= bot.name %></span>
-            <span class="discord-bot-badge">BOT</span>
-            <span class="discord-message-time">Today at 12:00 PM</span>
-          </div>
-          <div class="desc" id="pContent" style="margin-bottom:0.4rem;"></div>
-          <div class="discord-embed-preview" id="preview">
-            <div class="title" id="pTitle"></div>
-            <div class="desc" id="pDesc"></div>
-            <div id="pFields"></div>
-            <img id="pImage" style="display:none;">
-            <div class="muted" id="pFooter" style="margin-top:0.5rem; font-size:0.8rem;"></div>
+      <div class="eb-top-actions">
+        <button class="btn secondary" type="button" onclick="openImport()">📥 Import</button>
+        <div class="menu-wrap">
+          <button class="btn secondary" type="button" onclick="toggleMenu('exportMenu')" aria-haspopup="true">📤 Export ▾</button>
+          <div class="menu" id="exportMenu" role="menu">
+            <button type="button" onclick="exportCurrent()">Download this message (.json)</button>
+            <button type="button" onclick="copyJson()">Copy this message's JSON</button>
+            <a href="/api/guilds/<%= guild.id %>/embed-templates/export" download>Download all saved templates</a>
           </div>
         </div>
+        <button class="btn danger" type="button" onclick="clearAll()">🧹 Clear all</button>
       </div>
     </div>
-  </div>
+
+    <div class="split eb-split">
+      <div>
+        <div class="card eb-card">
+          <div class="eb-row">
+            <label for="templateSelect">Saved templates</label>
+            <div class="field-row" style="margin:0;">
+              <select id="templateSelect"><option value="">— New / unsaved —</option></select>
+              <button class="btn secondary small" type="button" onclick="loadSelectedTemplate()">Load</button>
+              <button class="btn secondary small" type="button" onclick="deleteSelectedTemplate()">Delete</button>
+            </div>
+          </div>
+          <div class="eb-row" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button class="btn small" type="button" onclick="saveTemplate(false)">💾 Save</button>
+            <button class="btn secondary small" type="button" onclick="saveTemplate(true)">Save as new…</button>
+            <span class="muted" id="draftStatus" style="font-size:0.78rem; align-self:center;"></span>
+          </div>
+        </div>
+
+        <div class="card eb-card">
+          <div class="radio-cards" style="margin-bottom:0.8rem;">
+            <label class="radio-card"><input type="radio" name="sendMode" value="new" checked><span class="rc-body"><span class="rc-title">📨 Send a new message</span></span></label>
+            <label class="radio-card"><input type="radio" name="sendMode" value="edit"><span class="rc-body"><span class="rc-title">✏️ Edit a bot message</span></span></label>
+          </div>
+          <div id="sendNewRow">
+            <label for="channel">Send to channel</label>
+            <select id="channel">
+              <option value="">— Select a channel —</option>
+              <% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %>
+            </select>
+          </div>
+          <div id="sendEditRow" style="display:none;">
+            <label for="editUrl">Message link</label>
+            <div class="field-row" style="margin:0;">
+              <input id="editUrl" placeholder="https://discord.com/channels/…" autocomplete="off">
+              <button class="btn secondary small" type="button" onclick="loadFromLink('editUrl')">Load it</button>
+            </div>
+            <p class="muted" style="font-size:0.78rem; margin:0.4rem 0 0;">Right-click a message sent by LoofaryBot → Copy Message Link. Loading it copies its content into the editor.</p>
+          </div>
+          <details class="eb-details">
+            <summary>Copy any message into the editor…</summary>
+            <div class="field-row" style="margin-top:0.6rem;">
+              <input id="copyUrl" placeholder="Any message link in this server" autocomplete="off">
+              <button class="btn secondary small" type="button" onclick="loadFromLink('copyUrl')">Copy in</button>
+            </div>
+          </details>
+        </div>
+
+        <div class="card eb-card">
+          <div class="eb-label-row"><label for="content" style="margin:0;">Message text</label><span class="counter" id="contentCount"></span></div>
+          <textarea id="content" maxlength="2000" rows="3" placeholder="Text above the embeds. Mentions here are the only ones that actually ping."></textarea>
+        </div>
+
+        <div id="embeds"></div>
+        <button class="btn secondary" type="button" id="addEmbedBtn" onclick="addEmbed()">+ Add embed</button>
+
+        <div class="savebar eb-savebar">
+          <span class="hint" id="totalHint"></span>
+          <button class="btn secondary" type="button" onclick="useAsWelcome()">👋 Use as welcome message</button>
+          <button class="btn" type="button" id="sendBtn" onclick="sendMessage()">🚀 Send</button>
+        </div>
+        <p class="muted" style="font-size:0.78rem;">Welcome messages use the text and the first embed (no fields) and support <code>{user}</code>, <code>{username}</code>, <code>{server}</code>, <code>{membercount}</code>, and <code>{avatar}</code> as the thumbnail. Shortcut: <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.</p>
+      </div>
+
+      <div class="sticky-preview">
+        <div class="card" style="margin-bottom:0;">
+          <h3 style="margin-top:0;">Live preview</h3>
+          <div class="discord-chat eb-preview">
+            <div class="discord-message-preview">
+              <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+              <div class="discord-message-body">
+                <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
+                <div class="desc md" id="pContent"></div>
+                <div id="pEmbeds"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="importDialog" class="eb-dialog">
+    <form method="dialog" class="eb-dialog-inner" onsubmit="return false;">
+      <h3 style="margin-top:0;">Import messages</h3>
+      <p class="muted" style="font-size:0.84rem; margin-top:0;">Paste JSON from Discohook's JSON editor, a webhook payload, a single embed, an old Discohook share link (<code>…?data=</code>), or choose a file — including a Discohook backup export or a LoofaryBot template export.</p>
+      <textarea id="importText" rows="8" placeholder='{"content": "Hello", "embeds": [{"title": "Rules", "color": 5793266}]}'></textarea>
+      <div class="field-row" style="margin-top:0.6rem; align-items:center;">
+        <input type="file" id="importFile" accept=".json,application/json">
+        <button class="btn secondary small" type="button" onclick="parseImportInput()">Read</button>
+      </div>
+      <div id="importResults"></div>
+      <div class="eb-dialog-actions">
+        <button class="btn secondary" type="button" onclick="document.getElementById('importDialog').close()">Cancel</button>
+        <label class="switch sm" style="margin-right:auto;" title="Replace templates that have the same name"><input type="checkbox" id="importOverwrite"><span class="track"></span><span style="font-weight:500; font-size:0.82rem;">Overwrite same names</span></label>
+        <button class="btn secondary" type="button" id="importSaveBtn" onclick="saveImported()" disabled>Save as templates</button>
+        <button class="btn" type="button" id="importOpenBtn" onclick="openImported()" disabled>Open in editor</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="toast" id="toast"></div>
 
   <script src="/js/mentions.js"></script>
+  <script src="/js/embed-json.js"></script>
   <script>
-    const guildId = '<%= guild.id %>';
-    let templates = [];
-    let fieldCounter = 0;
-
-    // ---------- Load real guild data for autocomplete ----------
-    async function loadMentionable() {
-      await LoofMentions.load(guildId);
-    }
-
-    // ---------- Templates ----------
-    async function loadTemplates() {
-      try {
-        const res = await fetch(`/api/guilds/${guildId}/embed-templates`);
-        const data = await res.json();
-        templates = data.templates || [];
-        const select = document.getElementById('templateSelect');
-        select.innerHTML =
-          '<option value="">— New / unsaved —</option>' +
-          templates.map((t) => `<option value="${LoofMentions.esc(t.name)}">${LoofMentions.esc(t.name)}</option>`).join("");
-      } catch (e) {
-        console.error('Failed to load templates', e);
-      }
-    }
-
-    function loadSelectedTemplate() {
-      const name = document.getElementById('templateSelect').value;
-      if (!name) return;
-      const t = templates.find((x) => x.name === name);
-      if (!t) return;
-
-      document.getElementById('content').value = t.content || '';
-      document.getElementById('title').value = t.title || '';
-      document.getElementById('description').value = t.description || '';
-      document.getElementById('color').value = t.color || '#5865f2';
-      document.getElementById('footer').value = t.footer || '';
-      document.getElementById('imageUrl').value = t.imageUrl || '';
-      document.getElementById('thumbnailUrl').value = t.thumbnailUrl || '';
-
-      document.getElementById('fieldRows').innerHTML = '';
-      (t.fields || []).forEach((f) => addFieldRow(f.name, f.value, f.inline));
-
-      updatePreview();
-      showToast(`Loaded template "${name}".`);
-    }
-
-    async function saveAsTemplate() {
-      const existing = document.getElementById('templateSelect').value;
-      const name = prompt('Save as template name:', existing || '');
-      if (!name || !name.trim()) return;
-
-      const fields = [...document.querySelectorAll('.field-entry')].map((row) => ({
-        name: row.querySelector('.f-name').value,
-        value: row.querySelector('.f-value').value,
-        inline: row.querySelector('.f-inline').checked
-      }));
-
-      const payload = {
-        name: name.trim(),
-        content: document.getElementById('content').value,
-        title: document.getElementById('title').value,
-        description: document.getElementById('description').value,
-        color: document.getElementById('color').value,
-        footer: document.getElementById('footer').value,
-        imageUrl: document.getElementById('imageUrl').value,
-        thumbnailUrl: document.getElementById('thumbnailUrl').value,
-        fields
-      };
-
-      const res = await fetch(`/api/guilds/${guildId}/embed-templates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        showToast(`✅ Saved template "${name.trim()}".`);
-        await loadTemplates();
-        document.getElementById('templateSelect').value = name.trim();
-      } else {
-        showToast(`❌ ${data.error || 'Failed to save template.'}`);
-      }
-    }
-
-    async function deleteSelectedTemplate() {
-      const name = document.getElementById('templateSelect').value;
-      if (!name) return showToast('Select a template to delete first.');
-      if (!confirm(`Delete template "${name}"? This can't be undone.`)) return;
-
-      const res = await fetch(`/api/guilds/${guildId}/embed-templates/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      if (res.ok) {
-        showToast(`🗑️ Deleted template "${name}".`);
-        await loadTemplates();
-      } else {
-        showToast('❌ Failed to delete template.');
-      }
-    }
-
-    // ---------- Autocomplete engine ----------
-    // Finds the trigger (@, #, :) immediately before the cursor, if any, and the partial
-    // query typed after it, so we know what to search and what to replace on selection.
-    // Autocomplete + mention rendering live in /js/mentions.js (shared with the dashboard).
-    const attachAutocomplete = (inputEl, dropdownEl) => LoofMentions.attach(inputEl, { onChange: updatePreview, dropdown: dropdownEl });
-    const renderMentionText = (raw) => LoofMentions.render(raw);
-
-    function updatePreview() {
-      const content = document.getElementById('content').value;
-      const title = document.getElementById('title').value;
-      const desc = document.getElementById('description').value;
-      const color = document.getElementById('color').value;
-      const footer = document.getElementById('footer').value;
-      const image = document.getElementById('imageUrl').value;
-
-      document.getElementById('pContent').innerHTML = renderMentionText(content);
-      document.getElementById('preview').style.borderLeftColor = color;
-      document.getElementById('pTitle').innerHTML = renderMentionText(title);
-      document.getElementById('pDesc').innerHTML = renderMentionText(desc);
-      document.getElementById('pFooter').innerHTML = renderMentionText(footer);
-
-      const hasEmbedContent = title || desc || footer || image || document.getElementById('thumbnailUrl').value ||
-        [...document.querySelectorAll('.field-entry')].some((row) => row.querySelector('.f-name').value || row.querySelector('.f-value').value);
-      document.getElementById('preview').style.display = hasEmbedContent ? 'block' : 'none';
-
-      const img = document.getElementById('pImage');
-      if (image) { img.src = image; img.style.display = 'block'; } else { img.style.display = 'none'; }
-
-      const fieldsHtml = [...document.querySelectorAll('.field-entry')]
-        .map((row) => {
-          const name = row.querySelector('.f-name').value;
-          const value = row.querySelector('.f-value').value;
-          if (!name && !value) return '';
-          return `<div style="margin-top:0.5rem;"><strong>${renderMentionText(name)}</strong><br>${renderMentionText(value)}</div>`;
-        })
-        .join('');
-      document.getElementById('pFields').innerHTML = fieldsHtml;
-    }
-
-    function addFieldRow(name = '', value = '', inline = false) {
-      const id = fieldCounter++;
-      const container = document.getElementById('fieldRows');
-      const row = document.createElement('div');
-      row.className = 'field-row field-entry';
-      row.innerHTML = `
-        <div class="autocomplete-wrapper" style="flex:1;">
-          <input class="f-name" placeholder="Field name" value="${LoofMentions.esc(name)}">
-          <div class="autocomplete-dropdown" id="ac-fname-${id}"></div>
-        </div>
-        <div class="autocomplete-wrapper" style="flex:1;">
-          <input class="f-value" placeholder="Field value" value="${LoofMentions.esc(value)}">
-          <div class="autocomplete-dropdown" id="ac-fvalue-${id}"></div>
-        </div>
-        <label style="display:flex; align-items:center; gap:0.3rem; flex:0 0 auto;">
-          <input type="checkbox" class="f-inline" style="width:auto;" ${inline ? 'checked' : ''}> Inline
-        </label>
-        <button class="btn secondary" type="button" onclick="this.parentElement.remove(); updatePreview();">✕</button>
-      `;
-      container.appendChild(row);
-      attachAutocomplete(row.querySelector('.f-name'), row.querySelector(`#ac-fname-${id}`));
-      attachAutocomplete(row.querySelector('.f-value'), row.querySelector(`#ac-fvalue-${id}`));
-      row.querySelector('.f-inline').addEventListener('change', updatePreview);
-    }
-
-    function showToast(msg) {
-      const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.style.display = 'block';
-      setTimeout(() => (t.style.display = 'none'), 3000);
-    }
-
-    async function sendEmbed() {
-      const channelId = document.getElementById('channel').value;
-      if (!channelId) return showToast('❌ Select a channel first.');
-
-      const fields = [...document.querySelectorAll('.field-entry')].map((row) => ({
-        name: row.querySelector('.f-name').value,
-        value: row.querySelector('.f-value').value,
-        inline: row.querySelector('.f-inline').checked
-      }));
-
-      const payload = {
-        channelId,
-        content: document.getElementById('content').value,
-        title: document.getElementById('title').value,
-        description: document.getElementById('description').value,
-        color: document.getElementById('color').value,
-        footer: document.getElementById('footer').value,
-        imageUrl: document.getElementById('imageUrl').value,
-        thumbnailUrl: document.getElementById('thumbnailUrl').value,
-        fields
-      };
-
-      const res = await fetch(`/dashboard/${guildId}/embed/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json().catch(() => ({}));
-      showToast(res.ok ? '✅ Sent!' : `❌ ${data.error || 'Failed to send.'}`);
-    }
-
-    ['content', 'title', 'description', 'color', 'footer', 'imageUrl', 'thumbnailUrl'].forEach((id) => {
-      const el = document.getElementById(id);
-      el.addEventListener('input', updatePreview);
-      if (['content', 'title', 'description', 'footer'].includes(id)) {
-        attachAutocomplete(el, document.getElementById(`ac-${id}`));
-      }
-    });
-
-    // ---------- Welcome message tie-in ----------
-    async function useAsWelcome() {
-      const payload = {
-        content: document.getElementById('content').value,
-        title: document.getElementById('title').value,
-        description: document.getElementById('description').value,
-        color: document.getElementById('color').value,
-        footer: document.getElementById('footer').value,
-        imageUrl: document.getElementById('imageUrl').value.trim(),
-        thumbnailUrl: document.getElementById('thumbnailUrl').value.trim()
-      };
-      const res = await fetch(`/api/guilds/${guildId}/welcome/from-embed`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return showToast(`❌ ${data.error || 'Failed to save.'}`);
-      showToast('✅ Saved as the welcome message — opening the Welcome tab…');
-      setTimeout(() => (location.href = `/dashboard/${guildId}#welcome`), 900);
-    }
-
-    // Opened via "Design in Embed Builder" on the Welcome tab: start from the saved welcome message.
-    async function loadWelcomeIntoBuilder() {
-      if (new URLSearchParams(location.search).get('welcome') !== '1') return;
-      try {
-        const res = await fetch(`/api/guilds/${guildId}/welcome`);
-        const { config } = await res.json();
-        const e = (config && config.embedConfig) || {};
-        document.getElementById('content').value = config.messageContent || '';
-        document.getElementById('title').value = e.title || '';
-        document.getElementById('description').value = e.description || '';
-        document.getElementById('color').value = e.color || '#5865f2';
-        document.getElementById('footer').value = e.footer || '';
-        document.getElementById('imageUrl').value = e.imageUrl || '';
-        document.getElementById('thumbnailUrl').value = e.thumbnailUrl || '';
-        showToast('👋 Loaded your welcome message — edit it, then click “Use as Welcome Message”.');
-      } catch (err) {
-        console.error('Failed to load welcome message', err);
-      }
-    }
-
-    Promise.all([loadMentionable(), loadTemplates(), loadWelcomeIntoBuilder()]).then(updatePreview);
+    window.EB_CONFIG = { guildId: '<%= guild.id %>', botAvatar: <%- JSON.stringify(bot.avatarUrl).replace(/</g, '\\u003c') %> };
   </script>
+  <script src="/js/embed-builder.js"></script>
 </body>
 </html>

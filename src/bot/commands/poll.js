@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const Poll = require('../../database/models/Poll');
 const { MAX_OPTIONS, buildPollMessage, endPoll } = require('../cogs/modules/polls');
 const { parseDuration } = require('../utils/duration');
+const { durationChoices, relative, clip } = require('../utils/autocomplete');
 
 const MAX_POLL_MS = 30 * 86400000;
 
@@ -16,7 +17,7 @@ const data = new SlashCommandBuilder()
       .addStringOption((opt) =>
         opt.setName('options').setDescription('2-10 choices separated by | (e.g. Pizza | Tacos | Sushi)').setMaxLength(1000).setRequired(true)
       )
-      .addStringOption((opt) => opt.setName('duration').setDescription('Auto-close after (e.g. 30m, 1h, 2d). Leave empty to close manually'))
+      .addStringOption((opt) => opt.setName('duration').setDescription('Auto-close after (e.g. 30m, 1h, 2d). Leave empty to close manually').setAutocomplete(true))
       .addBooleanOption((opt) => opt.setName('anonymous').setDescription('Hide who voted for what (default: public)'))
       .addBooleanOption((opt) => opt.setName('multiple').setDescription('Allow voting for more than one option'))
   )
@@ -24,7 +25,7 @@ const data = new SlashCommandBuilder()
     sub
       .setName('end')
       .setDescription('Close a poll now')
-      .addStringOption((opt) => opt.setName('message_id').setDescription('Poll message ID').setRequired(true))
+      .addStringOption((opt) => opt.setName('message_id').setDescription('Poll — start typing its question').setRequired(true).setAutocomplete(true))
   );
 
 async function execute(interaction, client) {
@@ -85,4 +86,23 @@ async function execute(interaction, client) {
   }
 }
 
-module.exports = { data, execute };
+async function autocomplete(interaction) {
+  const focused = interaction.options.getFocused(true);
+  if (focused.name === 'duration') return interaction.respond(durationChoices(focused.value));
+  const query = String(focused.value || '').toLowerCase();
+  // Moderators see every open poll; everyone else only their own (they can only close those).
+  const filter = { guildId: interaction.guildId, ended: false };
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) filter.creatorId = interaction.user.id;
+  const open = await Poll.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+  return interaction.respond(
+    open
+      .filter((p) => !query || p.question.toLowerCase().includes(query))
+      .slice(0, 25)
+      .map((p) => ({
+        name: clip(`📊 ${p.question} — ${new Set(p.votes.map((v) => v.userId)).size} voter(s)${p.endTimestamp ? ` · closes ${relative(p.endTimestamp)}` : ''}`, 100),
+        value: p.messageId
+      }))
+  );
+}
+
+module.exports = { data, execute, autocomplete };

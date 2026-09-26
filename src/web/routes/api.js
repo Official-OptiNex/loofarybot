@@ -17,6 +17,7 @@ const backups = require('../../bot/cogs/modules/backups');
 const { MOD_PAGES } = require('../utils/authMiddleware');
 const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
 const EmbedTemplate = require('../../database/models/EmbedTemplate');
+const EmbedJson = require('../static/js/embed-json');
 
 const router = express.Router();
 
@@ -684,59 +685,103 @@ router.post('/guilds/:guildId/welcome/test', requireAuth, requireGuildAccess, gu
   }
 });
 
-// --- Embed Templates: save/load/delete named embed drafts per guild ---
+// --- Embed Templates: saved messages (Discord JSON), with import/export ---
+
+const MAX_TEMPLATES = 250;
+const templateMessage = (t) => (t.data ? EmbedJson.normalizeMessage(t.data) : EmbedJson.legacyToMessage(t));
+const serializeTemplate = (t) => ({ name: t.name, message: templateMessage(t), createdBy: t.createdBy, updatedAt: t.updatedAt });
 
 router.get('/guilds/:guildId/embed-templates', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
-    const templates = await EmbedTemplate.find({ guildId: req.guild.id }).sort({ name: 1 });
-    res.json({ templates });
+    const templates = await EmbedTemplate.find({ guildId: req.guild.id }).sort({ name: 1 }).lean();
+    res.json({ templates: templates.map(serializeTemplate) });
   } catch (err) {
     console.error('Failed to load embed templates:', err);
     res.status(500).json({ error: 'Failed to load templates.' });
   }
 });
 
+// Download every template as one JSON file (re-importable here; each message also pastes into Discohook).
+router.get('/guilds/:guildId/embed-templates/export', requireAuth, requireGuildAccess, guardApi, async (req, res) => {
+  const templates = await EmbedTemplate.find({ guildId: req.guild.id }).sort({ name: 1 }).lean();
+  const file = {
+    type: 'loofarybot-embed-templates',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    guild: { id: req.guild.id, name: req.guild.name },
+    templates: templates.map((t) => ({ name: t.name, message: templateMessage(t) }))
+  };
+  const safeName = req.guild.name.replace(/[^\w-]+/g, '-').slice(0, 40) || 'server';
+  res.setHeader('Content-Disposition', `attachment; filename="embed-templates-${safeName}.json"`);
+  res.type('application/json').send(JSON.stringify(file, null, 2));
+});
+
+async function saveTemplate(guildId, name, message, userId) {
+  return EmbedTemplate.findOneAndUpdate(
+    { guildId, name },
+    {
+      $set: { data: message, createdBy: userId },
+      // Clear the old flat fields so a re-saved template can't be read two ways.
+      $unset: { content: 1, title: 1, description: 1, color: 1, footer: 1, imageUrl: 1, thumbnailUrl: 1, fields: 1 }
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+}
+
 router.post('/guilds/:guildId/embed-templates', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
-    const { name, title, description, color, footer, imageUrl, thumbnailUrl, fields, content } = req.body;
-    const cleanName = String(name || '').trim().slice(0, 100);
-    if (!cleanName) {
-      return res.status(400).json({ ok: false, error: 'A template name is required.' });
+    const cleanName = String(req.body.name || '').trim().slice(0, 100);
+    if (!cleanName) return res.status(400).json({ ok: false, error: 'A template name is required.' });
+    const message = EmbedJson.normalizeMessage(req.body.message);
+    const errors = EmbedJson.validateMessage(message);
+    if (errors.length) return res.status(400).json({ ok: false, error: errors[0] });
+    const exists = await EmbedTemplate.exists({ guildId: req.guild.id, name: cleanName });
+    if (!exists && (await EmbedTemplate.countDocuments({ guildId: req.guild.id })) >= MAX_TEMPLATES) {
+      return res.status(400).json({ ok: false, error: `You can keep up to ${MAX_TEMPLATES} templates — delete some first.` });
     }
-
-    const cleanFields = Array.isArray(fields)
-      ? fields
-          .filter((f) => f && f.name && f.value)
-          .slice(0, 25)
-          .map((f) => ({ name: String(f.name).slice(0, 256), value: String(f.value).slice(0, 1024), inline: !!f.inline }))
-      : [];
-
-    const data = {
-      guildId: req.guild.id,
-      name: cleanName,
-      createdBy: req.session.user.id,
-      title: title || '',
-      description: description || '',
-      content: content || '',
-      color: color || '#5865f2',
-      footer: footer || '',
-      imageUrl: imageUrl || '',
-      thumbnailUrl: thumbnailUrl || '',
-      fields: cleanFields
-    };
-
-    // Upsert: saving under an existing name in this guild overwrites it rather than erroring,
-    // so "Save" behaves the way people expect for an already-loaded template.
-    const template = await EmbedTemplate.findOneAndUpdate({ guildId: req.guild.id, name: cleanName }, data, {
-      upsert: true,
-      new: true,
-      setDefaultsOnInsert: true
-    });
-
-    res.json({ ok: true, template });
+    // Saving under an existing name overwrites it, so "Save" works the way people expect for a loaded template.
+    const template = await saveTemplate(req.guild.id, cleanName, message, req.session.user.id);
+    res.json({ ok: true, template: serializeTemplate(template.toObject()) });
   } catch (err) {
     console.error('Failed to save embed template:', err);
     res.status(500).json({ ok: false, error: 'Failed to save template.' });
+  }
+});
+
+// Bulk import (e.g. a Discohook backup file). Existing names are overwritten or kept side by side.
+router.post('/guilds/:guildId/embed-templates/import', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body.templates) ? req.body.templates.slice(0, 100) : [];
+    if (!incoming.length) return res.status(400).json({ ok: false, error: 'Nothing to import.' });
+    const overwrite = !!req.body.overwrite;
+    const existing = new Set((await EmbedTemplate.find({ guildId: req.guild.id }, { name: 1 }).lean()).map((t) => t.name));
+    const saved = [];
+    const skipped = [];
+    for (const t of incoming) {
+      const message = EmbedJson.normalizeMessage(t.message);
+      let name = String(t.name || 'Imported').trim().slice(0, 100) || 'Imported';
+      if (EmbedJson.validateMessage(message).length) {
+        skipped.push(name);
+        continue;
+      }
+      if (existing.has(name) && !overwrite) {
+        let n = 2;
+        while (existing.has(`${name.slice(0, 94)} (${n})`)) n++;
+        name = `${name.slice(0, 94)} (${n})`;
+      }
+      if (!existing.has(name) && existing.size >= MAX_TEMPLATES) {
+        skipped.push(name);
+        continue;
+      }
+      await saveTemplate(req.guild.id, name, message, req.session.user.id);
+      existing.add(name);
+      saved.push(name);
+    }
+    res.locals.audit = { section: 'Embed Builder', action: `Imported ${saved.length} embed template(s)`, detail: saved.slice(0, 5).join(', ') };
+    res.json({ ok: true, saved, skipped });
+  } catch (err) {
+    console.error('Failed to import embed templates:', err);
+    res.status(500).json({ ok: false, error: 'Failed to import templates.' });
   }
 });
 
