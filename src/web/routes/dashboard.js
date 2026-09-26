@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, requireGuildAccess, MANAGE_GUILD, ADMINISTRATOR } = require('../utils/authMiddleware');
 const GuildConfig = require('../../database/models/GuildConfig');
+const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const { getEffectiveXpSettings } = require('../../bot/cogs/modules/leveling');
 const { getGamblingSettings } = require('../../bot/cogs/modules/gambling');
 const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
@@ -33,7 +34,10 @@ router.get('/', requireAuth, (req, res) => {
 });
 
 router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
-  const configDoc = await GuildConfig.findOne({ guildId: req.guild.id });
+  const [configDoc, welcomeDoc] = await Promise.all([
+    GuildConfig.findOne({ guildId: req.guild.id }),
+    WelcomeConfig.findOne({ guildId: req.guild.id }).lean()
+  ]);
   const config = configDoc || {};
   const guild = req.guild;
 
@@ -67,12 +71,31 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     autoRoleName: autoRoleRole ? autoRoleRole.name : null
   };
 
+  // Used by the Welcome tab's live preview: the logged-in admin stands in for the new member.
+  const sessionUser = req.session.user || {};
+  const viewer = {
+    id: sessionUser.id,
+    username: sessionUser.username || 'new-member',
+    avatarUrl: sessionUser.avatar
+      ? `https://cdn.discordapp.com/avatars/${sessionUser.id}/${sessionUser.avatar}.png?size=128`
+      : 'https://cdn.discordapp.com/embed/avatars/0.png'
+  };
+  const me = guild.members.me;
+  const client = req.app.locals.client;
+  const bot = {
+    name: me?.displayName || client.user?.username || 'LoofaryBot',
+    avatarUrl: me?.displayAvatarURL({ size: 64 }) || client.user?.displayAvatarURL({ size: 64 }) || ''
+  };
+
   res.render('guild', {
+    viewer,
+    bot,
     guild,
     config,
     channels: textChannels,
     roles,
     effectiveXp,
+    welcome: welcomeDoc || new WelcomeConfig({ guildId: guild.id }).toObject(),
     gambling: getGamblingSettings(config),
     logEvents: LOG_EVENTS,
     defaultTrapEmbed: DEFAULT_TRAP_EMBED,
