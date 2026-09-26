@@ -1,5 +1,6 @@
 const { EmbedBuilder, PermissionFlagsBits, AuditLogEvent } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
+const { recordLeave } = require('./joinTracking');
 
 const LOG_EVENTS = {
   messageEdit: 'Message edits',
@@ -95,6 +96,8 @@ function registerLoggingEvents(client) {
   });
 
   client.on('guildMemberRemove', async (member) => {
+    // Feeds the dashboard's leaves line; independent of whether logging is configured.
+    recordLeave(member).catch((err) => console.error('Failed to record member leave:', err.message));
     const embed = new EmbedBuilder()
       .setColor('#ED4245')
       .setAuthor(userAuthor(member.user))

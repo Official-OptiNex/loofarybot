@@ -167,12 +167,17 @@ on every restart/redeploy so no giveaway is ever lost or silently skipped.
   with the welcome message loaded; its **Use as Welcome Message** button saves it back.
 
 ### Join Analytics (dashboard **Overview** tab)
-- Every join is recorded automatically. The Overview shows daily or weekly joins over 7 days to
-  1 year alongside a running total, plus joins in the last 24h / 7 days.
+- Every join and leave is recorded automatically. The Overview's **Member curve** shows joins,
+  leaves and net change per day or week over 7 days to 1 year. Stat cards show week-over-week and
+  day-over-day trends, and **Server goals** tracks the next member milestone, how many members
+  have earned XP, and progress to the next boost tier.
+- Leaves can only be tracked from the moment this feature is deployed (Discord keeps no history).
 - **Sync Join Data** backfills history from every current member's join date (members who left
   can't be recovered, and rejoiners only report their latest join). Limited to once per 5 minutes.
 
 ### Web Dashboard
+- Sidebar navigation with module on/off status, a search bar that jumps to any settings page or
+  command, and a **Sun / Moon** switch for light or dark theme (remembered per browser).
 - Visit the deployed URL → **Login with Discord** → pick a server where you have
   Manage Server/Administrator permission and the bot is present.
 - Configure the honeypot (including its disguise), leveling (role rewards, multipliers, level-up
