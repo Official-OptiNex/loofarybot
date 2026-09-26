@@ -64,6 +64,8 @@
           <p class="muted">XP per message: <strong><%= effectiveXp.xpMin %>–<%= effectiveXp.xpMax %></strong>,
             cooldown <strong><%= effectiveXp.cooldownMs / 1000 %>s</strong></p>
           <p class="muted"><%= (config.levelRoles || []).length %> role reward(s) configured.</p>
+          <% const lvlChannel = config.levelUpChannelId ? channels.find(c => c.id === config.levelUpChannelId) : null; %>
+          <p class="muted">Level-up messages: <strong><%= lvlChannel ? '#' + lvlChannel.name : 'same channel' %></strong></p>
         </div>
         <div class="card">
           <h3>🛡️ Auto-Role <span class="badge <%= (config.autoRoleId && config.autoRoleEnabled !== false) ? 'on' : 'off' %>"><%= (config.autoRoleId && config.autoRoleEnabled !== false) ? 'Active' : 'Not set up' %></span></h3>
@@ -116,6 +118,18 @@
           <input type="checkbox" id="lvlEnabled" style="width:auto;" <%= config.levelingEnabled === false ? '' : 'checked' %>>
           Enable XP gain from chat messages
         </label>
+
+        <h3 style="margin-top:1.5rem;">Level-Up Messages</h3>
+        <label for="levelUpChannel">Send level-up messages to</label>
+        <select id="levelUpChannel">
+          <option value="">Same channel the member was chatting in</option>
+          <% channels.forEach(c => { %>
+            <option value="<%= c.id %>" <%= config.levelUpChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+        <% if (config.levelUpChannelId && !channels.find(c => c.id === config.levelUpChannelId)) { %>
+          <p class="muted" style="color:#FEE75C;">⚠️ The configured level-up channel no longer exists — messages are falling back to the same channel.</p>
+        <% } %>
 
         <h3 style="margin-top:1.5rem;">XP Tuning</h3>
         <p class="muted">Leave a field blank to use the site-wide default shown as its placeholder.</p>
@@ -336,7 +350,8 @@
         xpMin: document.getElementById('xpMin').value,
         xpMax: document.getElementById('xpMax').value,
         xpCooldownSeconds: document.getElementById('xpCooldown').value,
-        levelXpBase: document.getElementById('levelXpBase').value
+        levelXpBase: document.getElementById('levelXpBase').value,
+        levelUpChannelId: document.getElementById('levelUpChannel').value
       };
       const res = await fetch(`/api/guilds/${guildId}/levels`, {
         method: 'POST',

@@ -103,7 +103,7 @@ router.post('/guilds/:guildId/honeypot', requireAuth, requireGuildAccess, async 
 
 router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (req, res) => {
   try {
-    const { enabled, levelRoles, xpMin, xpMax, xpCooldownSeconds, levelXpBase } = req.body;
+    const { enabled, levelRoles, xpMin, xpMax, xpCooldownSeconds, levelXpBase, levelUpChannelId } = req.body;
     const config = await getOrCreateConfig(req.guild.id);
 
     if (typeof enabled === 'boolean') config.levelingEnabled = enabled;
@@ -117,6 +117,19 @@ router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (r
     config.xpMax = xpMax === '' || xpMax == null ? null : Number(xpMax);
     config.xpCooldownSeconds = xpCooldownSeconds === '' || xpCooldownSeconds == null ? null : Number(xpCooldownSeconds);
     config.levelXpBase = levelXpBase === '' || levelXpBase == null ? null : Number(levelXpBase);
+
+    // Empty string means "same channel as the message"; otherwise it must be a text channel in this guild.
+    if (levelUpChannelId !== undefined) {
+      if (!levelUpChannelId) {
+        config.levelUpChannelId = null;
+      } else {
+        const channel = req.guild.channels.cache.get(String(levelUpChannelId));
+        if (!channel || !channel.isTextBased() || channel.isThread()) {
+          return res.status(400).json({ ok: false, error: 'That level-up channel is not a text channel in this server.' });
+        }
+        config.levelUpChannelId = channel.id;
+      }
+    }
 
     await config.save();
     res.json({ ok: true });

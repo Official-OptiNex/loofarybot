@@ -106,6 +106,9 @@ on every restart/redeploy so no giveaway is ever lost or silently skipped.
 - `/levels rank`, `/levels leaderboard` for users.
 - `/levels setrole <level> <role>` (Admin) to configure automatic role rewards.
 - `/levels toggle` (Admin) to turn XP gain on/off.
+- `/levels announcechannel [channel]` (Admin) to send level-up messages to a specific channel;
+  run it with no channel to go back to posting in the same channel the member was chatting in.
+  Also configurable on the dashboard's Leveling tab.
 
 ### Web Dashboard
 - Visit the deployed URL → **Login with Discord** → pick a server where you have

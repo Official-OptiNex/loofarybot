@@ -1,3 +1,4 @@
+const { PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
 const UserLevel = require('../../../database/models/UserLevel');
 const { XP_MIN, XP_MAX, XP_COOLDOWN_MS, LEVEL_XP_BASE } = require('../../../config');
@@ -63,8 +64,21 @@ async function handleMessageXp(message) {
   }
 }
 
+// Picks where level-up messages go: the guild's configured announcement channel if it
+// still exists and the bot can post there, otherwise the channel the user was chatting in.
+function resolveLevelUpChannel(message, config) {
+  if (!config.levelUpChannelId) return message.channel;
+  const channel = message.guild.channels.cache.get(config.levelUpChannelId);
+  const me = message.guild.members.me;
+  if (!channel || !channel.isTextBased() || !me || !channel.permissionsFor(me)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+    return message.channel;
+  }
+  return channel;
+}
+
 async function handleLevelUp(message, config, oldLevel, newLevel) {
-  message.channel
+  const announceChannel = resolveLevelUpChannel(message, config);
+  announceChannel
     .send(`🎉 ${message.author}, you leveled up to **Level ${newLevel}**!`)
     .catch(() => null);
 
@@ -99,7 +113,7 @@ async function handleLevelUp(message, config, oldLevel, newLevel) {
   }
 
   if (failures.length > 0) {
-    message.channel
+    announceChannel
       .send(
         `⚠️ Couldn't assign ${failures.join(', ')} to ${message.author} — LoofaryBot's role needs to be moved ` +
           `**above** that role in Server Settings → Roles.`

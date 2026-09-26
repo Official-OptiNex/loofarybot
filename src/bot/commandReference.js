@@ -32,6 +32,7 @@ module.exports = [
       { usage: '/levels setrole (Admin)', description: 'Grant a role automatically at a given level.' },
       { usage: '/levels removerole (Admin)', description: 'Remove a level-up role reward.' },
       { usage: '/levels toggle (Admin)', description: 'Turn XP gain on or off for this server.' },
+      { usage: '/levels announcechannel (Admin)', description: 'Send level-up messages to a specific channel, or leave empty for the same channel.' },
       { usage: '/levels xpconfig (Admin)', description: 'Tune XP-per-message, cooldown, and leveling speed.' },
       { usage: '/levels xpconfig_show', description: 'Show the current XP tuning for this server.' }
     ]
