@@ -121,6 +121,10 @@ function settledText(game) {
 
 // Returns the player's stake after a refund: their own XP, and their free play if it was one.
 async function refundStake(game) {
+  if (!(await game.claim)) {
+    game.alreadySettled = true;
+    return;
+  }
   if (game.paidStake > 0) await payout(game.guild, game.userId, game.paidStake, game.config);
   if (game.freePlay) await restoreFreePlay(game.guildId, game.userId);
 }
@@ -139,11 +143,32 @@ function levelNote(result) {
  * Validates the bet against the guild's gambling settings and atomically takes it from the
  * player's XP. Replies with the reason and returns null if the bet can't be placed.
  */
+// Game commands acknowledge Discord straight away ("thinking…") because placing a bet takes several
+// database round trips, and Discord drops any interaction not answered within 3 seconds — which used to
+// leave the XP taken with no game on screen.
+async function acknowledge(interaction) {
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
+}
+
+// Public reply that works whether or not the command was deferred.
+function respond(interaction, payload) {
+  return interaction.deferred || interaction.replied ? interaction.editReply(payload) : interaction.reply(payload);
+}
+
+// Private error message; replaces the public "thinking…" placeholder if there is one.
+async function replyPrivately(interaction, content) {
+  if (interaction.deferred || interaction.replied) {
+    await interaction.deleteReply().catch(() => null);
+    return interaction.followUp({ content, ephemeral: true });
+  }
+  return interaction.reply({ content, ephemeral: true });
+}
+
 async function placeBet(interaction, bet) {
   const config = await getOrCreateConfig(interaction.guildId);
   const settings = getGamblingSettings(config);
   const { levelXpBase } = getEffectiveXpSettings(config);
-  const fail = (content) => interaction.reply({ content, ephemeral: true }).then(() => null);
+  const fail = (content) => replyPrivately(interaction, content).then(() => null);
 
   if (!settings.enabled) return fail('❌ XP gambling is disabled on this server.');
   if (settings.channelId && interaction.channelId !== settings.channelId) {
@@ -180,6 +205,7 @@ async function payout(guild, userId, amount, config) {
 // ---------------------------------------------------------------- Coinflip
 
 async function playCoinflip(interaction, bet, side) {
+  await acknowledge(interaction);
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
   bet = ctx.bet;
@@ -209,7 +235,7 @@ async function playCoinflip(interaction, bet, side) {
         levelNote(levelResult) +
         `\n\n${balanceText(balance, net)}${freeNote ? `\n${freeNote}` : ''}`
     );
-  return interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
+  return respond(interaction, { embeds: [embed], allowedMentions: { parse: [] } });
 }
 
 // ---------------------------------------------------------------- Shared game lifecycle
@@ -239,7 +265,11 @@ function startGame(interaction, game, ctx) {
     paidAmount: game.paidStake,
     freePlay: game.freePlay,
     channelId: interaction.channelId
-  }).catch((err) => console.error('Failed to record active bet:', err.message));
+  })
+    .then(() => {
+      game.betRecorded = true;
+    })
+    .catch((err) => console.error('Failed to record active bet:', err.message));
   return game;
 }
 
@@ -282,7 +312,18 @@ function playerView(game, payload) {
 /** Posts a new game: the public (watch-only) board, then the player's private controls. */
 async function showGame(interaction, game) {
   const payload = game.render();
-  await interaction.reply(spectatorView(game, payload));
+  try {
+    await respond(interaction, spectatorView(game, payload));
+  } catch (err) {
+    // The board couldn't be posted (Discord rejected it or the interaction expired): don't leave the
+    // player locked out with their XP gone — end the game and give the stake back right away.
+    console.error('Could not post game board:', err.message);
+    await abortGame(game);
+    await interaction
+      .followUp({ content: `⚠️ Your game couldn't be shown, so it was cancelled — ${refundWord(game)}.`, ephemeral: true })
+      .catch(() => null);
+    return;
+  }
   game.message = await interaction.fetchReply().catch(() => null);
   if (game.finished) return; // e.g. a blackjack natural settles straight away
   const flags = (payload.flags ?? 0) | MessageFlags.Ephemeral;
@@ -310,45 +351,113 @@ async function syncViews(game, payload) {
 
 function touchGame(game) {
   clearTimeout(game.timer);
+  game.lastActive = Date.now();
   game.timer = setTimeout(() => expireGame(game).catch(console.error), IDLE_TIMEOUT_MS);
+  // Keep the stored bet's timestamp fresh (at most once a minute) so the orphan sweep never
+  // mistakes a game that's still being played for an abandoned one.
+  if (game.betRecorded && Date.now() - (game.lastPersisted || 0) > 60000) {
+    game.lastPersisted = Date.now();
+    game.betWrite = Promise.resolve(game.betWrite).then(() =>
+      ActiveBet.updateOne({ gameId: game.id }, { $set: { lastActiveAt: new Date() } }).catch(() => null)
+    );
+  }
 }
 
 function endGame(game) {
   game.finished = true;
   clearTimeout(game.timer);
-  game.betWrite = Promise.resolve(game.betWrite).then(() => ActiveBet.deleteOne({ gameId: game.id }).catch(() => null));
+  // Settling "claims" the stored bet by deleting it. If another copy of the bot (e.g. the new one
+  // during a redeploy) already refunded it, the claim fails and this game pays nothing — so a stake is
+  // never paid back twice. If the bet was never recorded, there's nothing to race against.
+  game.claim = Promise.resolve(game.betWrite).then(async () => {
+    if (!game.betRecorded) return true;
+    try {
+      return !!(await ActiveBet.findOneAndDelete({ gameId: game.id }));
+    } catch (err) {
+      console.error('Failed to clear active bet:', err.message);
+      return true; // can't tell — pay rather than risk losing the player's XP
+    }
+  });
+  game.betWrite = game.claim;
   activeGames.delete(game.id);
   if (activeByUser.get(`${game.guildId}:${game.userId}`) === game.id) {
     activeByUser.delete(`${game.guildId}:${game.userId}`);
   }
 }
 
-function hasActiveGame(guildId, userId) {
-  return activeByUser.has(`${guildId}:${userId}`);
+// Pays XP out of a finished game, unless its bet was already settled elsewhere.
+async function gamePayout(game, amount) {
+  if (!(await game.claim)) {
+    game.alreadySettled = true;
+    return null;
+  }
+  return payout(game.guild, game.userId, amount, game.config);
 }
 
-async function expireGame(game) {
-  if (game.finished) return;
+/**
+ * The player's game that's still running, or null. Also heals stale state: a lock pointing at a game
+ * that no longer exists is cleared, and a game idle past its timeout (a lost timer) is ended now.
+ */
+async function currentGame(guildId, userId) {
+  const key = `${guildId}:${userId}`;
+  const game = activeGames.get(activeByUser.get(key));
+  if (!game || game.finished) {
+    activeByUser.delete(key);
+    return null;
+  }
+  if (Date.now() - (game.lastActive || 0) > IDLE_TIMEOUT_MS) {
+    await expireGame(game).catch(console.error);
+    return null;
+  }
+  return game;
+}
+
+async function busyReply(interaction, game) {
+  const endsAt = Math.floor(((game.lastActive || Date.now()) + IDLE_TIMEOUT_MS) / 1000);
+  const where = game.message?.url ? `[your ${game.kind} game](${game.message.url})` : `your ${game.kind} game`;
+  return interaction.reply({
+    content: `❌ Finish ${where} first — it ends by itself <t:${endsAt}:R> if you leave it. Stuck? Use \`/gamble sync\`.`,
+    ephemeral: true
+  });
+}
+
+const EXPIRE_NOTES = {
+  idle: { stand: '⏰ Auto-stood after inactivity.', cash: '⏰ Auto-cashed out after inactivity.', refund: 'Timed out before any move' },
+  sync: { stand: '🔧 Ended with /gamble sync — auto-stood.', cash: '🔧 Ended with /gamble sync — cashed out.', refund: 'Ended with /gamble sync' }
+};
+
+async function expireGame(game, reason = 'idle') {
+  if (game.finished) return null;
+  const notes = EXPIRE_NOTES[reason];
+  let rendered;
   if (game.onExpire) {
-    await syncViews(game, await game.onExpire());
-    return;
+    rendered = await game.onExpire(notes.stand);
+  } else if (game.canCashOut()) {
+    rendered = await cashOut(game, notes.cash);
+  } else {
+    // Nothing won yet — refund the bet instead of eating it.
+    endGame(game);
+    await refundStake(game);
+    await settle(game, game.paidStake);
+    game.status = 'refunded';
+    rendered = game.render(`⏰ ${notes.refund} — ${refundWord(game)}.`);
   }
-  if (game.canCashOut()) {
-    await syncViews(game, await cashOut(game, '⏰ Auto-cashed out after inactivity.'));
-    return;
-  }
-  // Nothing won yet — refund the bet instead of eating it.
+  await syncViews(game, rendered);
+  return game;
+}
+
+// Ends a game whose board never made it to Discord, returning the stake.
+async function abortGame(game) {
+  if (game.finished) return;
   endGame(game);
   await refundStake(game);
-  await settle(game, game.paidStake);
   game.status = 'refunded';
-  await syncViews(game, game.render(`⏰ Timed out before any move — ${refundWord(game)}.`));
 }
 
 async function cashOut(game, note = '') {
   endGame(game);
   const winnings = Math.floor(game.bet * game.currentMultiplier());
-  const levelResult = await payout(game.guild, game.userId, winnings, game.config);
+  const levelResult = await gamePayout(game, winnings);
   await settle(game, winnings);
   game.status = 'cashed';
   game.winnings = winnings;
@@ -441,9 +550,9 @@ function renderMines(game, note) {
 }
 
 async function startMines(interaction, bet, mineCount) {
-  if (hasActiveGame(interaction.guildId, interaction.user.id)) {
-    return interaction.reply({ content: '❌ Finish your current game first.', ephemeral: true });
-  }
+  const running = await currentGame(interaction.guildId, interaction.user.id);
+  if (running) return busyReply(interaction, running);
+  await acknowledge(interaction);
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
 
@@ -561,9 +670,9 @@ function renderHighLow(game, note) {
 }
 
 async function startHighLow(interaction, bet) {
-  if (hasActiveGame(interaction.guildId, interaction.user.id)) {
-    return interaction.reply({ content: '❌ Finish your current game first.', ephemeral: true });
-  }
+  const running = await currentGame(interaction.guildId, interaction.user.id);
+  if (running) return busyReply(interaction, running);
+  await acknowledge(interaction);
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
 
@@ -655,9 +764,9 @@ function createBlackjackGame(bet, config, settings) {
   };
   game.currentMultiplier = () => 1;
   game.canCashOut = () => false;
-  game.onExpire = async () => {
+  game.onExpire = async (note) => {
     // Idle hands stand automatically rather than forfeiting the bet.
-    await resolveBlackjack(game, '⏰ Auto-stood after inactivity.');
+    await resolveBlackjack(game, note);
     return game.render();
   };
   game.render = (note = '') => renderBlackjack(game, note);
@@ -709,7 +818,7 @@ async function resolveBlackjack(game, note = '') {
   }
 
   const returned = blackjackReturn(game, outcome);
-  const levelResult = await payout(game.guild, game.userId, returned, game.config);
+  const levelResult = await gamePayout(game, returned);
   game.outcome = outcome;
   game.status = ['blackjack', 'win', 'dealer_bust'].includes(outcome) ? 'won' : outcome === 'push' ? 'push' : 'lost';
   game.note = [note, BJ_OUTCOME_TEXT[outcome] + (returned > game.bet ? ` +${fmtNum(returned - game.bet)} XP` : ''), levelNote(levelResult).trim()]
@@ -758,9 +867,9 @@ function renderBlackjack(game, note) {
 }
 
 async function startBlackjack(interaction, bet) {
-  if (hasActiveGame(interaction.guildId, interaction.user.id)) {
-    return interaction.reply({ content: '❌ Finish your current game first.', ephemeral: true });
-  }
+  const running = await currentGame(interaction.guildId, interaction.user.id);
+  if (running) return busyReply(interaction, running);
+  await acknowledge(interaction);
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
 
@@ -841,31 +950,106 @@ async function settleAllForShutdown() {
  * the player in the channel where they were playing.
  */
 async function refundOrphanedBets(client) {
-  const orphans = await ActiveBet.find({}).lean();
+  // During a redeploy the old copy of the bot is still running (and will settle its own games), so
+  // only refund bets that have sat untouched for a couple of minutes; the sweeper catches the rest.
+  const orphans = await ActiveBet.find({ updatedAt: { $lt: new Date(Date.now() - 2 * 60 * 1000) } }).lean();
+  let refunded = 0;
   for (const bet of orphans) {
-    const claimed = await ActiveBet.findOneAndDelete({ _id: bet._id });
-    if (!claimed) continue;
-    const guild = client.guilds.cache.get(bet.guildId);
-    if (!guild) continue;
-    try {
-      const paid = bet.paidAmount ?? bet.amount;
-      if (paid > 0) await adjustXp(guild, bet.userId, paid);
-      if (bet.freePlay) await restoreFreePlay(bet.guildId, bet.userId);
-      const what = [paid > 0 ? `your **${fmtNum(paid)} XP** bet was refunded` : null, bet.freePlay ? 'your free play was given back' : null]
-        .filter(Boolean)
-        .join(' and ');
-      const channel = bet.channelId ? guild.channels.cache.get(bet.channelId) : null;
-      await channel
-        ?.send({
-          content: `♻️ <@${bet.userId}> the bot restarted during your ${bet.kind} game — ${what}.`,
-          allowedMentions: { users: [bet.userId] }
-        })
-        .catch(() => null);
-    } catch (err) {
-      console.error(`Failed to refund orphaned bet ${bet.gameId}:`, err.message);
+    if (await refundBetRecord(client, bet, 'the bot restarted during your')) refunded++;
+  }
+  return refunded;
+}
+
+/**
+ * Refunds one stored bet whose game is gone (claimed atomically, so it's only ever paid once).
+ * Returns the amount refunded, or null if it was already settled elsewhere.
+ */
+async function refundBetRecord(client, bet, why, { notify = true } = {}) {
+  const claimed = await ActiveBet.findOneAndDelete({ _id: bet._id });
+  if (!claimed) return null;
+  const guild = client.guilds.cache.get(bet.guildId);
+  if (!guild) return null;
+  const paid = bet.paidAmount ?? bet.amount;
+  try {
+    if (paid > 0) await adjustXp(guild, bet.userId, paid);
+    if (bet.freePlay) await restoreFreePlay(bet.guildId, bet.userId);
+  } catch (err) {
+    console.error(`Failed to refund bet ${bet.gameId}:`, err.message);
+    return null;
+  }
+  if (notify) {
+    const what = [paid > 0 ? `your **${fmtNum(paid)} XP** bet was refunded` : null, bet.freePlay ? 'your free play was given back' : null]
+      .filter(Boolean)
+      .join(' and ');
+    const channel = bet.channelId ? guild.channels.cache.get(bet.channelId) : null;
+    await channel
+      ?.send({ content: `♻️ <@${bet.userId}> ${why} ${bet.kind} game — ${what}.`, allowedMentions: { users: [bet.userId] } })
+      .catch(() => null);
+  }
+  return { paid, freePlay: !!bet.freePlay, kind: bet.kind, userId: bet.userId };
+}
+
+// A stored bet untouched for this long can't belong to a game that's still being played
+// (games end after 3 idle minutes), even one running on another copy of the bot.
+const ORPHAN_AFTER_MS = 10 * 60 * 1000;
+
+/**
+ * Safety net, run every minute: ends games whose idle timer was lost, clears stale "game in progress"
+ * locks, and refunds stored bets whose game no longer exists anywhere.
+ */
+async function sweepStuckGames(client) {
+  const now = Date.now();
+  for (const game of [...activeGames.values()]) {
+    if (!game.finished && now - (game.lastActive || 0) > IDLE_TIMEOUT_MS + 30000) await expireGame(game).catch(console.error);
+  }
+  for (const [key, id] of [...activeByUser]) {
+    const game = activeGames.get(id);
+    if (!game || game.finished) activeByUser.delete(key);
+  }
+  const stale = await ActiveBet.find({ updatedAt: { $lt: new Date(now - ORPHAN_AFTER_MS) } }).lean();
+  for (const bet of stale) {
+    if (!activeGames.has(bet.gameId)) await refundBetRecord(client, bet, 'your interrupted').catch(console.error);
+  }
+}
+
+function startGameSweeper(client) {
+  const timer = setInterval(() => sweepStuckGames(client).catch(console.error), 60 * 1000);
+  timer.unref?.();
+  return timer;
+}
+
+/**
+ * /gamble sync: ends the given players' games right now (cashing out winnings, auto-standing
+ * blackjack, or refunding) and refunds any stored bets left behind by games that no longer exist.
+ * `userId` null = everyone in the server. Returns a summary of what was fixed.
+ */
+async function syncGames(client, guildId, userId = null) {
+  const result = { ended: [], refunded: [], cleared: 0 };
+  const mine = (g) => g.guildId === guildId && (!userId || g.userId === userId);
+
+  for (const game of [...activeGames.values()].filter(mine)) {
+    if (game.finished) continue;
+    await expireGame(game, 'sync');
+    result.ended.push({ userId: game.userId, kind: game.kind, status: game.status, amount: game.status === 'cashed' ? game.winnings : game.paidStake });
+  }
+  for (const [key, id] of [...activeByUser]) {
+    const [g, u] = key.split(':');
+    if (g !== guildId || (userId && u !== userId)) continue;
+    const game = activeGames.get(id);
+    if (!game || game.finished) {
+      activeByUser.delete(key);
+      result.cleared++;
     }
   }
-  return orphans.length;
+  // Stored bets with no live game here. Skip brand-new ones (a game may be starting on another copy of the bot).
+  const filter = { guildId, updatedAt: { $lt: new Date(Date.now() - 2 * 60 * 1000) } };
+  if (userId) filter.userId = userId;
+  for (const bet of await ActiveBet.find(filter).lean()) {
+    if (activeGames.has(bet.gameId)) continue;
+    const refund = await refundBetRecord(client, bet, '', { notify: false });
+    if (refund) result.refunded.push(refund);
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------- Button router
@@ -914,5 +1098,8 @@ module.exports = {
   handValue,
   blackjackReturn,
   handleGambleButton,
+  startGameSweeper,
+  sweepStuckGames,
+  syncGames,
   _test: { spectatorView, playerView, disableButtons }
 };

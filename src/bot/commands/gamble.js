@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
-const { getGamblingSettings, minesMultiplier, playCoinflip, startMines, startHighLow, startBlackjack } = require('../cogs/modules/gambling');
+const { getGamblingSettings, minesMultiplier, playCoinflip, startMines, startHighLow, startBlackjack, syncGames } = require('../cogs/modules/gambling');
 
 const betOption = (opt) => opt.setName('bet').setDescription('How much XP to bet').setMinValue(1).setRequired(true);
 
@@ -38,6 +38,12 @@ const data = new SlashCommandBuilder()
   .addSubcommand((sub) => sub.setName('info').setDescription('Show payouts, the house edge, and bet limits'))
   .addSubcommand((sub) =>
     sub
+      .setName('sync')
+      .setDescription("Stuck? End your game now and get back any XP from games that didn't finish")
+      .addBooleanOption((opt) => opt.setName('everyone').setDescription('Fix every player in this server (Manage Server only)'))
+  )
+  .addSubcommand((sub) =>
+    sub
       .setName('config')
       .setDescription('Configure XP gambling for this server (Admin only)')
       .addBooleanOption((opt) => opt.setName('enabled').setDescription('Turn gambling on or off'))
@@ -70,6 +76,36 @@ async function execute(interaction) {
   }
   if (sub === 'blackjack') {
     return startBlackjack(interaction, interaction.options.getInteger('bet'));
+  }
+
+  if (sub === 'sync') {
+    const everyone = interaction.options.getBoolean('everyone') ?? false;
+    if (everyone && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ content: '❌ Only members with **Manage Server** can sync everyone.', ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const result = await syncGames(interaction.client, interaction.guildId, everyone ? null : interaction.user.id);
+    const who = (id) => (everyone ? `<@${id}> ` : '');
+    const fmt = (n) => Number(n || 0).toLocaleString();
+    const lines = [
+      ...result.ended.map((e) =>
+        e.status === 'cashed'
+          ? `💰 ${who(e.userId)}${e.kind} ended and cashed out **${fmt(e.amount)} XP**`
+          : e.status === 'refunded'
+            ? `↩️ ${who(e.userId)}${e.kind} ended — bet of **${fmt(e.amount)} XP** refunded`
+            : `🃏 ${who(e.userId)}${e.kind} ended (auto-stood) — result shown on the game`
+      ),
+      ...result.refunded.map(
+        (r) => `♻️ ${who(r.userId)}unfinished ${r.kind} game — ${[r.paid ? `**${fmt(r.paid)} XP** refunded` : null, r.freePlay ? 'free play given back' : null].filter(Boolean).join(' and ')}`
+      )
+    ];
+    if (result.cleared) lines.push(`🔓 Cleared ${result.cleared} stuck "game in progress" lock(s).`);
+    return interaction.editReply({
+      content: lines.length
+        ? `✅ **Gambling synced${everyone ? ' for everyone' : ''}.**\n${lines.slice(0, 25).join('\n')}${lines.length > 25 ? `\n…and ${lines.length - 25} more.` : ''}`
+        : `✅ Nothing was stuck${everyone ? ' in this server' : ' — you can start a new game'}.`,
+      allowedMentions: { parse: [] }
+    });
   }
 
   if (sub === 'info') {

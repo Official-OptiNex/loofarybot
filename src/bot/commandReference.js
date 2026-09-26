@@ -60,6 +60,7 @@ module.exports = [
       { usage: '/gamble mines', perm: null, description: '5×5 minefield: reveal gems, avoid mines, cash out any time.' },
       { usage: '/gamble highlow', perm: null, description: 'Call higher or lower to build a multiplier, then cash out.' },
       { usage: '/gamble info', perm: null, description: 'Payouts, house edge and bet limits.' },
+      { usage: '/gamble sync', perm: null, description: "Stuck? End your game now and get back XP from games that didn't finish (admins: everyone:true)." },
       { usage: '/gamble config', perm: 'Admin', description: 'Enable gambling, set the house edge, limits and channel.' }
     ]
   },

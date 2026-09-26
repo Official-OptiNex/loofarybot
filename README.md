@@ -156,8 +156,20 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   average whatever strategy is used. Admins set the edge, min/max bet, and an optional
   gambling-only channel with `/gamble config`. Bets are taken atomically up front, so the same
   XP can't be spent twice.
-- Interactive games live in memory: an idle game is auto-cashed out after 3 minutes (or refunded
-  if nothing was revealed yet). A bot restart mid-game loses that game's bet.
+- An idle game ends after 3 minutes: winnings are cashed out, blackjack auto-stands, and a game
+  with nothing won yet is refunded. Restarts settle or refund open games too.
+- Others can watch a game live on its public board, but only the player gets working buttons, in a
+  private copy of the board.
+- Stuck games can't lock anyone out or keep their XP:
+  - Game commands answer Discord instantly, so the 3-second reply window can't be missed.
+  - If the board still can't be posted, the bet is refunded on the spot.
+  - A minute-by-minute sweep ends games whose timer was lost and refunds bets from games that
+    vanished, with a notice in the channel.
+  - Settling a game "claims" its stored bet, so a stake is never refunded twice, even while the old
+    and new copies of the bot overlap during a redeploy.
+- **`/gamble sync`** fixes a stuck player on demand: it ends your game now and returns XP from any
+  game that didn't finish. Admins with Manage Server can run `/gamble sync everyone:true` for the
+  whole server.
 
 ### Giveaways: requirements & drops
 - Every way of starting one offers the same options: **type** (timed giveaway or first-to-click
