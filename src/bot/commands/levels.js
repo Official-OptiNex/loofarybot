@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { getOrCreateConfig, getRank, getLeaderboard, xpForLevel, getEffectiveXpSettings } = require('../cogs/modules/leveling');
 
 const data = new SlashCommandBuilder()
@@ -49,11 +49,23 @@ const data = new SlashCommandBuilder()
           .setRequired(false)
       )
   )
+  .addSubcommand((sub) =>
+    sub
+      .setName('announcechannel')
+      .setDescription('Choose where level-up messages are sent (Admin only)')
+      .addChannelOption((opt) =>
+        opt
+          .setName('channel')
+          .setDescription('Channel for level-up messages — leave empty to send them in the same channel')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setRequired(false)
+      )
+  )
   .addSubcommand((sub) => sub.setName('xpconfig_show').setDescription('Show current XP tuning for this server'));
 
 // Admin-only subcommands. Discord only lets us gate an entire command (not a single
 // subcommand) via setDefaultMemberPermissions, so we enforce this at runtime instead.
-const ADMIN_ONLY_SUBCOMMANDS = ['setrole', 'removerole', 'toggle', 'xpconfig'];
+const ADMIN_ONLY_SUBCOMMANDS = ['setrole', 'removerole', 'toggle', 'xpconfig', 'announcechannel'];
 
 function checkRoleHierarchy(guild, role) {
   const botMember = guild.members.me;
@@ -177,6 +189,32 @@ async function execute(interaction) {
     });
   }
 
+  if (sub === 'announcechannel') {
+    const channel = interaction.options.getChannel('channel');
+    const config = await getOrCreateConfig(interaction.guildId);
+
+    if (!channel) {
+      config.levelUpChannelId = null;
+      await config.save();
+      return interaction.reply({
+        content: '✅ Level-up messages will now be sent in the **same channel** the member was chatting in.',
+        ephemeral: true
+      });
+    }
+
+    const me = interaction.guild.members.me;
+    if (!me || !channel.permissionsFor(me)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+      return interaction.reply({
+        content: `❌ LoofaryBot can't send messages in ${channel}. Give it View Channel + Send Messages there first.`,
+        ephemeral: true
+      });
+    }
+
+    config.levelUpChannelId = channel.id;
+    await config.save();
+    return interaction.reply({ content: `✅ Level-up messages will now be sent to ${channel}.`, ephemeral: true });
+  }
+
   if (sub === 'xpconfig_show') {
     const config = await getOrCreateConfig(interaction.guildId);
     const effective = getEffectiveXpSettings(config);
@@ -188,7 +226,12 @@ async function execute(interaction) {
         { name: 'Max XP / message', value: `${effective.xpMax}`, inline: true },
         { name: 'Cooldown', value: `${effective.cooldownMs / 1000}s`, inline: true },
         { name: 'Level curve base', value: `${effective.levelXpBase}`, inline: true },
-        { name: 'Leveling enabled', value: config.levelingEnabled ? 'Yes' : 'No', inline: true }
+        { name: 'Leveling enabled', value: config.levelingEnabled ? 'Yes' : 'No', inline: true },
+        {
+          name: 'Level-up messages',
+          value: config.levelUpChannelId ? `<#${config.levelUpChannelId}>` : 'Same channel',
+          inline: true
+        }
       );
     return interaction.reply({ embeds: [embed], ephemeral: true });
   }

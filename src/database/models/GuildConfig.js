@@ -32,6 +32,8 @@ const GuildConfigSchema = new mongoose.Schema(
     xpMax: { type: Number, default: null },
     xpCooldownSeconds: { type: Number, default: null },
     levelXpBase: { type: Number, default: null },
+    // Where level-up announcements go. null means "the same channel the user was chatting in".
+    levelUpChannelId: { type: String, default: null },
 
     // --- Auto-Role ---
     autoRoleId: { type: String, default: null },
