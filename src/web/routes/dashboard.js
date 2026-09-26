@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth, requireGuildAccess, MANAGE_GUILD, ADMINISTRATOR } = require('../utils/authMiddleware');
 const GuildConfig = require('../../database/models/GuildConfig');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
+const UserLevel = require('../../database/models/UserLevel');
 const { getEffectiveXpSettings } = require('../../bot/cogs/modules/leveling');
 const { getGamblingSettings } = require('../../bot/cogs/modules/gambling');
 const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
@@ -34,10 +35,15 @@ router.get('/', requireAuth, (req, res) => {
 });
 
 router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
-  const [configDoc, welcomeDoc] = await Promise.all([
+  const [configDoc, welcomeDoc, levelAgg] = await Promise.all([
     GuildConfig.findOne({ guildId: req.guild.id }),
-    WelcomeConfig.findOne({ guildId: req.guild.id }).lean()
+    WelcomeConfig.findOne({ guildId: req.guild.id }).lean(),
+    UserLevel.aggregate([
+      { $match: { guildId: req.guild.id, xp: { $gt: 0 } } },
+      { $group: { _id: null, ranked: { $sum: 1 }, topLevel: { $max: '$level' }, totalXp: { $sum: '$xp' } } }
+    ])
   ]);
+  const levelStats = levelAgg[0] || { ranked: 0, topLevel: 0, totalXp: 0 };
   const config = configDoc || {};
   const guild = req.guild;
 
@@ -87,8 +93,29 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     avatarUrl: me?.displayAvatarURL({ size: 64 }) || client.user?.displayAvatarURL({ size: 64 }) || ''
   };
 
+  // Newest members for the header's avatar stack (from cache — no extra API calls).
+  const humans = guild.members.cache.filter((m) => !m.user.bot);
+  const recentMembers = [...humans.values()]
+    .sort((a, b) => (b.joinedTimestamp || 0) - (a.joinedTimestamp || 0))
+    .slice(0, 5)
+    .map((m) => ({ name: m.displayName, avatarUrl: m.displayAvatarURL({ size: 64 }) }));
+
+  // "Server goals" panel: next member milestone, leveling participation, and next boost tier.
+  const milestones = [50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+  const nextMilestone = milestones.find((m) => m > guild.memberCount) || Math.ceil((guild.memberCount + 1) / 100000) * 100000;
+  const boostTiers = [2, 7, 14];
+  const nextBoostGoal = boostTiers.find((t) => t > stats.boostCount) || 14;
+  const goals = {
+    members: { current: guild.memberCount, target: nextMilestone },
+    ranked: { current: levelStats.ranked, target: Math.max(guild.memberCount, 1) },
+    boosts: { current: stats.boostCount, target: nextBoostGoal, maxed: stats.boostCount >= 14 }
+  };
+
   res.render('guild', {
     viewer,
+    recentMembers,
+    levelStats,
+    goals,
     bot,
     guild,
     config,

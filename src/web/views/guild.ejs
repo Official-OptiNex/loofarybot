@@ -5,105 +5,218 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= guild.name %> | LoofaryBot</title>
   <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
 </head>
 <body>
-  <nav>
-    <div class="brand">🎁 LoofaryBot</div>
-    <a class="btn secondary" href="/dashboard">← All Servers</a>
-  </nav>
-  <div class="container">
-    <% const serverAgeDays = Math.floor((Date.now() - stats.createdTimestamp) / 86400000); %>
-    <header class="topbar">
-      <div class="topbar-identity">
-        <% if (guild.iconURL()) { %>
-          <img src="<%= guild.iconURL({ size: 128 }) %>" alt="">
-        <% } else { %>
-          <div class="guild-icon-fallback"><%= guild.name.slice(0, 1) %></div>
-        <% } %>
-        <div style="min-width:0;">
-          <h1><%= guild.name %></h1>
-          <div class="sub">Owned by <%= stats.ownerTag %> · ID <code><%= guild.id %></code></div>
-        </div>
-      </div>
-      <div class="quick-stats">
-        <div class="quick-stat"><span class="value"><%= stats.memberCount.toLocaleString() %></span><span class="label">Members</span></div>
-        <div class="quick-stat gold"><span class="value" id="qsJoins7">—</span><span class="label">Joined 7d</span></div>
-        <div class="quick-stat"><span class="value"><%= stats.boostCount %></span><span class="label">Boosts<%= stats.boostTier > 0 ? ' · T' + stats.boostTier : '' %></span></div>
-        <div class="quick-stat"><span class="value"><%= serverAgeDays.toLocaleString() %>d</span><span class="label">Server age</span></div>
-      </div>
-      <a class="btn" href="/dashboard/<%= guild.id %>/embed">🖌️ Embed Builder</a>
-    </header>
+<%
+  // Line icons (24x24, stroke-based) shared by the sidebar, app bar and stat cards.
+  const ICON_PATHS = {
+    home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9v11.5h13V9"/><path d="M10 20.5v-6h4v6"/>',
+    welcome: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.1-4.6A8.5 8.5 0 1 1 21 12z"/><path d="M9 13.5a3.5 3.5 0 0 0 6 0"/>',
+    shield: '<path d="M12 3l8 3v6c0 4.8-3.4 8-8 9-4.6-1-8-4.2-8-9V6z"/>',
+    trending: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    userplus: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/>',
+    dice: '<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.1" fill="currentColor"/><circle cx="12" cy="12" r="1.1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.1" fill="currentColor"/>',
+    file: '<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h7M8.5 16.5h4.5"/>',
+    trophy: '<path d="M8 21h8M12 16.5V21"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5.5h2.5a2.5 2.5 0 0 1-2.8 4M7 5.5H4.5a2.5 2.5 0 0 0 2.8 4"/>',
+    terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12.5 15H17"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+    bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+    brush: '<path d="M18.5 3.5a2.1 2.1 0 0 1 3 3L12 16l-3.5.5.5-3.5z"/><path d="M8 17c-2 0-3.5 1.3-3.5 3.5H8a2.5 2.5 0 0 0 0-5"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
+    login: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l4-4-4-4M14 12H4"/>',
+    star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+    target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
+    curve: '<path d="M3 3v18h18"/><path d="M6.5 15c3-7 5.5-7 8 0 1.5 4 3 3.5 5-2"/>'
+  };
+  const icon = (name) =>
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
 
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="overview">Overview</button>
-      <button class="tab-btn" data-tab="welcome">👋 Welcome</button>
-      <button class="tab-btn" data-tab="honeypot">🍯 Honeypot</button>
-      <button class="tab-btn" data-tab="leveling">📈 Leveling</button>
-      <button class="tab-btn" data-tab="autorole">🛡️ Auto-Role</button>
-      <button class="tab-btn" data-tab="gambling">🎰 Gambling</button>
-      <button class="tab-btn" data-tab="logs">📋 Logs</button>
-      <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
-      <button class="tab-btn" data-tab="commands">📜 Commands</button>
+  const NAV = [
+    ['overview', 'home', 'Overview'],
+    ['welcome', 'welcome', 'Welcome'],
+    ['honeypot', 'shield', 'Honeypot'],
+    ['leveling', 'trending', 'Leveling'],
+    ['autorole', 'userplus', 'Auto-Role'],
+    ['gambling', 'dice', 'Gambling'],
+    ['logs', 'file', 'Logs'],
+    ['leaderboard', 'trophy', 'Leaderboard'],
+    ['commands', 'terminal', 'Commands']
+  ];
+  const logChannelSet = !!(config.logChannelId && channels.find(c => c.id === config.logChannelId));
+  const MODULES = [
+    ['welcome', 'Welcome', !!(welcome.enabled && welcome.channelId)],
+    ['honeypot', 'Honeypot', !!config.honeypotChannelId],
+    ['leveling', 'Leveling', config.levelingEnabled !== false],
+    ['autorole', 'Auto-Role', !!(config.autoRoleId && config.autoRoleEnabled !== false)],
+    ['gambling', 'Gambling', gambling.enabled],
+    ['logs', 'Logs', logChannelSet]
+  ];
+  const catches = (config.honeypotKicks || 0) + (config.honeypotSoftbans || 0) + (config.honeypotBans || 0);
+  const pct = (cur, target) => Math.max(0, Math.min(100, target > 0 ? (cur / target) * 100 : 0));
+%>
+<div class="app-shell" id="appShell">
+  <aside class="sidebar" id="sidebar" aria-label="Dashboard navigation">
+    <a class="sidebar-brand" href="/dashboard"><span class="brand-mark">🎁</span>LoofaryBot</a>
+
+    <div class="server-card">
+      <% if (guild.iconURL()) { %>
+        <img src="<%= guild.iconURL({ size: 64 }) %>" alt="">
+      <% } else { %>
+        <div class="guild-icon-fallback"><%= guild.name.slice(0, 1) %></div>
+      <% } %>
+      <div style="min-width:0;">
+        <div class="name"><%= guild.name %></div>
+        <a href="/dashboard">Switch server →</a>
+      </div>
     </div>
 
+    <div class="nav-section">
+      <div class="nav-heading"><span class="ring-dot"></span>Menu</div>
+      <% NAV.forEach(([tab, ic, label], i) => { %>
+        <button class="nav-item <%= i === 0 ? 'active' : '' %>" data-tab="<%= tab %>"><%- icon(ic) %><span><%= label %></span></button>
+      <% }) %>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-heading"><span class="ring-dot green"></span>Modules</div>
+      <% MODULES.forEach(([tab, label, on]) => { %>
+        <button class="module-row" data-tab="<%= tab %>"><span><%= label %></span><span class="pill <%= on ? 'on' : '' %>"><%= on ? 'ON' : 'OFF' %></span></button>
+      <% }) %>
+    </div>
+
+    <div class="sidebar-footer">
+      <label class="switch" title="Toggle light / dark theme">
+        <input type="checkbox" id="themeToggle" aria-label="Dark theme">
+        <span class="track"></span>
+      </label>
+      <span><span id="sunLabel">Sun</span> / <strong id="moonLabel">Moon</strong></span>
+    </div>
+  </aside>
+  <div class="sidebar-scrim" onclick="toggleSidebar(false)"></div>
+
+  <div class="main-area">
+    <header class="appbar">
+      <button class="appbar-icon menu-toggle" onclick="toggleSidebar()" aria-label="Open menu"><%- icon('menu') %></button>
+      <div class="appbar-search">
+        <%- icon('search') %>
+        <input id="globalSearch" type="search" placeholder="Search settings and commands …" autocomplete="off" aria-label="Search settings and commands">
+        <div class="search-results" id="searchResults" role="listbox"></div>
+      </div>
+      <a class="appbar-icon" href="/dashboard/<%= guild.id %>/embed" title="Embed Builder" aria-label="Embed Builder"><%- icon('brush') %></a>
+      <button class="appbar-icon" data-tab="logs" title="Server logs" aria-label="Server logs"><%- icon('bell') %><% if (!logChannelSet) { %><span class="badge-dot"></span><% } %></button>
+      <div class="appbar-user">
+        <div class="avatar-wrap"><img src="<%= viewer.avatarUrl %>" alt=""><span class="online"></span></div>
+        <div class="user-meta">
+          <div><%= viewer.username %></div>
+          <a href="/auth/logout">Log out</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
     <!-- OVERVIEW -->
     <div class="tab-panel" id="tab-overview">
-      <div class="metric-grid">
-        <div class="metric-card">
-          <div class="metric-icon">👥</div>
-          <div class="metric-value"><%= stats.memberCount.toLocaleString() %></div>
-          <div class="metric-label">Total members</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-icon">📥</div>
-          <div class="metric-value" id="mJoins24">—</div>
-          <div class="metric-label">Joined in the last 24h</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-icon">📈</div>
-          <div class="metric-value" id="mJoinsRange">—</div>
-          <div class="metric-label" id="mJoinsRangeLabel">Joined in the last 30 days</div>
-          <div class="metric-delta" id="mJoinsDelta"></div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-icon">💬</div>
-          <div class="metric-value"><%= stats.channelCount %></div>
-          <div class="metric-label">Channels · <%= stats.roleCount %> roles</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-icon">😀</div>
-          <div class="metric-value"><%= stats.emojiCount %></div>
-          <div class="metric-label">Custom emojis</div>
+      <div class="page-heading">
+        <h1>Server members <span>(<%= stats.memberCount.toLocaleString() %>)</span></h1>
+        <div class="avatar-stack" title="Newest members">
+          <% recentMembers.forEach(m => { %>
+            <img src="<%= m.avatarUrl %>" alt="<%= m.name %>" title="<%= m.name %>">
+          <% }) %>
+          <% if (stats.memberCount > recentMembers.length) { %>
+            <% const others = stats.memberCount - recentMembers.length; %>
+            <span class="more">+<%= others >= 1000 ? Math.floor(others / 1000) + 'k' : others %></span>
+          <% } %>
         </div>
       </div>
 
-      <div class="card chart-card">
-        <div class="chart-header">
-          <div>
-            <h2>Join activity</h2>
-            <div class="muted" style="font-size:0.85rem;" id="chartSubtitle">New members over time (UTC)</div>
+      <div class="stat-cards">
+        <div class="stat-card tone-blue">
+          <div class="stat-body">
+            <div class="stat-top"><span class="stat-label">Total members</span><span class="stat-icon"><%- icon('users') %></span></div>
+            <div class="stat-value"><%= stats.memberCount.toLocaleString() %></div>
+            <div class="stat-trends"><span>Joins wk:<strong id="tJoinsWeek">—</strong></span><span>Day:<strong id="tJoinsDay">—</strong></span></div>
           </div>
-          <div class="chart-controls">
-            <div class="segmented" id="rangeControl" role="group" aria-label="Date range">
-              <button data-days="7">7D</button>
-              <button data-days="30" class="active">30D</button>
-              <button data-days="90">90D</button>
-              <button data-days="365">1Y</button>
+          <div class="stat-footer"><span>Joined today</span><strong id="fJoinedToday">—</strong></div>
+        </div>
+        <div class="stat-card tone-red">
+          <div class="stat-body">
+            <div class="stat-top"><span class="stat-label" id="lJoinsRange">New joins · 30 days</span><span class="stat-icon"><%- icon('login') %></span></div>
+            <div class="stat-value" id="vJoinsRange">—</div>
+            <div class="stat-trends"><span>Left wk:<strong id="tLeavesWeek">—</strong></span><span>Net wk:<strong id="tNetWeek">—</strong></span></div>
+          </div>
+          <div class="stat-footer"><span>Left today</span><strong id="fLeftToday">—</strong></div>
+        </div>
+        <div class="stat-card tone-yellow">
+          <div class="stat-body">
+            <div class="stat-top"><span class="stat-label">Ranked members</span><span class="stat-icon"><%- icon('star') %></span></div>
+            <div class="stat-value"><%= levelStats.ranked.toLocaleString() %></div>
+            <div class="stat-trends"><span>Top level:<strong><%= levelStats.topLevel %></strong></span><span>XP:<strong><%= levelStats.totalXp >= 1e6 ? (levelStats.totalXp / 1e6).toFixed(1) + 'M' : levelStats.totalXp >= 1e3 ? (levelStats.totalXp / 1e3).toFixed(1) + 'k' : levelStats.totalXp %></strong></span></div>
+          </div>
+          <div class="stat-footer"><span>Role rewards</span><strong><%= (config.levelRoles || []).length %></strong></div>
+        </div>
+        <div class="stat-card tone-green">
+          <div class="stat-body">
+            <div class="stat-top"><span class="stat-label">Honeypot catches</span><span class="stat-icon"><%- icon('shield') %></span></div>
+            <div class="stat-value"><%= catches.toLocaleString() %></div>
+            <div class="stat-trends"><span>Kicks:<strong><%= config.honeypotKicks || 0 %></strong></span><span>Bans:<strong><%= config.honeypotBans || 0 %></strong></span></div>
+          </div>
+          <div class="stat-footer"><span>Soft bans</span><strong><%= config.honeypotSoftbans || 0 %></strong></div>
+        </div>
+      </div>
+
+      <div class="overview-row">
+        <div class="card panel-card">
+          <div class="panel-head">
+            <h2 class="panel-title"><%- icon('curve') %>Member curve</h2>
+            <div class="chart-controls">
+              <div class="segmented" id="rangeControl" role="group" aria-label="Date range">
+                <button data-days="7">7D</button>
+                <button data-days="30" class="active">30D</button>
+                <button data-days="90">90D</button>
+                <button data-days="365">1Y</button>
+              </div>
+              <div class="segmented" id="bucketControl" role="group" aria-label="Group by">
+                <button data-bucket="day" class="active">Daily</button>
+                <button data-bucket="week">Weekly</button>
+              </div>
+              <button class="btn secondary small" id="syncJoinsBtn" onclick="syncJoinData()">🔄 Sync Join Data</button>
             </div>
-            <div class="segmented" id="bucketControl" role="group" aria-label="Group by">
-              <button data-bucket="day" class="active">Daily</button>
-              <button data-bucket="week">Weekly</button>
+          </div>
+          <div class="panel-body">
+            <div class="chart-wrap">
+              <canvas id="joinChart" aria-label="Member joins, leaves and net change" role="img"></canvas>
+              <div class="chart-empty" id="chartEmpty">No join data yet. New joins are recorded automatically; click <strong>&nbsp;Sync Join Data&nbsp;</strong> to backfill current members.</div>
             </div>
-            <button class="btn secondary small" id="syncJoinsBtn" onclick="syncJoinData()">🔄 Sync Join Data</button>
+            <div class="chart-legend">
+              <span><span class="dot" style="background:var(--c-blue);"></span>Joins</span>
+              <span><span class="dot" style="background:var(--c-red);"></span>Leaves <span class="muted">(tracked from now on)</span></span>
+              <span><span class="dot" style="background:var(--c-yellow);"></span>Net change</span>
+              <span id="chartSubtitle" style="margin-left:auto;"></span>
+            </div>
           </div>
         </div>
-        <div class="chart-wrap">
-          <canvas id="joinChart" aria-label="Join activity chart" role="img"></canvas>
-          <div class="chart-empty" id="chartEmpty">No join data yet. New joins are recorded automatically; click <strong>&nbsp;Sync Join Data&nbsp;</strong> to backfill current members.</div>
-        </div>
-        <div class="chart-legend">
-          <span><span class="dot" style="background:#f5c542;"></span>New joins per period</span>
-          <span><span class="dot" style="background:#6d7dff;"></span>Total tracked joins</span>
+
+        <div class="card panel-card">
+          <div class="panel-head"><h2 class="panel-title"><%- icon('target') %>Server goals</h2></div>
+          <div class="panel-body">
+            <div class="goal blue">
+              <div class="goal-head"><span>Members</span><span><%= goals.members.current.toLocaleString() %> / <%= goals.members.target.toLocaleString() %></span></div>
+              <div class="goal-track"><div class="goal-fill" style="width:<%= pct(goals.members.current, goals.members.target) %>%;"></div></div>
+              <div class="goal-note"><%= (goals.members.target - goals.members.current).toLocaleString() %> to the next milestone</div>
+            </div>
+            <div class="goal red">
+              <div class="goal-head"><span>Ranked members</span><span><%= goals.ranked.current.toLocaleString() %> / <%= goals.ranked.target.toLocaleString() %></span></div>
+              <div class="goal-track"><div class="goal-fill" style="width:<%= pct(goals.ranked.current, goals.ranked.target) %>%;"></div></div>
+              <div class="goal-note"><%= Math.round(pct(goals.ranked.current, goals.ranked.target)) %>% of members have earned XP</div>
+            </div>
+            <div class="goal yellow">
+              <div class="goal-head"><span>Boosts</span><span><%= goals.boosts.current %> / <%= goals.boosts.target %></span></div>
+              <div class="goal-track"><div class="goal-fill" style="width:<%= pct(goals.boosts.current, goals.boosts.target) %>%;"></div></div>
+              <div class="goal-note"><%= goals.boosts.maxed ? 'Max boost tier reached 🎉' : (goals.boosts.target - goals.boosts.current) + ' more for Boost Tier ' + ([2, 7, 14].indexOf(goals.boosts.target) + 1) %></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -514,7 +627,9 @@
         </div>
       </div>
     </div>
+    </main>
   </div>
+</div>
 
   <div class="toast" id="toast"></div>
 
@@ -535,16 +650,95 @@
       return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     }
 
-    // --- Tabs ---
-    document.querySelectorAll('.tab-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-        document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
-        btn.classList.add('active');
-        document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
-        if (btn.dataset.tab === 'leaderboard') loadLeaderboard();
-      });
+    let joinChart = null; // created once join data loads
+
+    // --- Navigation (sidebar, module rows and app-bar buttons all carry data-tab) ---
+    function showTab(tab) {
+      const panel = document.getElementById(`tab-${tab}`);
+      if (!panel) return;
+      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
+      panel.classList.remove('hidden');
+      document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+      if (tab === 'leaderboard') loadLeaderboard();
+      if (tab === 'overview' && joinChart) joinChart.resize();
+      history.replaceState(null, '', tab === 'overview' ? location.pathname : `#${tab}`);
+      toggleSidebar(false);
+      window.scrollTo({ top: 0 });
+    }
+    document.querySelectorAll('[data-tab]').forEach((el) => el.addEventListener('click', () => showTab(el.dataset.tab)));
+
+    function toggleSidebar(open) {
+      const shell = document.getElementById('appShell');
+      shell.classList.toggle('nav-open', open ?? !shell.classList.contains('nav-open'));
+    }
+
+    // --- Sun / Moon theme ---
+    const themeToggle = document.getElementById('themeToggle');
+    function applyTheme(theme) {
+      if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      else document.documentElement.removeAttribute('data-theme');
+      themeToggle.checked = theme !== 'light';
+      document.getElementById('sunLabel').style.fontWeight = theme === 'light' ? '700' : '';
+      document.getElementById('moonLabel').style.fontWeight = theme === 'light' ? '400' : '';
+      try { localStorage.setItem('loofary-theme', theme); } catch (e) { /* storage blocked */ }
+      if (joinChart) styleChart(joinChart);
+    }
+    themeToggle.addEventListener('change', () => applyTheme(themeToggle.checked ? 'dark' : 'light'));
+    themeToggle.checked = document.documentElement.getAttribute('data-theme') !== 'light';
+
+    // --- Global search: jump to a settings page or a command ---
+    const commandIndex = <%- JSON.stringify(commandReference.flatMap((g) => g.commands.map((c) => ({ label: c.usage, detail: c.description, group: g.group })))).replace(/</g, '\\u003c') %>;
+    const searchIndex = [
+      ...[...document.querySelectorAll('.nav-item')].map((b) => ({ label: b.textContent.trim(), kind: 'Page', tab: b.dataset.tab })),
+      ...commandIndex.map((c) => ({ label: c.label, kind: c.group, tab: 'commands', detail: c.detail }))
+    ];
+    const searchInput = document.getElementById('globalSearch');
+    const searchResults = document.getElementById('searchResults');
+    let searchMatches = [];
+    let searchHighlight = 0;
+
+    function renderSearch() {
+      const q = searchInput.value.trim().toLowerCase();
+      searchMatches = q ? searchIndex.filter((i) => `${i.label} ${i.detail || ''}`.toLowerCase().includes(q)).slice(0, 8) : [];
+      searchHighlight = 0;
+      searchResults.innerHTML = searchMatches.length
+        ? searchMatches.map((m, i) => `<button data-i="${i}" class="${i === 0 ? 'highlighted' : ''}"><span>${esc(m.label)}</span><span class="kind">${esc(m.kind)}</span></button>`).join('')
+        : q ? '<button disabled><span class="kind">No matches</span></button>' : '';
+      searchResults.classList.toggle('visible', !!q);
+    }
+    function pickSearch(i) {
+      const m = searchMatches[i];
+      if (!m) return;
+      searchInput.value = '';
+      searchResults.classList.remove('visible');
+      showTab(m.tab);
+      if (m.tab === 'commands') {
+        const row = [...document.querySelectorAll('#tab-commands .cmd-row')].find((r) => r.querySelector('code').textContent === m.label);
+        if (row) {
+          row.scrollIntoView({ block: 'center' });
+          row.style.background = 'var(--accent-gold-soft)';
+          setTimeout(() => (row.style.background = ''), 1600);
+        }
+      }
+    }
+    searchInput.addEventListener('input', renderSearch);
+    searchInput.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        if (!searchMatches.length) return;
+        searchHighlight = (searchHighlight + (ev.key === 'ArrowDown' ? 1 : -1) + searchMatches.length) % searchMatches.length;
+        searchResults.querySelectorAll('button').forEach((b, i) => b.classList.toggle('highlighted', i === searchHighlight));
+      } else if (ev.key === 'Enter') {
+        pickSearch(searchHighlight);
+      } else if (ev.key === 'Escape') {
+        searchResults.classList.remove('visible');
+      }
     });
+    searchResults.addEventListener('mousedown', (ev) => {
+      const btn = ev.target.closest('button[data-i]');
+      if (btn) pickSearch(Number(btn.dataset.i));
+    });
+    searchInput.addEventListener('blur', () => setTimeout(() => searchResults.classList.remove('visible'), 150));
 
     // --- Leaderboard ---
     let lbCurrentPage = 1;
@@ -740,7 +934,6 @@
     }
 
     // --- Join analytics chart ---
-    let joinChart = null;
     const chartState = { days: 30, bucket: 'day' };
     const fmt = (n) => Number(n).toLocaleString();
 
@@ -761,38 +954,63 @@
       }
     }
 
+    function setTrend(id, value, { suffix = '%', invert = false } = {}) {
+      const el = document.getElementById(id);
+      el.classList.remove('trend-up', 'trend-down');
+      if (value === null || value === undefined) {
+        el.textContent = '—';
+        return;
+      }
+      el.textContent = `${value > 0 ? '+' : ''}${fmt(value)}${suffix}`;
+      if (value !== 0) el.classList.add((value > 0) !== invert ? 'trend-up' : 'trend-down');
+    }
+
+    const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+    // Theme-dependent chart styling (re-applied when Sun/Moon is toggled).
+    function styleChart(chart) {
+      const label = cssVar('--text-label');
+      const grid = cssVar('--border-card');
+      const tick = { color: label, font: { family: "Inter, -apple-system, 'Segoe UI', sans-serif", size: 11 } };
+      chart.options.scales.x.ticks = { ...tick, maxRotation: 0, autoSkipPadding: 18 };
+      chart.options.scales.x.grid = { color: grid, borderDash: [4, 4], drawTicks: false };
+      chart.options.scales.y.ticks = { ...tick, precision: 0, padding: 8 };
+      chart.options.scales.y.grid = { color: grid, borderDash: [4, 4], drawTicks: false };
+      Object.assign(chart.options.plugins.tooltip, {
+        backgroundColor: cssVar('--bg-card'),
+        borderColor: cssVar('--border-strong'),
+        titleColor: cssVar('--text-main'),
+        bodyColor: cssVar('--text-main')
+      });
+      chart.data.datasets.forEach((ds) => (ds.pointHoverBackgroundColor = cssVar('--bg-card')));
+      chart.update();
+    }
+
     function renderJoinChart(data) {
       const { totals } = data;
-      document.getElementById('qsJoins7').textContent = fmt(totals.last7);
-      document.getElementById('mJoins24').textContent = fmt(totals.last24h);
-      document.getElementById('mJoinsRange').textContent = fmt(totals.inRange);
-      document.getElementById('mJoinsRangeLabel').textContent =
-        chartState.days === 365 ? 'Joined in the last year' : `Joined in the last ${chartState.days} days`;
-      const avg = totals.inRange / chartState.days;
-      document.getElementById('mJoinsDelta').textContent = totals.inRange ? `≈ ${avg < 10 ? avg.toFixed(1) : Math.round(avg)} per day` : '';
-      document.getElementById('mJoinsDelta').className = 'metric-delta' + (totals.inRange ? ' up' : '');
+      const t = totals.trends || {};
+      setTrend('tJoinsWeek', t.joinsWeek);
+      setTrend('tJoinsDay', t.joinsDay);
+      setTrend('tLeavesWeek', totals.leaves7, { suffix: '', invert: true });
+      setTrend('tNetWeek', t.netWeek, { suffix: '' });
+      document.getElementById('fJoinedToday').textContent = fmt(totals.today);
+      document.getElementById('fLeftToday').textContent = fmt(totals.leavesToday);
+      document.getElementById('vJoinsRange').textContent = fmt(totals.inRange);
+      document.getElementById('lJoinsRange').textContent =
+        chartState.days === 365 ? 'New joins · 1 year' : `New joins · ${chartState.days} days`;
       document.getElementById('chartEmpty').classList.toggle('visible', totals.tracked === 0);
-      document.getElementById('chartSubtitle').textContent =
-        `${chartState.bucket === 'week' ? 'Weekly' : 'Daily'} new members (UTC) · ${fmt(totals.tracked)} joins tracked`;
+      document.getElementById('chartSubtitle').textContent = `${fmt(totals.tracked)} joins tracked · UTC`;
 
-      if (typeof Chart === 'undefined') return; // CDN blocked — metrics above still work
-      const ctx = document.getElementById('joinChart').getContext('2d');
-      const fill = ctx.createLinearGradient(0, 0, 0, 320);
-      fill.addColorStop(0, 'rgba(109, 125, 255, 0.35)');
-      fill.addColorStop(1, 'rgba(139, 92, 246, 0)');
-
+      if (typeof Chart === 'undefined') return; // CDN blocked — the stat cards above still work
       const labels = data.labels.map(formatLabel);
+      const line = (label, values, color) => ({
+        label, data: values, borderColor: color, backgroundColor: color, borderWidth: 3, tension: 0.42, fill: false,
+        pointRadius: 0, pointHoverRadius: 6, pointHoverBorderWidth: 3, pointHoverBorderColor: color
+      });
       const datasets = [
-        {
-          type: 'bar', label: 'New joins', data: data.joins, yAxisID: 'y',
-          backgroundColor: 'rgba(245, 197, 66, 0.85)', hoverBackgroundColor: '#f5c542',
-          borderRadius: 4, maxBarThickness: 18, order: 2
-        },
-        {
-          type: 'line', label: 'Total tracked', data: data.cumulative, yAxisID: 'y1',
-          borderColor: '#6d7dff', backgroundColor: fill, fill: true, tension: 0.35, borderWidth: 2.5,
-          pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#8b5cf6', order: 1
-        }
+        line('Joins', data.joins, cssVar('--c-blue')),
+        line('Leaves', data.leaves, cssVar('--c-red')),
+        line('Net change', data.net, cssVar('--c-yellow'))
       ];
 
       if (joinChart) {
@@ -801,28 +1019,29 @@
         joinChart.update();
         return;
       }
-      const grid = 'rgba(138, 141, 155, 0.12)';
-      const tick = { color: '#8a8d9b', font: { family: "Inter, -apple-system, 'Segoe UI', sans-serif", size: 11 } };
+      const ctx = document.getElementById('joinChart').getContext('2d');
       joinChart = new Chart(ctx, {
+        type: 'line',
         data: { labels, datasets },
         options: {
           responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
+          layout: { padding: { top: 6 } },
           plugins: {
             legend: { display: false },
             tooltip: {
-              backgroundColor: '#1b1e2b', borderColor: '#353950', borderWidth: 1, padding: 10,
-              titleColor: '#eef0f6', bodyColor: '#c9cbd6', displayColors: true, boxPadding: 4,
+              borderWidth: 1, padding: 12, cornerRadius: 8, boxPadding: 5, usePointStyle: true,
+              titleFont: { weight: '600' },
               callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` }
             }
           },
           scales: {
-            x: { grid: { display: false }, border: { display: false }, ticks: { ...tick, maxRotation: 0, autoSkipPadding: 16 } },
-            y: { position: 'left', beginAtZero: true, grid: { color: grid }, border: { display: false }, ticks: { ...tick, precision: 0 } },
-            y1: { position: 'right', beginAtZero: false, grid: { display: false }, border: { display: false }, ticks: { ...tick, precision: 0 } }
+            x: { border: { display: false } },
+            y: { beginAtZero: true, border: { display: false } }
           }
         }
       });
+      styleChart(joinChart);
     }
 
     function bindSegmented(id, key, attr) {
@@ -969,10 +1188,7 @@
     loadJoinChart();
 
     // Deep link: /dashboard/:id#welcome opens that tab (used after saving from the Embed Builder).
-    if (location.hash) {
-      const btn = document.querySelector(`.tab-btn[data-tab="${location.hash.slice(1)}"]`);
-      if (btn) btn.click();
-    }
+    if (location.hash) showTab(location.hash.slice(1));
 
     async function saveLevels() {
       const enabled = document.getElementById('lvlEnabled').checked;

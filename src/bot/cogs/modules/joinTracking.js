@@ -1,4 +1,5 @@
 const MemberJoin = require('../../../database/models/MemberJoin');
+const MemberLeave = require('../../../database/models/MemberLeave');
 
 const DAY_MS = 86400000;
 const SYNC_COOLDOWN_MS = 5 * 60 * 1000;
@@ -15,6 +16,11 @@ async function recordJoin(member) {
   ).catch((err) => {
     if (err.code !== 11000) throw err;
   });
+}
+
+async function recordLeave(member) {
+  if (member.user?.bot) return;
+  await MemberLeave.create({ guildId: member.guild.id, userId: member.id, leftAt: new Date() });
 }
 
 /**
@@ -52,49 +58,89 @@ async function syncJoins(guild) {
 
 const dayKey = (date) => date.toISOString().slice(0, 10);
 
+async function dailyCounts(Model, field, guildId, since) {
+  const rows = await Model.aggregate([
+    { $match: { guildId, [field]: { $gte: since } } },
+    { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: `$${field}` } }, count: { $sum: 1 } } }
+  ]);
+  return new Map(rows.map((r) => [r._id, r.count]));
+}
+
+const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+
+// Percent change from `previous` to `current`; null when there's no baseline to compare with.
+const pctChange = (current, previous) => (previous > 0 ? Math.round(((current - previous) / previous) * 100) : null);
+
 /**
- * Join counts per day or week (UTC) for the last `days` days, with empty buckets filled in, plus a
- * cumulative series that starts from every tracked join before the range.
+ * Joins, leaves and net change per day or week (UTC) for the last `days` days, with empty buckets
+ * filled in, a cumulative join series, and headline totals with week-over-week / day-over-day trends.
  */
 async function getJoinStats(guildId, { days = 30, bucket = 'day' } = {}) {
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const since = new Date(today.getTime() - (days - 1) * DAY_MS);
+  // Always look back at least 14 days so the week-over-week trend has a full previous week.
+  const lookback = Math.max(days, 14);
+  const since = new Date(today.getTime() - (lookback - 1) * DAY_MS);
 
-  const [daily, before, total, last24h] = await Promise.all([
-    MemberJoin.aggregate([
-      { $match: { guildId, joinedAt: { $gte: since } } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$joinedAt' } }, count: { $sum: 1 } } }
-    ]),
-    MemberJoin.countDocuments({ guildId, joinedAt: { $lt: since } }),
-    MemberJoin.countDocuments({ guildId }),
-    MemberJoin.countDocuments({ guildId, joinedAt: { $gte: new Date(Date.now() - DAY_MS) } })
+  const [joinsByDay, leavesByDay, before, total] = await Promise.all([
+    dailyCounts(MemberJoin, 'joinedAt', guildId, since),
+    dailyCounts(MemberLeave, 'leftAt', guildId, since),
+    MemberJoin.countDocuments({ guildId, joinedAt: { $lt: new Date(today.getTime() - (days - 1) * DAY_MS) } }),
+    MemberJoin.countDocuments({ guildId })
   ]);
-  const byDay = new Map(daily.map((d) => [d._id, d.count]));
 
-  const points = [];
-  for (let i = 0; i < days; i++) {
-    const date = new Date(since.getTime() + i * DAY_MS);
-    points.push({ date: dayKey(date), count: byDay.get(dayKey(date)) || 0 });
+  const allDays = [];
+  for (let i = 0; i < lookback; i++) {
+    const key = dayKey(new Date(since.getTime() + i * DAY_MS));
+    allDays.push({ date: key, joins: joinsByDay.get(key) || 0, leaves: leavesByDay.get(key) || 0 });
   }
+  const points = allDays.slice(-days);
 
   let series = points;
   if (bucket === 'week') {
     series = [];
     for (let i = 0; i < points.length; i += 7) {
       const chunk = points.slice(i, i + 7);
-      series.push({ date: chunk[0].date, count: chunk.reduce((sum, p) => sum + p.count, 0) });
+      series.push({ date: chunk[0].date, joins: sum(chunk.map((p) => p.joins)), leaves: sum(chunk.map((p) => p.leaves)) });
     }
   }
 
   let running = before;
-  const labels = series.map((p) => p.date);
-  const joins = series.map((p) => p.count);
-  const cumulative = series.map((p) => (running += p.count));
-  const inRange = joins.reduce((a, b) => a + b, 0);
-  const last7 = points.slice(-7).reduce((a, p) => a + p.count, 0);
+  const joins = series.map((p) => p.joins);
+  const leaves = series.map((p) => p.leaves);
 
-  return { labels, joins, cumulative, totals: { tracked: total, inRange, last7, last24h } };
+  const last7Days = allDays.slice(-7);
+  const prev7Days = allDays.slice(-14, -7);
+  const joinsToday = allDays.at(-1).joins;
+  const joinsYesterday = allDays.at(-2).joins;
+  const joins7 = sum(last7Days.map((p) => p.joins));
+  const joinsPrev7 = sum(prev7Days.map((p) => p.joins));
+  const leaves7 = sum(last7Days.map((p) => p.leaves));
+  const leavesPrev7 = sum(prev7Days.map((p) => p.leaves));
+
+  return {
+    labels: series.map((p) => p.date),
+    joins,
+    leaves,
+    net: series.map((p) => p.joins - p.leaves),
+    cumulative: joins.map((j) => (running += j)),
+    totals: {
+      tracked: total,
+      inRange: sum(joins),
+      leavesInRange: sum(leaves),
+      today: joinsToday,
+      last7: joins7,
+      last24h: joinsToday, // kept for older clients; "today" (UTC) is what's shown now
+      leaves7,
+      leavesToday: allDays.at(-1).leaves,
+      trends: {
+        joinsWeek: pctChange(joins7, joinsPrev7),
+        joinsDay: pctChange(joinsToday, joinsYesterday),
+        leavesWeek: pctChange(leaves7, leavesPrev7),
+        netWeek: joins7 - leaves7
+      }
+    }
+  };
 }
 
-module.exports = { recordJoin, syncJoins, getJoinStats };
+module.exports = { recordJoin, recordLeave, syncJoins, getJoinStats };
