@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const Giveaway = require('../../database/models/Giveaway');
 const { isAuthorized } = require('../utils/permissions');
 const {
@@ -7,7 +7,8 @@ const {
   resolveColor,
   buildGiveawayEmbed,
   launchGiveaway,
-  finishGiveawayById
+  finishGiveawayById,
+  replyOrEdit
 } = require('../cogs/modules/giveaways');
 
 const data = new SlashCommandBuilder()
@@ -63,6 +64,13 @@ const data = new SlashCommandBuilder()
   .addSubcommand((sub) => sub.setName('ping').setDescription('Check bot websocket and API latency'))
   .addSubcommand((sub) => sub.setName('help').setDescription('Show help and available commands'));
 
+// Every one of these subcommands does at least one Discord API call plus a database round trip
+// before it can reply — deferring immediately guarantees Discord's 3-second ack window is never
+// missed, regardless of Render/Atlas latency. `create` is excluded because showModal() must be
+// the interaction's first response and can't follow a deferReply. `ping`/`help` are fast/local
+// enough that deferring would only add a needless "thinking..." flash.
+const DEFER_SUBCOMMANDS = ['start', 'end', 'reroll', 'delete', 'edit', 'list'];
+
 async function execute(interaction, client) {
   if (!isAuthorized(interaction)) {
     return interaction.reply({
@@ -73,6 +81,10 @@ async function execute(interaction, client) {
 
   const sub = interaction.options.getSubcommand();
 
+  if (DEFER_SUBCOMMANDS.includes(sub)) {
+    await interaction.deferReply({ ephemeral: true });
+  }
+
   if (sub === 'ping') {
     const sent = await interaction.reply({ content: 'Pinging...', fetchReply: true, ephemeral: true });
     const roundtrip = sent.createdTimestamp - interaction.createdTimestamp;
@@ -82,7 +94,6 @@ async function execute(interaction, client) {
   }
 
   if (sub === 'help') {
-    const { EmbedBuilder } = require('discord.js');
     const helpEmbed = new EmbedBuilder()
       .setTitle('LoofaryBot Commands & Usage')
       .setColor('#5865F2')
@@ -106,7 +117,7 @@ async function execute(interaction, client) {
     const channel = interaction.options.getChannel('channel');
     const durationMs = parseDuration(interaction.options.getString('duration'));
     if (!durationMs) {
-      return interaction.reply({ content: '❌ Invalid duration format! Use e.g. `10m`, `1h`, `2d`.', ephemeral: true });
+      return replyOrEdit(interaction, { content: '❌ Invalid duration format! Use e.g. `10m`, `1h`, `2d`.' });
     }
     const winnerCount = interaction.options.getInteger('winners');
     const prize = interaction.options.getString('prize');
@@ -170,34 +181,34 @@ async function execute(interaction, client) {
     const msgId = interaction.options.getString('message_id').trim();
     const g = await Giveaway.findOne({ messageId: msgId });
     if (!g || g.ended) {
-      return interaction.reply({ content: '❌ Giveaway not found or already ended.', ephemeral: true });
+      return replyOrEdit(interaction, { content: '❌ Giveaway not found or already ended.' });
     }
     await finishGiveawayById(client, msgId);
-    return interaction.reply({ content: `✅ Giveaway \`${msgId}\` ended early.`, ephemeral: true });
+    return replyOrEdit(interaction, { content: `✅ Giveaway \`${msgId}\` ended early.` });
   }
 
   if (sub === 'reroll') {
     const msgId = interaction.options.getString('message_id').trim();
     const g = await Giveaway.findOne({ messageId: msgId });
     if (!g || !g.ended) {
-      return interaction.reply({ content: '❌ Giveaway not found or has not ended yet.', ephemeral: true });
+      return replyOrEdit(interaction, { content: '❌ Giveaway not found or has not ended yet.' });
     }
     if (g.entries.length === 0) {
-      return interaction.reply({ content: '❌ No entries to reroll from.', ephemeral: true });
+      return replyOrEdit(interaction, { content: '❌ No entries to reroll from.' });
     }
     const newWinner = g.entries[Math.floor(Math.random() * g.entries.length)];
     const channel = await client.channels.fetch(g.channelId).catch(() => null);
     if (channel) {
       channel.send(`🎉 New winner for **${g.prize}**: <@${newWinner}>!`).catch(() => null);
     }
-    return interaction.reply({ content: `✅ Rerolled. New winner: <@${newWinner}>`, ephemeral: true });
+    return replyOrEdit(interaction, { content: `✅ Rerolled. New winner: <@${newWinner}>` });
   }
 
   if (sub === 'delete') {
     const msgId = interaction.options.getString('message_id').trim();
     const g = await Giveaway.findOne({ messageId: msgId });
     if (!g) {
-      return interaction.reply({ content: '❌ Giveaway not found.', ephemeral: true });
+      return replyOrEdit(interaction, { content: '❌ Giveaway not found.' });
     }
     const channel = await client.channels.fetch(g.channelId).catch(() => null);
     if (channel) {
@@ -205,18 +216,18 @@ async function execute(interaction, client) {
       if (msg) await msg.delete().catch(() => null);
     }
     await Giveaway.deleteOne({ messageId: msgId });
-    return interaction.reply({ content: `✅ Giveaway \`${msgId}\` deleted.`, ephemeral: true });
+    return replyOrEdit(interaction, { content: `✅ Giveaway \`${msgId}\` deleted.` });
   }
 
   if (sub === 'list') {
     const active = await Giveaway.find({ ended: false, guildId: interaction.guildId });
     if (active.length === 0) {
-      return interaction.reply({ content: 'No active giveaways currently running in this server.', ephemeral: true });
+      return replyOrEdit(interaction, { content: 'No active giveaways currently running in this server.' });
     }
     const listStr = active
       .map((g) => `• **${g.prize}** | ID: \`${g.messageId}\` | Channel: <#${g.channelId}> | Ends: ${formatTime(g.endTimestamp)}`)
       .join('\n');
-    return interaction.reply({ content: `**Active Giveaways (${active.length}):**\n${listStr}`, ephemeral: true });
+    return replyOrEdit(interaction, { content: `**Active Giveaways (${active.length}):**\n${listStr}` });
   }
 
   if (sub === 'edit') {
@@ -226,7 +237,7 @@ async function execute(interaction, client) {
 
     const g = await Giveaway.findOne({ messageId: msgId });
     if (!g || g.ended) {
-      return interaction.reply({ content: '❌ Giveaway not found or already ended.', ephemeral: true });
+      return replyOrEdit(interaction, { content: '❌ Giveaway not found or already ended.' });
     }
     if (newPrize) g.prize = newPrize;
     if (newWinners) g.winnerCount = newWinners;
@@ -237,12 +248,16 @@ async function execute(interaction, client) {
       const msg = await channel.messages.fetch(g.messageId).catch(() => null);
       if (msg) await msg.edit({ embeds: [buildGiveawayEmbed(g)] }).catch(() => null);
     }
-    return interaction.reply({ content: `✅ Giveaway \`${msgId}\` updated successfully.`, ephemeral: true });
+    return replyOrEdit(interaction, { content: `✅ Giveaway \`${msgId}\` updated successfully.` });
   }
 }
 
 async function handleModalSubmit(interaction, client) {
   if (!interaction.customId.startsWith('gcreate_modal_')) return;
+
+  // Ack immediately — everything below this line does a Discord API call (channel fetch/send)
+  // and a database write, which combined can exceed Discord's 3-second first-response window.
+  await interaction.deferReply({ ephemeral: true });
 
   const parts = interaction.customId.split('_');
   const channelId = parts[2];
@@ -250,7 +265,7 @@ async function handleModalSubmit(interaction, client) {
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) {
-    return interaction.reply({ content: '❌ Target channel could not be found.', ephemeral: true });
+    return replyOrEdit(interaction, { content: '❌ Target channel could not be found.' });
   }
 
   const durationStr = interaction.fields.getTextInputValue('m_duration');
@@ -261,11 +276,11 @@ async function handleModalSubmit(interaction, client) {
 
   const durationMs = parseDuration(durationStr);
   if (!durationMs) {
-    return interaction.reply({ content: '❌ Invalid duration format inside modal! Use e.g. `10m`, `1h`, `2d`.', ephemeral: true });
+    return replyOrEdit(interaction, { content: '❌ Invalid duration format inside modal! Use e.g. `10m`, `1h`, `2d`.' });
   }
   const winnerCount = parseInt(winnersStr, 10);
   if (isNaN(winnerCount) || winnerCount < 1) {
-    return interaction.reply({ content: '❌ Winner count must be a valid positive integer.', ephemeral: true });
+    return replyOrEdit(interaction, { content: '❌ Winner count must be a valid positive integer.' });
   }
 
   const colorHex = resolveColor(rawColor);

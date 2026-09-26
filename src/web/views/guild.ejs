@@ -27,6 +27,7 @@
       <button class="tab-btn active" data-tab="overview">Overview</button>
       <button class="tab-btn" data-tab="honeypot">🍯 Honeypot</button>
       <button class="tab-btn" data-tab="leveling">📈 Leveling</button>
+      <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
       <button class="tab-btn" data-tab="commands">📜 Commands</button>
     </div>
 
@@ -150,6 +151,19 @@
         </div>
       <% }) %>
     </div>
+
+    <!-- LEADERBOARD -->
+    <div class="tab-panel hidden" id="tab-leaderboard">
+      <div class="card">
+        <h2>🏆 XP Leaderboard</h2>
+        <div id="leaderboardRows" class="muted">Loading…</div>
+        <div class="pagination">
+          <button class="btn secondary" id="lbPrev" onclick="changeLeaderboardPage(-1)">← Prev</button>
+          <span class="muted" id="lbPageLabel">Page 1</span>
+          <button class="btn secondary" id="lbNext" onclick="changeLeaderboardPage(1)">Next →</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -165,8 +179,61 @@
         document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
         btn.classList.add('active');
         document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+        if (btn.dataset.tab === 'leaderboard') loadLeaderboard();
       });
     });
+
+    // --- Leaderboard ---
+    let lbCurrentPage = 1;
+    let lbTotalPages = 1;
+    let lbLoaded = false;
+
+    async function loadLeaderboard() {
+      if (lbLoaded) return;
+      lbLoaded = true;
+      await fetchLeaderboardPage(1);
+    }
+
+    async function fetchLeaderboardPage(page) {
+      const container = document.getElementById('leaderboardRows');
+      container.innerHTML = '<p class="muted">Loading…</p>';
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/leaderboard?page=${page}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load.');
+
+        lbCurrentPage = data.page;
+        lbTotalPages = data.totalPages;
+        document.getElementById('lbPageLabel').textContent = `Page ${data.page} of ${data.totalPages} · ${data.total} ranked member(s)`;
+        document.getElementById('lbPrev').disabled = data.page <= 1;
+        document.getElementById('lbNext').disabled = data.page >= data.totalPages;
+
+        if (data.entries.length === 0) {
+          container.innerHTML = '<p class="muted">No XP data yet for this server.</p>';
+          return;
+        }
+
+        container.innerHTML = data.entries
+          .map(
+            (e) => `
+            <div class="leaderboard-row">
+              <div class="leaderboard-rank ${e.rank <= 3 ? 'top3' : ''}">#${e.rank}</div>
+              ${e.avatarUrl ? `<img class="leaderboard-avatar" src="${e.avatarUrl}">` : '<div class="leaderboard-avatar"></div>'}
+              <div class="leaderboard-name">${e.name}</div>
+              <div class="leaderboard-stats">Level ${e.level} · ${e.xp} XP</div>
+            </div>`
+          )
+          .join('');
+      } catch (err) {
+        container.innerHTML = `<p class="muted">❌ ${err.message}</p>`;
+      }
+    }
+
+    function changeLeaderboardPage(delta) {
+      const next = lbCurrentPage + delta;
+      if (next < 1 || next > lbTotalPages) return;
+      fetchLeaderboardPage(next);
+    }
 
     function showToast(msg) {
       const t = document.getElementById('toast');

@@ -108,8 +108,20 @@ async function handleLevelUp(message, config, oldLevel, newLevel) {
   }
 }
 
-async function getLeaderboard(guildId, limit = 10) {
-  return UserLevel.find({ guildId }).sort({ xp: -1 }).limit(limit);
+async function getLeaderboard(guildId, page = 1, pageSize = 10) {
+  const safePage = Math.max(1, page);
+  const skip = (safePage - 1) * pageSize;
+  const [entries, total] = await Promise.all([
+    UserLevel.find({ guildId }).sort({ xp: -1 }).skip(skip).limit(pageSize),
+    UserLevel.countDocuments({ guildId })
+  ]);
+  return {
+    entries,
+    total,
+    page: safePage,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize))
+  };
 }
 
 async function getRank(guildId, userId) {

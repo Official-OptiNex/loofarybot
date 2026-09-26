@@ -11,7 +11,13 @@ router.get('/:guildId/embed', requireAuth, requireGuildAccess, (req, res) => {
     .map((c) => ({ id: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  res.render('embedBuilder', { guild: req.guild, channels });
+  const client = req.app.locals.client;
+  const bot = {
+    name: me?.displayName || client.user.username,
+    avatarUrl: me?.displayAvatarURL({ size: 64 }) || client.user.displayAvatarURL({ size: 64 })
+  };
+
+  res.render('embedBuilder', { guild: req.guild, channels, bot });
 });
 
 router.post('/:guildId/embed/send', requireAuth, requireGuildAccess, async (req, res) => {

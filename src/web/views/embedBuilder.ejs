@@ -61,12 +61,22 @@
 
     <div>
       <h2>Live Preview</h2>
-      <div class="discord-embed-preview" id="preview">
-        <div class="title" id="pTitle"></div>
-        <div class="desc" id="pDesc"></div>
-        <div id="pFields"></div>
-        <img id="pImage" style="display:none;">
-        <div class="muted" id="pFooter" style="margin-top:0.5rem; font-size:0.8rem;"></div>
+      <div class="discord-message-preview">
+        <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="<%= bot.name %>">
+        <div class="discord-message-body">
+          <div class="discord-message-header">
+            <span class="discord-bot-name"><%= bot.name %></span>
+            <span class="discord-bot-badge">BOT</span>
+            <span class="discord-message-time">Today at 12:00 PM</span>
+          </div>
+          <div class="discord-embed-preview" id="preview">
+            <div class="title" id="pTitle"></div>
+            <div class="desc" id="pDesc"></div>
+            <div id="pFields"></div>
+            <img id="pImage" style="display:none;">
+            <div class="muted" id="pFooter" style="margin-top:0.5rem; font-size:0.8rem;"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

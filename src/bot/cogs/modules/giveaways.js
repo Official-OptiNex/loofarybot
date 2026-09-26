@@ -63,6 +63,21 @@ function buildEntryRow(emoji, disabled = false) {
   );
 }
 
+/**
+ * Discord requires an interaction's FIRST response within 3 seconds. Any command that does a
+ * Discord API call (channel.send) followed by a database write can blow past that on a free-tier
+ * host, so callers defer immediately and every subsequent reply must go through this helper —
+ * it picks editReply vs reply based on whether the interaction was already deferred/replied,
+ * and (critically) is always awaited by its caller so a failure is still caught locally instead
+ * of leaking out to the generic top-level error handler.
+ */
+async function replyOrEdit(interaction, options) {
+  if (interaction.deferred || interaction.replied) {
+    return interaction.editReply(options);
+  }
+  return interaction.reply(options);
+}
+
 async function launchGiveaway(client, { interaction, channel, durationMs, winnerCount, prize, pingRole, colorHex, emoji, customDesc }) {
   const endTimestamp = Date.now() + durationMs;
 
@@ -93,15 +108,13 @@ async function launchGiveaway(client, { interaction, channel, durationMs, winner
 
     scheduleGiveawayEnd(client, msg.id, durationMs);
 
-    return interaction.reply({
-      content: `✅ Giveaway started in ${channel}! [Jump to Message](${msg.url})`,
-      ephemeral: true
+    return await replyOrEdit(interaction, {
+      content: `✅ Giveaway started in ${channel}! [Jump to Message](${msg.url})`
     });
   } catch (err) {
     console.error('Error posting giveaway message:', err);
-    return interaction.reply({
-      content: '❌ Failed to send giveaway message. Ensure the bot has permissions in the target channel.',
-      ephemeral: true
+    return await replyOrEdit(interaction, {
+      content: '❌ Failed to send giveaway message. Ensure the bot has permissions in the target channel.'
     });
   }
 }
@@ -218,6 +231,7 @@ module.exports = {
   resolveColor,
   buildGiveawayEmbed,
   buildEntryRow,
+  replyOrEdit,
   launchGiveaway,
   finishGiveaway,
   finishGiveawayById,

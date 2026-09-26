@@ -10,7 +10,12 @@ const data = new SlashCommandBuilder()
       .setDescription("Check your (or someone else's) level and XP")
       .addUserOption((opt) => opt.setName('user').setDescription('User to check').setRequired(false))
   )
-  .addSubcommand((sub) => sub.setName('leaderboard').setDescription('Show the server XP leaderboard'))
+  .addSubcommand((sub) =>
+    sub
+      .setName('leaderboard')
+      .setDescription('Show the server XP leaderboard')
+      .addIntegerOption((opt) => opt.setName('page').setDescription('Page number (10 per page)').setRequired(false))
+  )
   .addSubcommand((sub) =>
     sub
       .setName('setrole')
@@ -85,12 +90,21 @@ async function execute(interaction) {
   }
 
   if (sub === 'leaderboard') {
-    const top = await getLeaderboard(interaction.guildId, 10);
-    if (top.length === 0) {
+    const page = interaction.options.getInteger('page') || 1;
+    const { entries, page: safePage, totalPages, total } = await getLeaderboard(interaction.guildId, page, 10);
+    if (total === 0) {
       return interaction.reply({ content: 'No XP data yet for this server.', ephemeral: true });
     }
-    const lines = top.map((r, i) => `**${i + 1}.** <@${r.userId}> — Level ${r.level} (${r.xp} XP)`);
-    const embed = new EmbedBuilder().setTitle('🏆 XP Leaderboard').setColor('#F1C40F').setDescription(lines.join('\n'));
+    if (safePage > totalPages) {
+      return interaction.reply({ content: `There are only ${totalPages} page(s) of leaderboard data.`, ephemeral: true });
+    }
+    const startRank = (safePage - 1) * 10;
+    const lines = entries.map((r, i) => `**${startRank + i + 1}.** <@${r.userId}> — Level ${r.level} (${r.xp} XP)`);
+    const embed = new EmbedBuilder()
+      .setTitle('🏆 XP Leaderboard')
+      .setColor('#F1C40F')
+      .setDescription(lines.join('\n'))
+      .setFooter({ text: `Page ${safePage} of ${totalPages} • ${total} ranked member(s)` });
     return interaction.reply({ embeds: [embed] });
   }
 

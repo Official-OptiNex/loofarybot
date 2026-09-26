@@ -2,7 +2,7 @@ const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 const { requireAuth, requireGuildAccess } = require('../utils/authMiddleware');
 const { setupHoneypotChannel } = require('../../bot/cogs/modules/honeypot');
-const { getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
+const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
 
 const router = express.Router();
 
@@ -47,6 +47,36 @@ router.get('/guilds/:guildId/mentionable', requireAuth, requireGuildAccess, asyn
   } catch (err) {
     console.error('Failed to load mentionable data:', err);
     res.status(500).json({ error: 'Failed to load server data.' });
+  }
+});
+
+// GET a paginated, member-info-enriched XP leaderboard — powers the dashboard's Leaderboard tab.
+router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const { entries, total, totalPages } = await getLeaderboard(req.guild.id, page, 10);
+
+    // Members may not all be cached — fetch (bounded) so names/avatars resolve even for
+    // users who haven't been active recently.
+    await req.guild.members.fetch({ limit: 1000 }).catch(() => null);
+
+    const startRank = (page - 1) * 10;
+    const enriched = entries.map((r, i) => {
+      const member = req.guild.members.cache.get(r.userId);
+      return {
+        rank: startRank + i + 1,
+        userId: r.userId,
+        name: member ? member.displayName : `Unknown User (${r.userId})`,
+        avatarUrl: member ? member.displayAvatarURL({ size: 64 }) : null,
+        level: r.level,
+        xp: r.xp
+      };
+    });
+
+    res.json({ entries: enriched, page, totalPages, total });
+  } catch (err) {
+    console.error('Failed to load leaderboard:', err);
+    res.status(500).json({ error: 'Failed to load leaderboard.' });
   }
 });
 
