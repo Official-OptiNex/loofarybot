@@ -15,7 +15,7 @@ const { XP_MIN, XP_MAX, XP_COOLDOWN_MS, LEVEL_XP_BASE } = require('../../config'
 const router = express.Router();
 
 router.get('/', requireAuth, async (req, res) => {
-  const client = req.app.locals.client;
+  const client = req.app.locals.discordClient;
 
   // Servers the bot is in where the user is an admin (Manage Server) or a dashboard moderator.
   const candidates = (req.session.guilds || []).filter((g) => client.guilds.cache.has(g.id));
@@ -108,7 +108,7 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
       : 'https://cdn.discordapp.com/embed/avatars/0.png'
   };
   const me = guild.members.me;
-  const client = req.app.locals.client;
+  const client = req.app.locals.discordClient;
   const bot = {
     name: me?.displayName || client.user?.username || 'LoofaryBot',
     avatarUrl: me?.displayAvatarURL({ size: 64 }) || client.user?.displayAvatarURL({ size: 64 }) || ''
