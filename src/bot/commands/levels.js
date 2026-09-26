@@ -8,6 +8,7 @@ const {
   adjustXp
 } = require('../cogs/modules/leveling');
 const UserLevel = require('../../database/models/UserLevel');
+const levelColors = require('../cogs/modules/levelColors');
 const { resolveColor } = require('../cogs/modules/giveaways');
 
 const data = new SlashCommandBuilder()
@@ -93,6 +94,52 @@ const data = new SlashCommandBuilder()
       )
       .addSubcommand((sub) => sub.setName('list').setDescription('List every XP multiplier'))
   )
+  .addSubcommandGroup((group) =>
+    group
+      .setName('colorroles')
+      .setDescription('Cosmetic name-color roles for every few levels (Admin only)')
+      .addSubcommand((sub) =>
+        sub
+          .setName('setup')
+          .setDescription('Turn level colors on/off and choose tiers and placement')
+          .addBooleanOption((opt) => opt.setName('enabled').setDescription('Give members a color role for their level tier'))
+          .addIntegerOption((opt) => opt.setName('every').setDescription('A new color every N levels (default 5)').setMinValue(1).setMaxValue(1000))
+          .addIntegerOption((opt) => opt.setName('max_level').setDescription('Highest tier level (default 100)').setMinValue(1).setMaxValue(10000))
+          .addStringOption((opt) =>
+            opt
+              .setName('placement')
+              .setDescription('Where the color roles sit in the role list')
+              .addChoices(
+                { name: 'Just above @everyone (other colored roles win)', value: 'low' },
+                { name: "As high as possible (level color wins)", value: 'high' },
+                { name: 'Directly above a role you pick', value: 'above' }
+              )
+          )
+          .addRoleOption((opt) => opt.setName('above_role').setDescription("Role to sit above (for placement 'above')"))
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName('set')
+          .setDescription('Use one of your own roles for a tier instead of an auto-created one')
+          .addIntegerOption((opt) => opt.setName('level').setDescription('Tier level (e.g. 10)').setMinValue(1).setRequired(true))
+          .addRoleOption((opt) => opt.setName('role').setDescription('Your role').setRequired(true))
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName('color')
+          .setDescription("Change an auto tier role's color")
+          .addIntegerOption((opt) => opt.setName('level').setDescription('Tier level').setMinValue(1).setRequired(true))
+          .addStringOption((opt) => opt.setName('color').setDescription('Hex like #FF5733 or a name like gold').setRequired(true))
+      )
+      .addSubcommand((sub) =>
+        sub
+          .setName('reset')
+          .setDescription('Put a tier back to its auto-created role and palette color')
+          .addIntegerOption((opt) => opt.setName('level').setDescription('Tier level').setMinValue(1).setRequired(true))
+      )
+      .addSubcommand((sub) => sub.setName('list').setDescription('Show every tier and its role'))
+      .addSubcommand((sub) => sub.setName('sync').setDescription("Give every member the color role for their current level"))
+  )
   .addSubcommand((sub) =>
     sub
       .setName('givexp')
@@ -144,7 +191,13 @@ const ADMIN_ONLY_SUBCOMMANDS = [
   'cardaccess',
   'add',
   'remove',
-  'list'
+  'list',
+  // colorroles group
+  'setup',
+  'set',
+  'color',
+  'reset',
+  'sync'
 ];
 
 function progressBar(current, total, size = 12) {
@@ -336,6 +389,8 @@ async function execute(interaction) {
     }
   }
 
+  if (group === 'colorroles') return handleColorRoles(interaction, sub);
+
   if (sub === 'givexp' || sub === 'takexp') {
     const target = interaction.options.getUser('user');
     const amount = interaction.options.getInteger('amount');
@@ -356,6 +411,7 @@ async function execute(interaction) {
   if (sub === 'resetxp') {
     const target = interaction.options.getUser('user');
     await UserLevel.updateOne({ guildId: interaction.guildId, userId: target.id }, { $set: { xp: 0, level: 0 } });
+    await levelColors.onLevelChange(interaction.guildId, target.id, 0).catch(() => null);
     return interaction.reply({ content: `✅ Reset ${target}'s XP and level to 0. (Earned role rewards were kept.)`, ephemeral: true });
   }
 
@@ -462,6 +518,96 @@ async function execute(interaction) {
         }
       );
     return interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+}
+
+async function handleColorRoles(interaction, sub) {
+  const guild = interaction.guild;
+  const level = interaction.options.getInteger('level');
+  const config = await getOrCreateConfig(interaction.guildId);
+  const settings = levelColors.settingsOf(config);
+  const validLevels = levelColors.tierLevels(settings);
+  const badLevel = () =>
+    interaction.reply({
+      content: `❌ ${level} isn't a tier level. Tiers are every ${settings.interval} levels up to ${settings.maxLevel} (e.g. ${validLevels.slice(0, 3).join(', ')}…).`,
+      ephemeral: true
+    });
+
+  if (sub === 'setup') {
+    const placement = interaction.options.getString('placement');
+    const aboveRole = interaction.options.getRole('above_role');
+    if (placement === 'above' && !aboveRole && !settings.anchorRoleId) {
+      return interaction.reply({ content: "❌ Pick `above_role` when using placement 'above'.", ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const updated = await levelColors.saveSettings(guild, {
+      enabled: interaction.options.getBoolean('enabled') ?? undefined,
+      interval: interaction.options.getInteger('every') ?? undefined,
+      maxLevel: interaction.options.getInteger('max_level') ?? undefined,
+      placement: placement ?? undefined,
+      anchorRoleId: aboveRole ? aboveRole.id : undefined
+    });
+    const s = levelColors.settingsOf(updated);
+    const where = { low: 'just above @everyone', high: 'as high as LoofaryBot can place them', above: `above <@&${s.anchorRoleId}>` }[s.placement];
+    return interaction.editReply(
+      `✅ Level colors are **${s.enabled ? 'on' : 'off'}** · a new color every **${s.interval}** levels up to **${s.maxLevel}** · placed ${where}.` +
+        (s.enabled ? '\nRun `/levels colorroles sync` to give existing members their colors now.' : '')
+    );
+  }
+
+  if (sub === 'list') {
+    const tiers = levelColors.describeTiers(config, guild);
+    const lines = tiers.slice(0, 25).map(
+      (t) => `**Lv ${t.level}** — ${t.roleId ? `<@&${t.roleId}>` : `*Level ${t.level} (created when first reached)*`} · \`${t.color || '—'}\`${t.custom ? ' · custom' : ''}`
+    );
+    return interaction.reply({
+      content:
+        `**Level colors: ${settings.enabled ? 'on' : 'off'}**\n${lines.join('\n')}` + (tiers.length > 25 ? `\n…and ${tiers.length - 25} more on the dashboard.` : ''),
+      ephemeral: true,
+      allowedMentions: { parse: [] }
+    });
+  }
+
+  if (sub === 'sync') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const r = await levelColors.syncAll(guild);
+      return interaction.editReply(
+        `✅ Synced **${r.scanned}** members · **${r.updated}** updated · ${r.tiersInUse} tier(s) in use.` + (r.failed ? ` ⚠️ ${r.failed} failed (role hierarchy?).` : '')
+      );
+    } catch (err) {
+      return interaction.editReply(`❌ ${err.message}`);
+    }
+  }
+
+  if (!validLevels.includes(level)) return badLevel();
+
+  if (sub === 'set') {
+    const role = interaction.options.getRole('role');
+    if (!levelColors.botCanManage(guild, role)) {
+      return interaction.reply({ content: `❌ LoofaryBot can't assign ${role} — its own role must be above it.`, ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    await levelColors.saveSettings(guild, { overrides: [{ level, roleId: role.id }] });
+    return interaction.editReply(`✅ Level ${level} now uses ${role}. Members at that tier get it instead of an auto role (and lose it when they move tiers).`);
+  }
+
+  if (sub === 'color' || sub === 'reset') {
+    let color = null;
+    if (sub === 'color') {
+      const raw = interaction.options.getString('color');
+      color = resolveColor(raw);
+      if (color === '#5865F2' && !/blurple|5865f2/i.test(raw)) {
+        return interaction.reply({ content: '❌ Unknown color. Use a hex code like `#FF5733` or a name like `gold`.', ephemeral: true });
+      }
+    }
+    await interaction.deferReply({ ephemeral: true });
+    await levelColors.saveSettings(guild, { overrides: [{ level, roleId: null, color }] });
+    return interaction.editReply(
+      sub === 'color'
+        ? `✅ Level ${level} color set to \`${color}\`.`
+        : `✅ Level ${level} is back to its auto role and palette color.`
+    );
   }
 }
 

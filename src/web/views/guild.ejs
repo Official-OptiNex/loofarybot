@@ -536,6 +536,7 @@
         <button data-sub="lv-rewards">🏅 Role rewards</button>
         <button data-sub="lv-mult">✖️ Multipliers</button>
         <button data-sub="lv-msg">📣 Level-up messages</button>
+        <button data-sub="lv-colors">🎨 Level colors</button>
         <button data-sub="lv-cards">🪪 Rank cards</button>
       </div>
 
@@ -606,6 +607,55 @@
         </div>
       </div>
 
+      <div class="subpage hidden" data-page="lv-colors">
+        <div class="two-col">
+          <div class="card settings-card">
+            <div class="setting-row">
+              <div><div class="setting-title">Level name colors</div><div class="setting-help">Members get a cosmetic color role for the highest tier they've reached, so their name color changes as they level up (and back down if they lose levels).</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="lcEnabled" <%= levelColorSettings.enabled ? 'checked' : '' %>><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Tiers</div><div class="setting-help">A new color every N levels, up to a top tier.</div></div>
+              <div class="setting-control">
+                <span class="muted" style="font-size:0.8rem;">Every</span>
+                <input type="number" id="lcInterval" min="1" max="1000" value="<%= levelColorSettings.interval %>" aria-label="New color every N levels" style="flex:0 0 80px; min-width:80px;">
+                <span class="muted" style="font-size:0.8rem;">levels, up to level</span>
+                <input type="number" id="lcMax" min="1" max="10000" value="<%= levelColorSettings.maxLevel %>" aria-label="Top tier level" style="flex:0 0 90px; min-width:90px;">
+              </div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Placement</div><div class="setting-help">Discord shows the color of a member's <em>highest</em> colored role.</div></div>
+              <div class="radio-cards">
+                <% [['low', 'Just above @everyone', 'Staff & other colored roles keep their color.'], ['high', 'As high as possible', 'The level color wins over other roles.'], ['above', 'Above a role', 'Sit directly above a role you pick.']].forEach(([v, t, d]) => { %>
+                  <label class="radio-card"><input type="radio" name="lcPlacement" value="<%= v %>" <%= levelColorSettings.placement === v ? 'checked' : '' %>><span class="rc-body"><span class="rc-title"><%= t %></span><span class="rc-desc" style="display:block;"><%= d %></span></span></label>
+                <% }) %>
+              </div>
+              <select id="lcAnchor" style="<%= levelColorSettings.placement === 'above' ? '' : 'display:none;' %>">
+                <option value="">— Pick a role to sit above —</option>
+                <% roles.forEach(r => { %><option value="<%= r.id %>" <%= levelColorSettings.anchorRoleId === r.id ? 'selected' : '' %>><%= r.name %></option><% }) %>
+              </select>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="margin-top:0;">Apply to everyone</h3>
+            <p class="muted" style="font-size:0.85rem;">New level-ups update colors automatically. <strong>Sync</strong> checks every member's current level and gives them the right color role — use it after turning colors on or changing tiers.</p>
+            <button class="btn" id="lcSyncBtn" onclick="syncLevelColors()">🔄 Sync all members</button>
+            <p class="muted" id="lcSyncResult" style="font-size:0.85rem; margin-top:0.75rem;"></p>
+            <div class="subpanel">
+              <p class="muted" style="font-size:0.8rem;">Remove every auto-created “Level N” role from the server (your custom roles are kept).</p>
+              <button class="btn danger small" onclick="removeLevelColorRoles()">Delete auto roles</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1.25rem;">
+          <div class="setting-title">Tier roles</div>
+          <div class="setting-help" style="margin-bottom:1rem;">“Auto” creates a <code>Level N</code> role the first time someone reaches that tier. Pick one of your roles to use it instead — members gain and lose it with their level.</div>
+          <div id="lcTiers"></div>
+        </div>
+      </div>
+
       <div class="subpage hidden" data-page="lv-cards">
         <div class="card settings-card">
           <div class="setting-row">
@@ -616,8 +666,8 @@
       </div>
 
       <div class="savebar">
-        <span class="hint">Saves every leveling tab at once.</span>
-        <button class="btn" onclick="saveLevels()">Save changes</button>
+        <span class="hint">Saves every leveling tab at once, including level colors.</span>
+        <button class="btn" onclick="saveLevelsAll()">Save changes</button>
       </div>
     </div>
 
@@ -1364,6 +1414,147 @@
         showToast('❌ Failed to send.');
       }
     }
+
+    async function saveLevelsAll() {
+      await saveLevels();
+      try {
+        await saveLevelColors({ quiet: true });
+      } catch (err) {
+        showToast(`❌ ${err.message}`);
+      }
+    }
+
+    // --- Level color tiers ---
+    const LC_PALETTE = <%- JSON.stringify(levelColorPalette) %>;
+    const lcStored = new Map(<%- JSON.stringify(levelColorTiers.map((t) => [t.level, t])).replace(/</g, '\\u003c') %>);
+    const assignableRoles = roles.filter((r) => r.assignable);
+
+    function lcLevels() {
+      const every = Math.max(1, parseInt(document.getElementById('lcInterval').value, 10) || 5);
+      const max = Math.max(every, parseInt(document.getElementById('lcMax').value, 10) || 100);
+      const out = [];
+      for (let l = every; l <= max && out.length < 50; l += every) out.push(l);
+      return { every, levels: out };
+    }
+    function lcDefaultColor(level, every, levels) {
+      if (level === levels[levels.length - 1]) return '#FFD700';
+      return LC_PALETTE[Math.max(0, Math.round(level / every) - 1) % (LC_PALETTE.length - 1)];
+    }
+
+    let lcRendered = null; // tier layout currently on screen, to tell real color edits from defaults
+
+    // Remember in-progress edits when tiers are re-rendered (e.g. after changing the interval).
+    function lcCaptureEdits() {
+      if (!lcRendered) return;
+      document.querySelectorAll('.lc-row').forEach((row) => {
+        const level = Number(row.dataset.level);
+        const roleId = row.querySelector('.lc-role').value;
+        const color = row.querySelector('.lc-color').value;
+        const prev = lcStored.get(level) || { level };
+        const shownDefault = lcDefaultColor(level, lcRendered.every, lcRendered.levels);
+        const storedColor = prev.custom ? null : prev.color;
+        // Only a color that differs from what was on screen by default counts as the admin's pick.
+        const picked = color.toLowerCase() !== (storedColor || shownDefault).toLowerCase() ? color : storedColor && storedColor.toLowerCase() !== shownDefault.toLowerCase() ? storedColor : null;
+        lcStored.set(level, { ...prev, custom: !!roleId, roleId: roleId || (prev.custom ? null : prev.roleId), color: picked, editedColor: picked });
+      });
+    }
+
+    function renderLcTiers(capture = true) {
+      if (capture) lcCaptureEdits();
+      const { every, levels } = lcLevels();
+      lcRendered = { every, levels };
+      const container = document.getElementById('lcTiers');
+      container.innerHTML = levels.map((level) => {
+        const t = lcStored.get(level) || {};
+        const custom = t.custom && t.roleId;
+        const customRole = custom ? roles.find((r) => r.id === t.roleId) : null;
+        const color = t.editedColor || (custom ? t.color : t.color) || lcDefaultColor(level, every, levels);
+        const options = ['<option value="">Auto — “Level ' + level + '” role</option>']
+          .concat(assignableRoles.map((r) => `<option value="${esc(r.id)}" ${custom && r.id === t.roleId ? 'selected' : ''}>@${esc(r.name)}</option>`))
+          .join('');
+        return `<div class="field-row lc-row" data-level="${level}" style="align-items:center;">
+          <span class="status-chip" style="flex:0 0 86px; justify-content:center;">Lv ${level}+</span>
+          <span class="lc-preview" style="flex:0 0 150px; font-weight:700; color:${esc(color)}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(viewer.username)}</span>
+          <select class="lc-role">${options}</select>
+          <input type="color" class="lc-color" value="${esc(color)}" style="flex:0 0 64px; min-width:64px;" ${custom ? 'disabled title="Custom roles keep their own color"' : ''}>
+          <span class="muted" style="flex:0 0 110px; font-size:0.75rem;">${custom ? (customRole ? 'your role' : '⚠️ role missing') : t.roleId ? 'created' : 'created when reached'}</span>
+        </div>`;
+      }).join('');
+      container.querySelectorAll('.lc-row').forEach((row) => {
+        const colorInput = row.querySelector('.lc-color');
+        const preview = row.querySelector('.lc-preview');
+        colorInput.addEventListener('input', () => (preview.style.color = colorInput.value));
+        row.querySelector('.lc-role').addEventListener('change', () => renderLcTiers());
+      });
+    }
+    ['lcInterval', 'lcMax'].forEach((id) => document.getElementById(id).addEventListener('change', () => renderLcTiers()));
+    document.querySelectorAll('input[name="lcPlacement"]').forEach((r) =>
+      r.addEventListener('change', () => (document.getElementById('lcAnchor').style.display = r.value === 'above' && r.checked ? '' : 'none'))
+    );
+
+    function readLevelColors() {
+      const { every, levels } = lcLevels();
+      return {
+        enabled: document.getElementById('lcEnabled').checked,
+        interval: every,
+        maxLevel: parseInt(document.getElementById('lcMax').value, 10) || 100,
+        placement: (document.querySelector('input[name="lcPlacement"]:checked') || {}).value || 'low',
+        anchorRoleId: document.getElementById('lcAnchor').value || null,
+        tiers: [...document.querySelectorAll('.lc-row')].map((row) => {
+          const level = Number(row.dataset.level);
+          const roleId = row.querySelector('.lc-role').value || null;
+          const color = row.querySelector('.lc-color').value;
+          // Only send a color override when it differs from the palette default.
+          return { level, roleId, color: roleId || color.toLowerCase() === lcDefaultColor(level, every, levels).toLowerCase() ? null : color };
+        })
+      };
+    }
+
+    async function saveLevelColors({ quiet = false } = {}) {
+      const res = await fetch(`/api/guilds/${guildId}/levelcolors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(readLevelColors())
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to save level colors.');
+      lcStored.clear();
+      (data.tiers || []).forEach((t) => lcStored.set(t.level, t));
+      renderLcTiers(false);
+      if (!quiet) showToast('✅ Level colors saved.');
+    }
+
+    async function syncLevelColors() {
+      const btn = document.getElementById('lcSyncBtn');
+      const out = document.getElementById('lcSyncResult');
+      btn.disabled = true;
+      out.textContent = 'Saving settings and syncing every member… this can take a minute on big servers.';
+      try {
+        await saveLevelColors({ quiet: true });
+        const res = await fetch(`/api/guilds/${guildId}/levelcolors/sync`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Sync failed.');
+        out.textContent = `✅ Checked ${fmt(data.scanned)} members · ${fmt(data.updated)} updated · ${data.tiersInUse} tier(s) in use.${data.failed ? ` ⚠️ ${data.failed} failed (role hierarchy?).` : ''}`;
+        const r2 = await fetch(`/api/guilds/${guildId}/levelcolors`);
+        const d2 = await r2.json().catch(() => ({}));
+        if (r2.ok) { lcStored.clear(); (d2.tiers || []).forEach((t) => lcStored.set(t.level, t)); renderLcTiers(false); }
+      } catch (err) {
+        out.textContent = `❌ ${err.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function removeLevelColorRoles() {
+      if (!confirm('Delete every auto-created "Level N" color role from this server? Custom roles are kept.')) return;
+      const res = await fetch(`/api/guilds/${guildId}/levelcolors/remove-auto`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return showToast(`❌ ${data.error || 'Failed.'}`);
+      lcStored.forEach((t, level) => { if (!t.custom) lcStored.set(level, { level }); });
+      renderLcTiers(false);
+      showToast(`🗑️ Deleted ${data.deleted} role(s).`);
+    }
+    renderLcTiers(false);
 
     // --- Sub-tabs inside module pages ---
     document.querySelectorAll('[data-subtabs]').forEach((bar) => {

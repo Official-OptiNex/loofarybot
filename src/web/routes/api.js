@@ -7,6 +7,7 @@ const { syncJoins, getJoinStats } = require('../../bot/cogs/modules/joinTracking
 const { sendWelcome } = require('../../bot/cogs/modules/welcome');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const LogEntry = require('../../database/models/LogEntry');
+const levelColors = require('../../bot/cogs/modules/levelColors');
 const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
 const EmbedTemplate = require('../../database/models/EmbedTemplate');
 
@@ -182,6 +183,71 @@ router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (r
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Level color roles ---
+
+router.post('/guilds/:guildId/levelcolors', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { enabled, interval, maxLevel, placement, anchorRoleId, tiers } = req.body;
+    if (placement === 'above' && !anchorRoleId) {
+      return res.status(400).json({ ok: false, error: "Pick a role to place the colors above (or choose another placement)." });
+    }
+    if (anchorRoleId && !req.guild.roles.cache.has(String(anchorRoleId))) {
+      return res.status(400).json({ ok: false, error: 'That anchor role is not in this server.' });
+    }
+    const overrides = [];
+    for (const t of Array.isArray(tiers) ? tiers : []) {
+      const level = Number(t.level);
+      if (!Number.isInteger(level) || level < 1) continue;
+      if (t.roleId) {
+        const role = req.guild.roles.cache.get(String(t.roleId));
+        if (!role) return res.status(400).json({ ok: false, error: `The role picked for level ${level} no longer exists.` });
+        if (!levelColors.botCanManage(req.guild, role)) {
+          return res.status(400).json({ ok: false, error: `LoofaryBot can't assign @${role.name} (level ${level}) — move its role above it.` });
+        }
+        overrides.push({ level, roleId: role.id });
+      } else {
+        overrides.push({ level, roleId: null, color: t.color || null });
+      }
+    }
+    const config = await levelColors.saveSettings(req.guild, {
+      enabled: typeof enabled === 'boolean' ? enabled : undefined,
+      interval: Number(interval) || undefined,
+      maxLevel: Number(maxLevel) || undefined,
+      placement,
+      anchorRoleId: anchorRoleId ?? null,
+      overrides
+    });
+    res.json({ ok: true, tiers: levelColors.describeTiers(config, req.guild) });
+  } catch (err) {
+    console.error('Failed to save level colors:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.get('/guilds/:guildId/levelcolors', requireAuth, requireGuildAccess, async (req, res) => {
+  const config = await getOrCreateConfig(req.guild.id);
+  res.json({ settings: levelColors.settingsOf(config), tiers: levelColors.describeTiers(config, req.guild) });
+});
+
+router.post('/guilds/:guildId/levelcolors/sync', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await levelColors.syncAll(req.guild)) });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ ok: false, error: err.message });
+    console.error('Level color sync failed:', err);
+    res.status(500).json({ ok: false, error: 'Sync failed. Check the bot has Manage Roles.' });
+  }
+});
+
+router.post('/guilds/:guildId/levelcolors/remove-auto', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await levelColors.removeAutoRoles(req.guild)) });
+  } catch (err) {
+    console.error('Failed to remove level color roles:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

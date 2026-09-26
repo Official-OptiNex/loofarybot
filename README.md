@@ -125,6 +125,14 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   (e.g. `0` in a bot-spam channel, `2` for Server Boosters).
 - `/levels givexp`, `/levels takexp`, `/levels resetxp` (Admin) — manual adjustments. Giving XP
   grants any role rewards crossed; taking XP lowers the level but keeps earned roles.
+- **Level name colors** (`/levels colorroles …` or the dashboard's Leveling → Level colors tab, off
+  by default): every N levels (default 5, up to level 100) members get a cosmetic, permission-less
+  `Level N` role in its own color, created the first time anyone reaches that tier. Members hold
+  only their highest tier's color, so their name color changes as they level (and moves back down
+  if they lose levels). Placement is configurable: just above @everyone, as high as the bot can
+  place it (so it overrides other colored roles), or above a chosen role. Any tier can use one of
+  your own roles instead, and auto roles can be recolored. **Sync** gives every member the right
+  color from their current level; **Delete auto roles** removes the bot-created ones.
 - `/levels card` — members customize their rank card (accent color, background image, tagline).
   `/levels cardaccess boosters_only:true` makes it a booster perk.
 

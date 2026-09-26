@@ -672,14 +672,14 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.88em
 .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; align-items: start; }
 .two-col > .card { margin-bottom: 0; }
 
-.radio-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+.radio-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; }
 .radio-card { position: relative; cursor: pointer; margin: 0; }
 .radio-card input { position: absolute; opacity: 0; }
 .radio-card .rc-body {
-  border: 1.5px solid var(--border-card); border-radius: 12px; padding: 0.85rem 0.95rem; background: var(--bg-input); height: 100%;
+  display: block; border: 1.5px solid var(--border-card); border-radius: 12px; padding: 0.85rem 0.95rem; background: var(--bg-input); height: 100%;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
-.radio-card .rc-title { font-weight: 700; color: var(--text-main); font-size: 0.9rem; }
+.radio-card .rc-title { display: block; font-weight: 700; color: var(--text-main); font-size: 0.9rem; }
 .radio-card .rc-desc { color: var(--text-label); font-size: 0.78rem; font-weight: 400; margin-top: 0.2rem; }
 .radio-card input:checked + .rc-body { border-color: var(--c-blue); background: rgba(79, 124, 255, 0.08); }
 .radio-card input:focus-visible + .rc-body { box-shadow: 0 0 0 3px rgba(79, 124, 255, 0.3); }

@@ -8,6 +8,18 @@ const LevelRoleSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// One color tier. Auto tiers point at a role the bot created (roleId filled in lazily);
+// custom tiers point at an existing role an admin chose instead.
+const LevelColorTierSchema = new mongoose.Schema(
+  {
+    level: { type: Number, required: true },
+    roleId: { type: String, default: null },
+    custom: { type: Boolean, default: false },
+    color: { type: String, default: null } // override for auto roles; null = palette color
+  },
+  { _id: false }
+);
+
 const XpMultiplierSchema = new mongoose.Schema(
   {
     type: { type: String, enum: ['channel', 'role'], required: true },
@@ -70,6 +82,16 @@ const GuildConfigSchema = new mongoose.Schema(
     levelUpChannelId: { type: String, default: null },
     xpMultipliers: { type: [XpMultiplierSchema], default: [] },
     rankCardBoosterOnly: { type: Boolean, default: false },
+    // Cosmetic name-color roles: members hold the color role for the highest tier they've reached.
+    levelColors: {
+      enabled: { type: Boolean, default: false },
+      interval: { type: Number, default: 5 },
+      maxLevel: { type: Number, default: 100 },
+      // low = just above @everyone · high = just below LoofaryBot's own role · above = above anchorRoleId
+      placement: { type: String, enum: ['low', 'high', 'above'], default: 'low' },
+      anchorRoleId: { type: String, default: null },
+      tiers: { type: [LevelColorTierSchema], default: [] }
+    },
 
     // --- XP Gambling ---
     gamblingEnabled: { type: Boolean, default: true },

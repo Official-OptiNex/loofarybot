@@ -58,6 +58,10 @@ async function syncLevel(guildId, userId, levelXpBase) {
   if (newLevel !== oldLevel) {
     await UserLevel.updateOne({ _id: record._id }, { $set: { level: newLevel } });
     record.level = newLevel;
+    // Name-color roles follow every level change (up or down). Lazy require avoids a cycle.
+    require('./levelColors')
+      .onLevelChange(guildId, userId, newLevel)
+      .catch((err) => console.error('Level color hook failed:', err.message));
   }
   return { record, oldLevel, newLevel };
 }
