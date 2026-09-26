@@ -40,7 +40,7 @@ function avatarUrl(user) {
 
 // Header data every public page needs.
 function siteLocals(req) {
-  const client = req.app.locals.client;
+  const client = req.app.locals.discordClient;
   const user = req.session?.user || null;
   return {
     user: user ? { id: user.id, name: user.global_name || user.username, avatarUrl: avatarUrl(user) } : null,

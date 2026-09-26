@@ -120,7 +120,7 @@ router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, guar
 router.post('/guilds/:guildId/honeypot', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
     const { channelId, action, embed, dmEnabled } = req.body;
-    const client = req.app.locals.client;
+    const client = req.app.locals.discordClient;
 
     const config = await getOrCreateConfig(req.guild.id);
     if (action && ['kick', 'softban', 'ban'].includes(action)) {
@@ -422,7 +422,7 @@ router.post('/guilds/:guildId/alerts/:id/test', requireAuth, requireGuildAccess,
   try {
     const sub = await AlertSubscription.findOne({ _id: req.params.id, guildId: req.guild.id });
     if (!sub) return res.status(404).json({ ok: false, error: 'Alert not found.' });
-    await socialAlerts.sendTest(req.app.locals.client, sub);
+    await socialAlerts.sendTest(req.app.locals.discordClient, sub);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });

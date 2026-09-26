@@ -109,7 +109,7 @@ router.post('/guilds/:guildId/giveaways', ...guard('giveaways'), async (req, res
   if (winnerCount < 1 || winnerCount > 100) return bad(res, 'Winners must be between 1 and 100.');
 
   try {
-    const { giveaway, message } = await giveaways.postGiveaway(req.app.locals.client, {
+    const { giveaway, message } = await giveaways.postGiveaway(req.app.locals.discordClient, {
       channel,
       hostId: req.session.user.id,
       durationMs,
@@ -161,7 +161,7 @@ router.post('/guilds/:guildId/giveaways/:messageId', ...guard('giveaways'), asyn
   g.requirements = readRequirements(req.guild, b.requirements);
   await g.save();
 
-  const client = req.app.locals.client;
+  const client = req.app.locals.discordClient;
   const found = await giveaways.refreshGiveaway(client, g);
   // A drop whose winner count was lowered to the number of claims is now complete.
   if (g.type === 'drop' && g.entries.length >= g.winnerCount) await giveaways.finishGiveaway(client, g);
@@ -173,7 +173,7 @@ router.post('/guilds/:guildId/giveaways/:messageId/end', ...guard('giveaways'), 
   const g = await findGiveaway(req, res);
   if (!g) return;
   if (g.ended) return bad(res, 'That giveaway has already ended.');
-  await giveaways.finishGiveaway(req.app.locals.client, g);
+  await giveaways.finishGiveaway(req.app.locals.discordClient, g);
   const fresh = await Giveaway.findById(g._id).lean();
   res.locals.audit = { section: 'Giveaways', action: `Ended giveaway “${g.prize.slice(0, 60)}” early`, detail: '' };
   res.json({ ok: true, giveaway: fresh ? serializeGiveaway(fresh, req.guild) : null });
@@ -182,7 +182,7 @@ router.post('/guilds/:guildId/giveaways/:messageId/end', ...guard('giveaways'), 
 router.post('/guilds/:guildId/giveaways/:messageId/reroll', ...guard('giveaways'), async (req, res) => {
   const g = await findGiveaway(req, res);
   if (!g) return;
-  const result = await giveaways.rerollGiveaway(req.app.locals.client, g);
+  const result = await giveaways.rerollGiveaway(req.app.locals.discordClient, g);
   if (result.error) return bad(res, result.error);
   const member = req.guild.members.cache.get(result.winner);
   res.locals.audit = { section: 'Giveaways', action: `Rerolled “${g.prize.slice(0, 60)}”`, detail: `New winner: ${member ? member.displayName : result.winner}` };
@@ -192,7 +192,7 @@ router.post('/guilds/:guildId/giveaways/:messageId/reroll', ...guard('giveaways'
 router.delete('/guilds/:guildId/giveaways/:messageId', ...guard('giveaways'), async (req, res) => {
   const g = await findGiveaway(req, res);
   if (!g) return;
-  await giveaways.deleteGiveaway(req.app.locals.client, g);
+  await giveaways.deleteGiveaway(req.app.locals.discordClient, g);
   res.locals.audit = { section: 'Giveaways', action: `Deleted giveaway “${g.prize.slice(0, 60)}”`, detail: '' };
   res.json({ ok: true });
 });
@@ -365,7 +365,7 @@ router.post('/guilds/:guildId/polls/:messageId/end', ...guard('community'), asyn
   const poll = await Poll.findOne({ guildId: req.guild.id, messageId: String(req.params.messageId) });
   if (!poll) return bad(res, 'Poll not found.', 404);
   if (poll.ended) return bad(res, 'That poll is already closed.');
-  await polls.endPoll(req.app.locals.client, poll);
+  await polls.endPoll(req.app.locals.discordClient, poll);
   res.locals.audit = { section: 'Community', action: `Closed poll “${poll.question.slice(0, 60)}”`, detail: '' };
   res.json({ ok: true });
 });

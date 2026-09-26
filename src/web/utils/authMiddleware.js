@@ -77,7 +77,7 @@ async function requireGuildAccess(req, res, next) {
   const userGuild = (req.session.guilds || []).find((g) => g.id === guildId);
   if (!userGuild) return deny(req, res, 403, "You don't have access to that server.");
 
-  const client = req.app.locals.client;
+  const client = req.app.locals.discordClient;
   const guild = client.guilds.cache.get(guildId);
   if (!guild) return deny(req, res, 404, 'LoofaryBot is not in that server.');
 

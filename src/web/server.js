@@ -14,7 +14,9 @@ const { siteLocals, botStats, publicCommands } = require('./utils/site');
 
 function startWebServer(client) {
   const app = express();
-  app.locals.client = client; // routes read the live bot client off here
+  // Routes read the live bot client off here. Not named `client`: app.locals are passed to every
+  // EJS view, and EJS treats a `client` field as its own option (client-side mode), which breaks include().
+  app.locals.discordClient = client;
 
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
