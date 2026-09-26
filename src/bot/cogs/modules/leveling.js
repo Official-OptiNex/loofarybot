@@ -87,9 +87,10 @@ async function grantMilestoneRoles(guild, userId, config, oldLevel, newLevel) {
     // the single most common reason a level-up role silently fails to attach.
     if (role && botMember && botMember.roles.highest.position <= role.position) {
       failures.push(`<@&${milestone.roleId}>`);
-      console.error(
-        `Cannot assign level-${milestone.level} role (${role.name}) in guild ${guild.id}: ` +
-          `bot's highest role is below it in the hierarchy.`
+      require('../../utils/errorReporter').reportIssue(
+        guild.id,
+        'Level reward role could not be given',
+        `LoofaryBot's role is below **${role.name}** (level ${milestone.level} reward). Move LoofaryBot's role above it in Server Settings → Roles.`
       );
       continue;
     }

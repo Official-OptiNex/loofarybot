@@ -1,0 +1,58 @@
+    <!-- MODERATION (same as /lockdown, /unlockdown and /purge) -->
+    <div class="tab-panel hidden" id="tab-moderation">
+      <div class="module-hero">
+        <div class="hero-icon red">🛡️</div>
+        <div>
+          <h1>Moderation</h1>
+          <p>Lock channels or the whole server, lift lockdowns, and bulk-delete messages — the same as <code>/lockdown</code>, <code>/unlockdown</code> and <code>/purge</code>.</p>
+          <div class="hero-status" id="modStatus"></div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 style="margin-top:0;">🔒 Lockdown</h3>
+          <p class="muted" style="font-size:0.84rem; margin-top:0;">Stops everyone except staff (Administrator / Manage Messages roles) from posting. The original permissions are saved and restored on unlock.</p>
+          <div class="radio-cards" style="margin-bottom:0.75rem;">
+            <label class="radio-card"><input type="radio" name="ldScope" value="channel" checked><span class="rc-body"><span class="rc-title">One channel</span></span></label>
+            <label class="radio-card"><input type="radio" name="ldScope" value="server"><span class="rc-body"><span class="rc-title">Whole server</span></span></label>
+          </div>
+          <div class="setting-row" id="ldChannelRow" style="border:none; padding-top:0;">
+            <div class="setting-title">Channel</div>
+            <div class="setting-control"><select id="ldChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+          </div>
+          <div class="setting-row" style="border:none; padding-top:0;">
+            <div class="setting-title">Reason</div>
+            <div class="setting-control"><input id="ldReason" maxlength="300" placeholder="Raid in progress"></div>
+          </div>
+          <div style="display:flex; gap:0.6rem; justify-content:flex-end; flex-wrap:wrap;">
+            <button class="btn secondary" id="ldUnlockBtn" onclick="runUnlock()">🔓 Unlock</button>
+            <button class="btn danger" id="ldLockBtn" onclick="runLockdown()">🔒 Lock</button>
+          </div>
+          <h3 class="section-label">Currently locked</h3>
+          <div id="ldLockedList" class="muted">Loading…</div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;">🧹 Purge messages</h3>
+          <p class="muted" style="font-size:0.84rem; margin-top:0;">Deletes the most recent messages. Discord only allows bulk-deleting messages under 14 days old — older ones are skipped.</p>
+          <div class="setting-row" style="border:none; padding-top:0;">
+            <div class="setting-title">Channel</div>
+            <div class="setting-control"><select id="pgChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+          </div>
+          <div class="setting-row" style="border:none; padding-top:0;">
+            <div><div class="setting-title">How many</div><div class="setting-help">1 to 100.</div></div>
+            <div class="setting-control"><input type="number" id="pgCount" min="1" max="100" value="20"></div>
+          </div>
+          <div class="setting-row" style="border:none; padding-top:0;">
+            <div><div class="setting-title">Only from</div><div class="setting-help">Optional — type a name to pick a member.</div></div>
+            <div class="setting-control member-picker">
+              <input id="pgUser" placeholder="Anyone" autocomplete="off" aria-label="Only messages from this member">
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end;">
+            <button class="btn danger" id="pgBtn" onclick="runPurge()">Delete messages</button>
+          </div>
+        </div>
+      </div>
+    </div>

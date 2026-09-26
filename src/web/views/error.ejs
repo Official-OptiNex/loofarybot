@@ -3,15 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Error | LoofaryBot</title>
+  <title>Something went wrong | <%= typeof botName !== 'undefined' ? botName : 'LoofaryBot' %></title>
   <link rel="stylesheet" href="/css/style.css">
   <script src="/js/theme.js"></script>
 </head>
-<body>
-  <div class="container">
-    <h1>⚠️ Something went wrong</h1>
-    <p class="muted"><%= message %></p>
-    <a class="btn" href="/">Back to Home</a>
-  </div>
+<body class="site">
+  <% if (typeof user !== 'undefined') { %><%- include('partials/site-bar') %><% } %>
+  <main class="site-main">
+    <div class="card empty-state error-card">
+      <div class="big">⚠️</div>
+      <h1>Something went wrong</h1>
+      <p class="muted"><%= message %></p>
+      <div class="site-cta" style="justify-content:center;">
+        <a class="btn" href="/">Back to home</a>
+        <% if (typeof user !== 'undefined' && user) { %><a class="btn secondary" href="/dashboard">Your servers</a><% } %>
+      </div>
+    </div>
+  </main>
 </body>
 </html>

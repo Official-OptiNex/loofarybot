@@ -6,10 +6,12 @@ const {
   parseDuration,
   formatTime,
   resolveColor,
-  buildGiveawayEmbed,
   describeRequirements,
   launchGiveaway,
   finishGiveawayById,
+  refreshGiveaway,
+  rerollGiveaway,
+  deleteGiveaway,
   replyOrEdit
 } = require('../cogs/modules/giveaways');
 
@@ -209,10 +211,7 @@ async function execute(interaction, client) {
       if (minLevel !== null) g.requirements.minLevel = minLevel || null;
     }
     await g.save();
-
-    const channel = await client.channels.fetch(g.channelId).catch(() => null);
-    const msg = channel ? await channel.messages.fetch(g.messageId).catch(() => null) : null;
-    if (msg) await msg.edit({ embeds: [buildGiveawayEmbed(g)] }).catch(() => null);
+    await refreshGiveaway(client, g);
 
     const summary = describeRequirements(g.requirements) || '\n\nNo requirements — anyone can enter.';
     return replyOrEdit(interaction, {
@@ -261,7 +260,7 @@ async function execute(interaction, client) {
 
   if (sub === 'end') {
     const msgId = interaction.options.getString('message_id').trim();
-    const g = await Giveaway.findOne({ messageId: msgId });
+    const g = await Giveaway.findOne({ messageId: msgId, guildId: interaction.guildId });
     if (!g || g.ended) {
       return replyOrEdit(interaction, { content: '❌ Giveaway not found or already ended.' });
     }
@@ -271,36 +270,20 @@ async function execute(interaction, client) {
 
   if (sub === 'reroll') {
     const msgId = interaction.options.getString('message_id').trim();
-    const g = await Giveaway.findOne({ messageId: msgId });
-    if (!g || !g.ended) {
-      return replyOrEdit(interaction, { content: '❌ Giveaway not found or has not ended yet.' });
-    }
-    if (g.type === 'drop') {
-      return replyOrEdit(interaction, { content: "❌ Drops can't be rerolled — their winners are whoever claimed first." });
-    }
-    if (g.entries.length === 0) {
-      return replyOrEdit(interaction, { content: '❌ No entries to reroll from.' });
-    }
-    const newWinner = g.entries[Math.floor(Math.random() * g.entries.length)];
-    const channel = await client.channels.fetch(g.channelId).catch(() => null);
-    if (channel) {
-      channel.send(`🎉 New winner for **${g.prize}**: <@${newWinner}>!`).catch(() => null);
-    }
-    return replyOrEdit(interaction, { content: `✅ Rerolled. New winner: <@${newWinner}>` });
+    const g = await Giveaway.findOne({ messageId: msgId, guildId: interaction.guildId });
+    if (!g) return replyOrEdit(interaction, { content: '❌ Giveaway not found.' });
+    const result = await rerollGiveaway(client, g);
+    if (result.error) return replyOrEdit(interaction, { content: `❌ ${result.error}` });
+    return replyOrEdit(interaction, { content: `✅ Rerolled. New winner: <@${result.winner}>` });
   }
 
   if (sub === 'delete') {
     const msgId = interaction.options.getString('message_id').trim();
-    const g = await Giveaway.findOne({ messageId: msgId });
+    const g = await Giveaway.findOne({ messageId: msgId, guildId: interaction.guildId });
     if (!g) {
       return replyOrEdit(interaction, { content: '❌ Giveaway not found.' });
     }
-    const channel = await client.channels.fetch(g.channelId).catch(() => null);
-    if (channel) {
-      const msg = await channel.messages.fetch(g.messageId).catch(() => null);
-      if (msg) await msg.delete().catch(() => null);
-    }
-    await Giveaway.deleteOne({ messageId: msgId });
+    await deleteGiveaway(client, g);
     return replyOrEdit(interaction, { content: `✅ Giveaway \`${msgId}\` deleted.` });
   }
 
@@ -320,19 +303,14 @@ async function execute(interaction, client) {
     const newPrize = interaction.options.getString('new_prize');
     const newWinners = interaction.options.getInteger('new_winners');
 
-    const g = await Giveaway.findOne({ messageId: msgId });
+    const g = await Giveaway.findOne({ messageId: msgId, guildId: interaction.guildId });
     if (!g || g.ended) {
       return replyOrEdit(interaction, { content: '❌ Giveaway not found or already ended.' });
     }
     if (newPrize) g.prize = newPrize;
     if (newWinners) g.winnerCount = newWinners;
     await g.save();
-
-    const channel = await client.channels.fetch(g.channelId).catch(() => null);
-    if (channel) {
-      const msg = await channel.messages.fetch(g.messageId).catch(() => null);
-      if (msg) await msg.edit({ embeds: [buildGiveawayEmbed(g)] }).catch(() => null);
-    }
+    await refreshGiveaway(client, g);
     return replyOrEdit(interaction, { content: `✅ Giveaway \`${msgId}\` updated successfully.` });
   }
 }

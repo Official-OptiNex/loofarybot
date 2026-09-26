@@ -27,7 +27,7 @@ LoofaryBot/
 │   │                              #   MemberJoin, WelcomeConfig
 │   └── web/
 │       ├── server.js               # Express app, sessions, route mounting, /health
-│       ├── routes/                 # auth.js (OAuth2), dashboard.js, api.js, embedBuilder.js
+│       ├── routes/                 # auth.js (OAuth2), dashboard.js, api.js, manage.js, embedBuilder.js
 │       ├── views/                  # EJS templates
 │       └── static/                 # CSS
 ```
@@ -45,6 +45,9 @@ Copy `.env.example` to `.env` for local dev, or set these in Render's dashboard.
 | `CLIENT_SECRET` | for dashboard login | Discord application client secret |
 | `REDIRECT_URI` | for dashboard login | e.g. `https://your-app.onrender.com/auth/discord/callback` |
 | `SESSION_SECRET` | for dashboard login | Any long random string |
+| `TWITCH_CLIENT_ID` | no | Optional — switches Twitch alerts to the official API (free app at dev.twitch.tv/console/apps) |
+| `TWITCH_CLIENT_SECRET` | no | Same app as above |
+| `ERROR_ALERT_CHANNEL_ID` | no | A channel (in any server the bot is in) that gets every error with details |
 | `PORT` | no | Render sets this automatically |
 
 Without `CLIENT_SECRET`/`REDIRECT_URI`/`SESSION_SECRET`, the bot and giveaways/honeypot/leveling
@@ -145,6 +148,10 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   `tiles left ÷ safe tiles left`; hit a mine and the bet is lost. Cash out any time.
 - `highlow` — call whether the next card (A–K) is higher-or-same or lower-or-same. Each correct
   call multiplies winnings by `1 ÷ chance`. You can skip a card, and cash out any time.
+- **Free play:** if a loss leaves a player below the minimum bet, they get one free **300 XP** bet
+  (their next `/gamble` uses it automatically; they keep any winnings). At most once per 24 hours
+  per member so it can't be farmed — amount, cooldown and on/off are on the Gambling page or
+  `/gamble config`. A free play interrupted by a restart gives the free play back, not XP.
 - The **house edge** (default 4%) is taken once from every payout, so every bet returns 96% on
   average whatever strategy is used. Admins set the edge, min/max bet, and an optional
   gambling-only channel with `/gamble config`. Bets are taken atomically up front, so the same
@@ -195,12 +202,58 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - **Sync Join Data** backfills history from every current member's join date (members who left
   can't be recovered, and rejoiners only report their latest join). Limited to once per 5 minutes.
 
+### Creator Alerts (`/alerts …` or the dashboard's **Alerts** page)
+- Twitch go-live and YouTube upload alerts, each with its own channel, ping role (or @everyone),
+  message and embed (placeholders `{name}` `{title}` `{url}` `{game}`), and a pause switch.
+- Follow any streamer by pasting their twitch.tv link (or username) — nothing is hard-coded and no
+  setup is needed. Twitch is checked every 2 minutes; when a stream ends, its alert is edited to
+  "Stream ended · streamed for 2h 5m" without a second ping.
+- Without keys the bot uses the public connection twitch.tv's own site uses (unofficial — Twitch
+  could change it). Set `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET` to use the official API instead.
+- YouTube uses the channel's public RSS feed every 5 minutes — no API key. Following a channel
+  never announces its old videos, and at most 3 new videos are posted per check.
+- Alerts in announcement channels are auto-published to followers.
+
+### Daily streaks (`/daily`)
+- Claim XP once per UTC day. Consecutive days add a streak bonus (default +10/day, capped at
+  +200) and a milestone bonus every 7 days (+250). Configure it on Leveling → 🔥 Daily streaks.
+- The streak shows on `/levels rank`. Claims go through normal XP, so role rewards and level
+  colors apply.
+
+### Server Settings (dashboard, admins only)
+- **Mod access:** pick moderator roles and which pages they can use (e.g. Log viewer and
+  Leaderboard only). Mods see a limited dashboard; everything else is hidden and blocked by the API.
+- **Bot alerts:** a staff channel where LoofaryBot reports problems it can't fix itself (missing
+  permissions, a role above the bot, a deleted channel, errors). Repeats are grouped.
+- **Change history:** every dashboard change, who made it (admin or mod) and when — kept 180 days.
+- **Backups:** automatic daily backups (last 7) plus manual ones, each with settings and member XP.
+  Download any backup, restore it (XP optional), or export/import settings as a JSON file. A safety
+  backup is taken before every import or restore.
+
 ### Member data
 - When someone leaves, their XP/level/rank card, reminders in that server and entries in running
   giveaways are deleted, so they drop off the leaderboard. Anyone who left while the bot was
   offline is cleaned up on the next startup. Anonymous join/leave counts are kept for the charts.
 
 ### Web Dashboard
+- **Everything works from both places.** Anything a slash command manages can also be done on the
+  dashboard, using the same code:
+  - **Giveaways:** start timed giveaways or first-to-click drops with every `/loof` option (channel,
+    duration, winners, ping, color, button emoji, description, role/days/level requirements) and a
+    live preview. Running ones can be edited (including a new end time), ended early, rerolled or deleted.
+  - **Reaction Roles:** build role panels (buttons, multi-pick or single-pick dropdown) with a live
+    preview, then edit or delete them.
+  - **Polls & Reminders:** post polls (anonymous, multiple choice, auto-close) and see live results,
+    then close them. Schedule or cancel channel reminders.
+  - **Moderation:** lock or unlock a channel or the whole server, and purge messages (optionally from
+    one member).
+  - **Leaderboard → Adjust a member's XP:** give, take or reset XP (`/levels givexp · takexp · resetxp`).
+  - Each of these can be given to dashboard moderators under Server Settings, and every action is
+    recorded in the change history.
+- **Home page:** open to everyone without logging in. It lists the features, live bot stats, an
+  **Add to Discord** button and every command members can use (searchable, click to copy).
+- **Server picker:** a searchable card grid of your servers with admin/moderator badges. It also
+  lists servers you manage that don't have the bot yet, each with a one-click invite.
 - Every module has an on/off switch — in the sidebar, on its Overview card and in its page header.
 - Module pages are split into sub-tabs (e.g. Leveling: XP & speed · Role rewards · Multipliers ·
   Level-up messages · Rank cards) with a sticky **Save changes** bar.
@@ -218,7 +271,10 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 
 ## 7. Notes & Limitations
 
-- Web sessions use in-memory storage and reset on redeploy (you'll just need to log back in);
-  swap in `connect-mongo` in `src/web/server.js` if you want sessions to persist too.
+- Dashboard logins are stored in MongoDB (`web_sessions`), so they survive redeploys. Keep
+  `SESSION_SECRET` set to the same long random value — changing it logs everyone out.
+- Redeploys and restarts settle open gambling games: winnings are cashed out, otherwise the bet
+  is refunded (blackjack hands are always refunded). A crash is caught up on the next startup —
+  the bet is refunded and the player is told in the channel.
 - Render's free tier has an ephemeral filesystem — this is exactly why giveaways, honeypot
   counts, and level data all live in MongoDB Atlas rather than local files.

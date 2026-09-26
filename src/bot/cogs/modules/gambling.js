@@ -9,6 +9,7 @@ const {
 } = require('discord.js');
 const { getOrCreateConfig, getEffectiveXpSettings, adjustXp, debitXp } = require('./leveling');
 const UserLevel = require('../../../database/models/UserLevel');
+const ActiveBet = require('../../../database/models/ActiveBet');
 
 const GRID_SIZE = 25; // 5x5 mines board
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
@@ -28,7 +29,12 @@ function getGamblingSettings(config) {
     edgePercent,
     minBet: config.gamblingMinBet ?? 10,
     maxBet: config.gamblingMaxBet ?? null,
-    channelId: config.gamblingChannelId ?? null
+    channelId: config.gamblingChannelId ?? null,
+    freePlay: {
+      enabled: config.gamblingFreePlayEnabled !== false,
+      amount: Math.max(1, config.gamblingFreePlayAmount ?? 300),
+      cooldownMs: Math.max(0, config.gamblingFreePlayCooldownHours ?? 24) * 3600 * 1000
+    }
   };
 }
 
@@ -47,11 +53,77 @@ function balanceText(balance, net) {
   return `💳 **Balance:** \`${fmtNum(balance.xp)} XP\` · Level **${balance.level}** · this game: **${change} XP**`;
 }
 
-// Settles a finished interactive game: records the net result and the player's fresh balance.
-async function settle(game, returned) {
-  game.net = returned - game.bet;
-  game.balance = await fetchBalance(game.guildId, game.userId);
+// ---------------------------------------------------------------- Free play (going broke)
+
+/**
+ * When a loss leaves the player below the minimum bet, give them one free play (a bet of
+ * settings.freePlay.amount that costs them nothing) — at most once per cooldown so it can't be
+ * farmed. Returns { granted, nextAt } (nextAt = when the next one could be given, if on cooldown).
+ */
+async function maybeGrantFreePlay(guildId, userId, settings, balance) {
+  const fp = settings.freePlay;
+  if (!fp.enabled || balance.xp >= settings.minBet) return { granted: false };
+  const cutoff = new Date(Date.now() - fp.cooldownMs);
+  const res = await UserLevel.updateOne(
+    {
+      guildId,
+      userId,
+      $and: [
+        { $or: [{ freePlays: { $exists: false } }, { freePlays: { $lt: 1 } }] },
+        { $or: [{ lastFreePlayGrantedAt: null }, { lastFreePlayGrantedAt: { $lte: cutoff } }] }
+      ]
+    },
+    { $set: { freePlays: 1, lastFreePlayGrantedAt: new Date() } }
+  );
+  if (res.modifiedCount === 1) return { granted: true };
+  const record = await UserLevel.findOne({ guildId, userId }, { freePlays: 1, lastFreePlayGrantedAt: 1 }).lean();
+  if (record?.freePlays > 0) return { granted: false, pending: true };
+  const last = record?.lastFreePlayGrantedAt ? new Date(record.lastFreePlayGrantedAt).getTime() : null;
+  return { granted: false, nextAt: last ? last + fp.cooldownMs : null };
 }
+
+// Uses up the player's free play, atomically (so two commands can't both spend it).
+async function consumeFreePlay(guildId, userId) {
+  const res = await UserLevel.updateOne({ guildId, userId, freePlays: { $gt: 0 } }, { $inc: { freePlays: -1 } });
+  return res.modifiedCount === 1;
+}
+
+// Gives an unused free play back (game refunded by a restart or timeout).
+async function restoreFreePlay(guildId, userId) {
+  await UserLevel.updateOne({ guildId, userId }, { $set: { freePlays: 1 } }).catch(() => null);
+}
+
+function freePlayText(outcome, settings) {
+  if (!outcome) return '';
+  if (outcome.granted) {
+    return `🎟️ **You're out of XP — here's a free play!** Your next \`/gamble\` is a **${fmtNum(settings.freePlay.amount)} XP** bet on the house.`;
+  }
+  if (outcome.pending) return '🎟️ You still have an unused **free play** — your next `/gamble` uses it.';
+  if (outcome.nextAt) return `🎟️ You're out of XP. Your next free play unlocks <t:${Math.floor(outcome.nextAt / 1000)}:R> — or chat to earn more.`;
+  return '';
+}
+
+// Settles a finished interactive game: records the net result (against what the player actually
+// staked — free plays cost nothing), their fresh balance, and a free play if they went broke.
+async function settle(game, returned) {
+  game.net = returned - (game.paidStake ?? game.bet);
+  game.balance = await fetchBalance(game.guildId, game.userId);
+  if (game.net < 0 || (game.freePlay && returned === 0)) {
+    game.freePlayNote = freePlayText(await maybeGrantFreePlay(game.guildId, game.userId, game.settings, game.balance), game.settings);
+  }
+}
+
+// Text shown under a finished game: balance line plus any free-play notice.
+function settledText(game) {
+  return [balanceText(game.balance, game.net), game.freePlayNote].filter(Boolean).join('\n');
+}
+
+// Returns the player's stake after a refund: their own XP, and their free play if it was one.
+async function refundStake(game) {
+  if (game.paidStake > 0) await payout(game.guild, game.userId, game.paidStake, game.config);
+  if (game.freePlay) await restoreFreePlay(game.guildId, game.userId);
+}
+const refundWord = (game) => (game.freePlay && !game.paidStake ? 'your free play was given back' : 'your bet was refunded');
 
 function levelNote(result) {
   if (!result) return '';
@@ -79,11 +151,25 @@ async function placeBet(interaction, bet) {
   if (bet < settings.minBet) return fail(`❌ The minimum bet is **${settings.minBet} XP**.`);
   if (settings.maxBet && bet > settings.maxBet) return fail(`❌ The maximum bet is **${settings.maxBet} XP**.`);
 
-  const debited = await debitXp(interaction.guildId, interaction.user.id, bet, levelXpBase);
-  if (!debited) return fail(`❌ You don't have **${bet} XP** to bet. Check your balance with \`/levels rank\`.`);
+  // A player holding a free play who can't cover this bet plays it for free instead.
+  const record = await UserLevel.findOne({ guildId: interaction.guildId, userId: interaction.user.id }, { xp: 1, freePlays: 1 }).lean();
+  if (record?.freePlays > 0 && (record.xp ?? 0) < bet && settings.freePlay.enabled) {
+    if (await consumeFreePlay(interaction.guildId, interaction.user.id)) {
+      return { config, settings, bet: settings.freePlay.amount, freePlay: true, paidStake: 0 };
+    }
+  }
 
-  return { config, settings };
+  const debited = await debitXp(interaction.guildId, interaction.user.id, bet, levelXpBase);
+  if (!debited) {
+    const status = freePlayText(await maybeGrantFreePlay(interaction.guildId, interaction.user.id, settings, { xp: record?.xp ?? 0 }), settings);
+    return fail(`❌ You don't have **${fmtNum(bet)} XP** to bet. Check your balance with \`/levels rank\`.${status ? `\n${status}` : ''}`);
+  }
+
+  return { config, settings, bet, freePlay: false, paidStake: bet };
 }
+
+const freePlayBanner = (ctx) =>
+  ctx.freePlay ? `🎟️ **Free play!** This **${fmtNum(ctx.bet)} XP** bet is on the house — you keep any winnings.` : '';
 
 async function payout(guild, userId, amount, config) {
   if (amount <= 0) return null;
@@ -95,6 +181,7 @@ async function payout(guild, userId, amount, config) {
 async function playCoinflip(interaction, bet, side) {
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
+  bet = ctx.bet;
 
   const result = randInt(2) === 0 ? 'heads' : 'tails';
   const won = result === side;
@@ -102,25 +189,35 @@ async function playCoinflip(interaction, bet, side) {
   const winnings = won ? Math.floor(bet * multiplier) : 0;
   const levelResult = await payout(interaction.guild, interaction.user.id, winnings, ctx.config);
   const balance = await fetchBalance(interaction.guildId, interaction.user.id);
+  const net = winnings - ctx.paidStake;
+  const freeNote = net < 0 || (ctx.freePlay && !won)
+    ? freePlayText(await maybeGrantFreePlay(interaction.guildId, interaction.user.id, ctx.settings, balance), ctx.settings)
+    : '';
 
   const embed = new EmbedBuilder()
     .setTitle(`🪙 Coinflip — ${result === 'heads' ? 'Heads' : 'Tails'}!`)
     .setColor(won ? '#57F287' : '#ED4245')
     .setDescription(
-      `${interaction.user} bet **${fmtNum(bet)} XP** on **${side}**.\n` +
+      (ctx.freePlay ? `${freePlayBanner(ctx)}\n` : '') +
+        `${interaction.user} bet **${fmtNum(bet)} XP** on **${side}**.\n` +
         (won
           ? `✅ You won **${fmtNum(winnings)} XP** (${fmtMult(multiplier)}).`
-          : `❌ You lost **${fmtNum(bet)} XP**.`) +
+          : ctx.freePlay
+            ? '❌ No luck this time — it was a free play, so you lost nothing.'
+            : `❌ You lost **${fmtNum(bet)} XP**.`) +
         levelNote(levelResult) +
-        `\n\n${balanceText(balance, winnings - bet)}`
+        `\n\n${balanceText(balance, net)}${freeNote ? `\n${freeNote}` : ''}`
     );
   return interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
 }
 
 // ---------------------------------------------------------------- Shared game lifecycle
 
-function startGame(interaction, game) {
+function startGame(interaction, game, ctx) {
   game.id = crypto.randomBytes(6).toString('hex');
+  game.settings = ctx.settings;
+  game.freePlay = !!ctx.freePlay;
+  game.paidStake = ctx.paidStake;
   game.userId = interaction.user.id;
   game.guildId = interaction.guildId;
   game.guild = interaction.guild;
@@ -129,6 +226,19 @@ function startGame(interaction, game) {
   activeGames.set(game.id, game);
   activeByUser.set(`${game.guildId}:${game.userId}`, game.id);
   touchGame(game);
+  // Persist the stake so a crash or redeploy mid-game can refund it.
+  // Writes are chained through game.betWrite so create → update → delete always land in order
+  // (a delete racing ahead of its create would leave a stray record that gets refunded later).
+  game.betWrite = ActiveBet.create({
+    gameId: game.id,
+    guildId: game.guildId,
+    userId: game.userId,
+    kind: game.kind,
+    amount: game.bet,
+    paidAmount: game.paidStake,
+    freePlay: game.freePlay,
+    channelId: interaction.channelId
+  }).catch((err) => console.error('Failed to record active bet:', err.message));
   return game;
 }
 
@@ -140,6 +250,7 @@ function touchGame(game) {
 function endGame(game) {
   game.finished = true;
   clearTimeout(game.timer);
+  game.betWrite = Promise.resolve(game.betWrite).then(() => ActiveBet.deleteOne({ gameId: game.id }).catch(() => null));
   activeGames.delete(game.id);
   if (activeByUser.get(`${game.guildId}:${game.userId}`) === game.id) {
     activeByUser.delete(`${game.guildId}:${game.userId}`);
@@ -164,10 +275,10 @@ async function expireGame(game) {
   }
   // Nothing won yet — refund the bet instead of eating it.
   endGame(game);
-  await payout(game.guild, game.userId, game.bet, game.config);
-  await settle(game, game.bet);
+  await refundStake(game);
+  await settle(game, game.paidStake);
   game.status = 'refunded';
-  if (game.message) await game.message.edit(game.render('⏰ Timed out before any move — your bet was refunded.')).catch(() => null);
+  if (game.message) await game.message.edit(game.render(`⏰ Timed out before any move — ${refundWord(game)}.`)).catch(() => null);
 }
 
 async function cashOut(game, note = '') {
@@ -222,7 +333,8 @@ function renderMines(game, note) {
   }
   if (game.status === 'lost') header += `\n💥 You hit a mine and lost **${game.bet} XP**.`;
   if (note) header += `\n${note}`;
-  if (game.balance) header += `\n\n${balanceText(game.balance, game.net)}`;
+  if (game.freePlay && !game.balance) header += `\n${freePlayBanner(game)}`;
+  if (game.balance) header += `\n\n${settledText(game)}`;
 
   const rows = [];
   for (let r = 0; r < 5; r++) {
@@ -271,7 +383,7 @@ async function startMines(interaction, bet, mineCount) {
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
 
-  const game = startGame(interaction, createMinesGame(bet, mineCount, ctx.config, ctx.settings));
+  const game = startGame(interaction, createMinesGame(ctx.bet, mineCount, ctx.config, ctx.settings), ctx);
   await interaction.reply(game.render());
   game.message = await interaction.fetchReply().catch(() => null);
 }
@@ -351,7 +463,8 @@ function renderHighLow(game, note) {
   if (game.history.length > 0) lines.push(`**History:** ${game.history.slice(-10).join(' → ')}`);
   if (game.status === 'lost') lines.push(`❌ Wrong call — you lost **${game.bet} XP**.`);
   if (note) lines.push(note);
-  if (game.balance) lines.push('', balanceText(game.balance, game.net));
+  if (game.freePlay && !game.balance) lines.push(freePlayBanner(game));
+  if (game.balance) lines.push('', settledText(game));
 
   const embed = new EmbedBuilder()
     .setTitle('🃏 High-Low')
@@ -391,7 +504,7 @@ async function startHighLow(interaction, bet) {
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
 
-  const game = startGame(interaction, createHighLowGame(bet, ctx.config, ctx.settings));
+  const game = startGame(interaction, createHighLowGame(ctx.bet, ctx.config, ctx.settings), ctx);
   await interaction.reply(game.render());
   game.message = await interaction.fetchReply().catch(() => null);
 }
@@ -563,7 +676,9 @@ function renderBlackjack(game, note) {
     )
     .setFooter({ text: 'Dealer stands on 17 · Blackjack pays 3:2 · 6-deck shoe' });
 
-  const text = [note, game.note, game.balance ? balanceText(game.balance, game.net) : ''].filter(Boolean).join('\n\n');
+  const text = [game.freePlay && !game.balance ? freePlayBanner(game) : '', note, game.note, game.balance ? settledText(game) : '']
+    .filter(Boolean)
+    .join('\n\n');
   if (text) embed.addFields({ name: '​', value: text });
 
   const canDouble = !over && game.player.length === 2 && !game.doubled;
@@ -587,7 +702,7 @@ async function startBlackjack(interaction, bet) {
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
 
-  const game = startGame(interaction, createBlackjackGame(bet, ctx.config, ctx.settings));
+  const game = startGame(interaction, createBlackjackGame(ctx.bet, ctx.config, ctx.settings), ctx);
   // A natural on either side settles immediately.
   if (isBlackjack(game.player) || isBlackjack(game.dealer)) await resolveBlackjack(game);
   await interaction.reply(game.render());
@@ -611,13 +726,85 @@ async function handleBlackjackClick(interaction, game, action) {
     if (!(await debitXp(game.guildId, game.userId, game.bet, levelXpBase))) {
       return interaction.reply({ content: `❌ You need another **${fmtNum(game.bet)} XP** to double down.`, ephemeral: true });
     }
+    game.paidStake += game.bet; // doubling always costs the player's own XP, even on a free play
     game.bet *= 2;
     game.doubled = true;
+    game.betWrite = Promise.resolve(game.betWrite).then(() =>
+      ActiveBet.updateOne({ gameId: game.id }, { $set: { amount: game.bet, paidAmount: game.paidStake } }).catch(() => null)
+    );
     game.player.push(game.shoe.pop());
     await resolveBlackjack(game);
     return interaction.update(game.render());
   }
   return interaction.deferUpdate();
+}
+
+// ---------------------------------------------------------------- Restarts
+
+/**
+ * Called on SIGTERM (Render redeploys/restarts): every open game is cashed out if it has winnings,
+ * otherwise refunded, and its message is updated so the player knows what happened.
+ */
+async function settleAllForShutdown() {
+  const games = [...activeGames.values()];
+  await Promise.allSettled(
+    games.map(async (game) => {
+      if (game.finished) return;
+      let rendered;
+      if (game.kind === 'blackjack') {
+        // Mid-hand blackjack can't be fairly finished for the player — give the stake back.
+        endGame(game);
+        await refundStake(game);
+        await settle(game, game.paidStake);
+        game.status = 'refunded';
+        game.note = `🔧 The bot restarted mid-hand — ${refundWord(game)}.`;
+        rendered = game.render();
+      } else if (game.canCashOut()) {
+        rendered = await cashOut(game, '🔧 The bot restarted — you were cashed out automatically.');
+      } else {
+        endGame(game);
+        await refundStake(game);
+        await settle(game, game.paidStake);
+        game.status = 'refunded';
+        rendered = game.render(`🔧 The bot restarted — ${refundWord(game)}.`);
+      }
+      if (game.message && rendered) await game.message.edit(rendered).catch(() => null);
+      await game.betWrite;
+    })
+  );
+  return games.length;
+}
+
+/**
+ * Called at startup: refunds stakes left behind by a crash (games that never settled) and tells
+ * the player in the channel where they were playing.
+ */
+async function refundOrphanedBets(client) {
+  const orphans = await ActiveBet.find({}).lean();
+  for (const bet of orphans) {
+    const claimed = await ActiveBet.findOneAndDelete({ _id: bet._id });
+    if (!claimed) continue;
+    const guild = client.guilds.cache.get(bet.guildId);
+    if (!guild) continue;
+    try {
+      const paid = bet.paidAmount ?? bet.amount;
+      if (paid > 0) await adjustXp(guild, bet.userId, paid);
+      if (bet.freePlay) await restoreFreePlay(bet.guildId, bet.userId);
+      const what = [paid > 0 ? `your **${fmtNum(paid)} XP** bet was refunded` : null, bet.freePlay ? 'your free play was given back' : null]
+        .filter(Boolean)
+        .join(' and ');
+      const channel = bet.channelId ? guild.channels.cache.get(bet.channelId) : null;
+      await channel
+        ?.send({
+          content: `♻️ <@${bet.userId}> the bot restarted during your ${bet.kind} game — ${what}.`,
+          allowedMentions: { users: [bet.userId] }
+        })
+        .catch(() => null);
+    } catch (err) {
+      console.error(`Failed to refund orphaned bet ${bet.gameId}:`, err.message);
+    }
+  }
+  return orphans.length;
 }
 
 // ---------------------------------------------------------------- Button router
@@ -652,6 +839,8 @@ module.exports = {
   startMines,
   startHighLow,
   startBlackjack,
+  settleAllForShutdown,
+  refundOrphanedBets,
   handValue,
   blackjackReturn,
   handleGambleButton

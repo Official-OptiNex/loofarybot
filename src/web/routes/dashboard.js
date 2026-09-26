@@ -1,5 +1,6 @@
 const express = require('express');
-const { requireAuth, requireGuildAccess, MANAGE_GUILD, ADMINISTRATOR } = require('../utils/authMiddleware');
+const { requireAuth, requireGuildAccess, resolveAccess, canUse, sessionHasManage, MOD_PAGES } = require('../utils/authMiddleware');
+const { inviteUrl } = require('../utils/site');
 const GuildConfig = require('../../database/models/GuildConfig');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const UserLevel = require('../../database/models/UserLevel');
@@ -13,24 +14,43 @@ const { XP_MIN, XP_MAX, XP_COOLDOWN_MS, LEVEL_XP_BASE } = require('../../config'
 
 const router = express.Router();
 
-router.get('/', requireAuth, (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   const client = req.app.locals.client;
 
-  const manageableGuilds = (req.session.guilds || [])
-    .filter((g) => {
-      const perms = BigInt(g.permissions || '0');
-      const hasPerm = (perms & BigInt(ADMINISTRATOR)) !== 0n || (perms & BigInt(MANAGE_GUILD)) !== 0n;
-      return hasPerm && client.guilds.cache.has(g.id);
-    })
-    .map((g) => {
+  // Servers the bot is in where the user is an admin (Manage Server) or a dashboard moderator.
+  const candidates = (req.session.guilds || []).filter((g) => client.guilds.cache.has(g.id));
+  const withAccess = await Promise.all(
+    candidates.map(async (g) => {
       const liveGuild = client.guilds.cache.get(g.id);
-      return { ...g, memberCount: liveGuild.memberCount, channelCount: liveGuild.channels.cache.size };
-    });
+      const access = await resolveAccess(liveGuild, req.session.user.id, g).catch(() => null);
+      return access
+        ? {
+            id: g.id,
+            name: liveGuild.name,
+            iconUrl: liveGuild.iconURL({ size: 128 }),
+            memberCount: liveGuild.memberCount,
+            channelCount: liveGuild.channels.cache.size,
+            accessLevel: access.level
+          }
+        : null;
+    })
+  );
+  const guilds = withAccess.filter(Boolean).sort((a, b) => (a.accessLevel === b.accessLevel ? a.name.localeCompare(b.name) : a.accessLevel === 'admin' ? -1 : 1));
+
+  // Servers the user manages that don't have the bot yet — offered as one-click invites.
+  const addable = (req.session.guilds || [])
+    .filter((g) => !client.guilds.cache.has(g.id) && (g.owner || sessionHasManage(g)))
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      iconUrl: g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=128` : null,
+      inviteUrl: inviteUrl(g.id)
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   res.render('dashboard', {
-    user: req.session.user,
-    guilds: manageableGuilds,
-    botTag: client.user?.tag || 'LoofaryBot',
+    guilds,
+    addable,
     totalGuilds: client.guilds.cache.size
   });
 });
@@ -112,7 +132,17 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     boosts: { current: stats.boostCount, target: nextBoostGoal, maxed: stats.boostCount >= 14 }
   };
 
+  // What this user may open: admins get everything; moderators get the pages chosen in Settings.
+  const access = {
+    level: req.access.level,
+    pages: req.access.pages ? [...req.access.pages] : null
+  };
+  const can = (page) => canUse(req.access, page);
+
   res.render('guild', {
+    access,
+    can,
+    modPageOptions: MOD_PAGES,
     viewer,
     recentMembers,
     levelStats,

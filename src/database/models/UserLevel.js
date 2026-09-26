@@ -7,6 +7,13 @@ const UserLevelSchema = new mongoose.Schema(
     xp: { type: Number, default: 0 },
     level: { type: Number, default: 0 },
     lastMessageTimestamp: { type: Number, default: 0 },
+    // /daily streaks — lastDailyDay is the UTC date (YYYY-MM-DD) of the last claim.
+    dailyStreak: { type: Number, default: 0 },
+    bestStreak: { type: Number, default: 0 },
+    lastDailyDay: { type: String, default: null },
+    // Gambling free play: an unused free bet (0 or 1) and when the last one was given.
+    freePlays: { type: Number, default: 0 },
+    lastFreePlayGrantedAt: { type: Date, default: null },
     // Personal /levels card customization.
     card: {
       color: { type: String, default: null },

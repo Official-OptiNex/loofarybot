@@ -252,7 +252,8 @@ async function execute(interaction) {
         { name: 'Level', value: `${record.level}`, inline: true },
         { name: 'XP', value: `${record.xp} / ${nextLevelXp}`, inline: true },
         { name: 'Server Rank', value: `#${rank}`, inline: true },
-        { name: 'Progress', value: progressBar(record.xp - levelStartXp, nextLevelXp - levelStartXp) }
+        { name: 'Progress', value: progressBar(record.xp - levelStartXp, nextLevelXp - levelStartXp) },
+        ...(record.dailyStreak ? [{ name: 'Daily streak', value: `🔥 ${record.dailyStreak} day(s) · best ${record.bestStreak || record.dailyStreak}`, inline: true }] : [])
       );
     if (card.text) embed.setDescription(card.text);
     if (card.backgroundUrl) embed.setImage(card.backgroundUrl);

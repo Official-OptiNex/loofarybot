@@ -120,20 +120,23 @@ async function replyOrEdit(interaction, options) {
   return interaction.reply(options);
 }
 
-async function launchGiveaway(
+/**
+ * Posts a giveaway (or drop) in `channel` and stores it. Shared by /loof and the dashboard.
+ * `ping` is the raw text to put above the embed (a role mention, @everyone or @here) or null.
+ * Throws if the bot can't post there.
+ */
+async function postGiveaway(
   client,
-  { interaction, channel, durationMs, winnerCount, prize, pingRole, colorHex, emoji, customDesc, type = 'timed', requirements = {} }
+  { channel, hostId, durationMs, winnerCount, prize, ping = null, colorHex, emoji, customDesc, type = 'timed', requirements = {} }
 ) {
-  const endTimestamp = Date.now() + durationMs;
-
   const draft = {
     prize,
     winnerCount,
-    endTimestamp,
+    endTimestamp: Date.now() + durationMs,
     colorHex,
     emoji,
     customDesc,
-    hostId: interaction.user.id,
+    hostId,
     entries: [],
     type,
     requirements: {
@@ -143,24 +146,25 @@ async function launchGiveaway(
     }
   };
 
-  const embed = buildGiveawayEmbed(draft);
-  const row = buildEntryRow(emoji, false, type);
-  const pingContent = pingRole ? `${pingRole}` : undefined;
+  const msg = await channel.send({
+    content: ping || undefined,
+    embeds: [buildGiveawayEmbed(draft)],
+    components: [buildEntryRow(emoji, false, type)]
+  });
+  const giveaway = await Giveaway.create({ messageId: msg.id, channelId: channel.id, guildId: channel.guild.id, ...draft });
+  scheduleGiveawayEnd(client, msg.id, durationMs);
+  return { message: msg, giveaway };
+}
 
+async function launchGiveaway(client, { interaction, pingRole, ...options }) {
   try {
-    const msg = await channel.send({ content: pingContent, embeds: [embed], components: [row] });
-
-    await Giveaway.create({
-      messageId: msg.id,
-      channelId: channel.id,
-      guildId: interaction.guildId,
-      ...draft
+    const { message } = await postGiveaway(client, {
+      ...options,
+      hostId: interaction.user.id,
+      ping: pingRole ? `${pingRole}` : null
     });
-
-    scheduleGiveawayEnd(client, msg.id, durationMs);
-
     return await replyOrEdit(interaction, {
-      content: `✅ ${type === 'drop' ? 'Drop' : 'Giveaway'} started in ${channel}! [Jump to Message](${msg.url})`
+      content: `✅ ${options.type === 'drop' ? 'Drop' : 'Giveaway'} started in ${options.channel}! [Jump to Message](${message.url})`
     });
   } catch (err) {
     console.error('Error posting giveaway message:', err);
@@ -168,6 +172,45 @@ async function launchGiveaway(
       content: '❌ Failed to send giveaway message. Ensure the bot has permissions in the target channel.'
     });
   }
+}
+
+async function fetchGiveawayMessage(client, g) {
+  const channel = await client.channels.fetch(g.channelId).catch(() => null);
+  const message = channel ? await channel.messages.fetch(g.messageId).catch(() => null) : null;
+  return { channel, message };
+}
+
+// Re-renders a running giveaway after its settings changed, and moves its timer if the end moved.
+async function refreshGiveaway(client, g) {
+  const { message } = await fetchGiveawayMessage(client, g);
+  if (message) {
+    await message.edit({ embeds: [buildGiveawayEmbed(g)], components: [buildEntryRow(g.emoji, false, g.type)] }).catch(() => null);
+  }
+  if (!g.ended) scheduleGiveawayEnd(client, g.messageId, g.endTimestamp - Date.now());
+  return !!message;
+}
+
+/** Picks a new winner from an ended timed giveaway (eligible entrants only). Returns the user ID or an error. */
+async function rerollGiveaway(client, g) {
+  if (!g.ended) return { error: 'That giveaway has not ended yet.' };
+  if (g.type === 'drop') return { error: "Drops can't be rerolled — their winners are whoever claimed first." };
+  const { channel } = await fetchGiveawayMessage(client, g);
+  let pool = [...g.entries];
+  if (hasRequirements(g.requirements) && channel?.guild) pool = await filterEligible(channel.guild, g, pool);
+  if (pool.length === 0) return { error: 'No eligible entries to reroll from.' };
+
+  const winner = pool[Math.floor(Math.random() * pool.length)];
+  await Giveaway.updateOne({ _id: g._id }, { $push: { winners: winner } });
+  if (channel) channel.send(`🎉 New winner for **${g.prize}**: <@${winner}>!`).catch(() => null);
+  return { winner };
+}
+
+/** Deletes a giveaway's message and record, cancelling its timer. */
+async function deleteGiveaway(client, g) {
+  clearScheduledEnd(g.messageId);
+  const { message } = await fetchGiveawayMessage(client, g);
+  if (message) await message.delete().catch(() => null);
+  await Giveaway.deleteOne({ _id: g._id });
 }
 
 function scheduleGiveawayEnd(client, messageId, delayMs) {
@@ -218,6 +261,7 @@ async function finishGiveaway(client, g) {
     const shuffled = pool.sort(() => 0.5 - Math.random());
     winners = shuffled.slice(0, Math.min(g.winnerCount, shuffled.length));
   }
+  await Giveaway.updateOne({ _id: g._id }, { $set: { winners } });
   const winnerMentions = winners.length > 0 ? winners.map((id) => `<@${id}>`).join(', ') : 'No valid entries.';
 
   if (msg) {
@@ -344,7 +388,12 @@ module.exports = {
   describeRequirements,
   checkRequirements,
   replyOrEdit,
+  postGiveaway,
   launchGiveaway,
+  refreshGiveaway,
+  rerollGiveaway,
+  deleteGiveaway,
+  scheduleGiveawayEnd,
   finishGiveaway,
   finishGiveawayById,
   handleButtonInteraction,

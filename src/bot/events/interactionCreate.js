@@ -4,6 +4,7 @@ const { handleRoleButton, handleRoleSelect } = require('../cogs/modules/reaction
 const { handleVote } = require('../cogs/modules/polls');
 const { handleHelpSelect } = require('../cogs/modules/help');
 const loofCommand = require('../commands/loof');
+const { reportError } = require('../utils/errorReporter');
 const honeypotCommand = require('../commands/honeypot');
 
 // Routes a component's customId to its feature by prefix.
@@ -40,7 +41,10 @@ module.exports = function registerInteractionCreateEvent(client) {
 
       await command.execute(interaction, client);
     } catch (err) {
-      console.error('Error handling interaction:', err);
+      const label = interaction.isChatInputCommand?.()
+        ? `/${interaction.commandName}${interaction.options.getSubcommand(false) ? ' ' + interaction.options.getSubcommand(false) : ''} failed`
+        : `${interaction.customId ? `Component "${interaction.customId.split(':')[0]}"` : 'Interaction'} failed`;
+      reportError(err, { guildId: interaction.guildId, context: label });
       if (!interaction.replied && !interaction.deferred) {
         await interaction
           .reply({ content: '⚠️ An internal error occurred while processing your command.', ephemeral: true })

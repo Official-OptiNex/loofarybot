@@ -1,6 +1,7 @@
 const { handleMessageXp } = require('../cogs/modules/leveling');
 const { handleHoneypotMessage } = require('../cogs/modules/honeypot');
 const GuildConfig = require('../../database/models/GuildConfig');
+const { reportError } = require('../utils/errorReporter');
 
 module.exports = function registerMessageCreateEvent(client) {
   client.on('messageCreate', async (message) => {
@@ -15,7 +16,7 @@ module.exports = function registerMessageCreateEvent(client) {
       }
       await handleMessageXp(message);
     } catch (err) {
-      console.error('Error in messageCreate handler:', err);
+      reportError(err, { guildId: message.guildId, context: 'Message handling failed' });
     }
   });
 };

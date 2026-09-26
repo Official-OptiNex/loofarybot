@@ -1,0 +1,76 @@
+    <!-- REACTION ROLES (same as /reactionrole create · add · remove · delete · list) -->
+    <div class="tab-panel hidden" id="tab-reactionroles">
+      <div class="module-hero">
+        <div class="hero-icon green">🎭</div>
+        <div>
+          <h1>Reaction Roles</h1>
+          <p>Self-assign role panels with buttons or a dropdown — the same as <code>/reactionrole</code>.</p>
+          <div class="hero-status" id="rrStatus"></div>
+        </div>
+        <div class="hero-toggle"><button class="btn" onclick="openPanelEditor()">+ New panel</button></div>
+      </div>
+
+      <div class="split">
+        <div>
+          <div id="rrList"><div class="card empty-state">Loading…</div></div>
+
+          <div class="card" id="rrEditor" style="display:none; margin-top:1.25rem;">
+            <h3 style="margin-top:0;" id="rrEditorTitle">New role panel</h3>
+            <input type="hidden" id="rrId">
+            <div class="setting-row" id="rrChannelRow">
+              <div class="setting-title">Post in</div>
+              <div class="setting-control"><select id="rrChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Title</div>
+              <div class="setting-control"><input id="rrTitle" maxlength="256" placeholder="Pick your roles"></div>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-title">Description <span class="muted" style="font-weight:400;">(optional)</span></div>
+              <textarea id="rrDesc" rows="2" maxlength="2000" placeholder="Choose the pings you want to get."></textarea>
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Color</div>
+              <div class="setting-control"><input type="color" id="rrColor" value="#5865F2" style="flex:0 0 64px; min-width:64px;"></div>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-title">Style</div>
+              <div class="radio-cards">
+                <label class="radio-card"><input type="radio" name="rrMode" value="buttons" checked><span class="rc-body"><span class="rc-title">Buttons</span><span class="rc-desc" style="display:block;">One toggle button per role</span></span></label>
+                <label class="radio-card"><input type="radio" name="rrMode" value="select"><span class="rc-body"><span class="rc-title">Dropdown · many</span><span class="rc-desc" style="display:block;">Pick any number of roles</span></span></label>
+                <label class="radio-card"><input type="radio" name="rrMode" value="select_single"><span class="rc-body"><span class="rc-title">Dropdown · one</span><span class="rc-desc" style="display:block;">Pick exactly one role</span></span></label>
+              </div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Roles</div><div class="setting-help">Up to 25. Label and emoji are optional — the label defaults to the role name. Roles marked ⚠️ are above LoofaryBot and can't be given.</div></div>
+              <div id="rrRoleRows"></div>
+              <div><button class="btn secondary small" type="button" onclick="addPanelRoleRow()">+ Add role</button></div>
+            </div>
+            <div style="display:flex; gap:0.6rem; justify-content:flex-end; flex-wrap:wrap; margin-top:0.9rem;">
+              <button class="btn secondary" onclick="closePanelEditor()">Cancel</button>
+              <button class="btn" id="rrSaveBtn" onclick="savePanel()">Post panel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sticky-preview">
+          <div class="card" style="margin-bottom:0;">
+            <h3 style="margin-top:0;">Preview</h3>
+            <div class="discord-chat">
+              <div class="channel-name" id="rrpChannel"># roles</div>
+              <div class="discord-message-preview">
+                <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                <div class="discord-message-body">
+                  <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
+                  <div class="discord-embed-preview" id="rrpEmbed">
+                    <div class="title" id="rrpTitle"></div>
+                    <div class="desc" id="rrpDesc"></div>
+                  </div>
+                  <div class="mock-buttons" id="rrpComponents"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

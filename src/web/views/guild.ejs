@@ -28,22 +28,35 @@
     login: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l4-4-4-4M14 12H4"/>',
     star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
     target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
-    curve: '<path d="M3 3v18h18"/><path d="M6.5 15c3-7 5.5-7 8 0 1.5 4 3 3.5 5-2"/>'
+    curve: '<path d="M3 3v18h18"/><path d="M6.5 15c3-7 5.5-7 8 0 1.5 4 3 3.5 5-2"/>',
+    gift: '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8.5h14V12M12 8v12.5"/><path d="M12 8C10.5 4.5 7 4 7 6.2 7 8 12 8 12 8zM12 8c1.5-3.5 5-4 5-1.8C17 8 12 8 12 8z"/>',
+    tag: '<path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.4 1.4 0 0 1 0 2l-6.7 6.7a1.4 1.4 0 0 1-2 0z"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/>',
+    chat: '<path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
+    radio: '<circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
   };
   const icon = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
 
   const NAV = [
     ['overview', 'home', 'Overview'],
+    ['giveaways', 'gift', 'Giveaways'],
     ['welcome', 'welcome', 'Welcome'],
     ['honeypot', 'shield', 'Honeypot'],
     ['leveling', 'trending', 'Leveling'],
     ['autorole', 'userplus', 'Auto-Role'],
+    ['reactionroles', 'tag', 'Reaction Roles'],
     ['gambling', 'dice', 'Gambling'],
+    ['community', 'chat', 'Polls & Reminders'],
+    ['moderation', 'lock', 'Moderation'],
     ['logs', 'file', 'Logs'],
+    ['alerts', 'radio', 'Alerts'],
     ['leaderboard', 'trophy', 'Leaderboard'],
-    ['commands', 'terminal', 'Commands']
-  ];
+    ['commands', 'terminal', 'Commands'],
+    ['settings', 'gear', 'Server settings']
+  ].filter(([tab]) => tab === 'overview' || (tab === 'logs' ? can('logs') || can('logviewer') : can(tab)));
+  const isAdmin = access.level === 'admin';
   const logChannelSet = !!(config.logChannelId && channels.find(c => c.id === config.logChannelId));
   // [tab, label, enabled flag] — the switches mirror each module's on/off setting.
   const MODULES = [
@@ -52,10 +65,12 @@
     ['leveling', 'Leveling', config.levelingEnabled !== false],
     ['autorole', 'Auto-Role', config.autoRoleEnabled !== false],
     ['gambling', 'Gambling', gambling.enabled],
-    ['logs', 'Logs', config.logsEnabled !== false]
-  ];
+    ['logs', 'Logs', config.logsEnabled !== false],
+    ['alerts', 'Alerts', config.socialAlertsEnabled !== false]
+  ].filter(([tab]) => can(tab) || (tab === 'logs' && can('logviewer')));
+  // Moderators see module switches only for pages they're allowed to edit.
   const sideToggle = (key, on) =>
-    `<label class="switch sm" title="Turn ${key} on or off"><input type="checkbox" class="module-toggle" data-module="${key}" ${on ? 'checked' : ''} aria-label="Enable ${key}"><span class="track"></span></label>`;
+    `<label class="switch sm" title="${can(key) ? `Turn ${key} on or off` : 'Only admins can change this'}"><input type="checkbox" class="module-toggle" data-module="${key}" ${on ? 'checked' : ''} ${can(key) ? '' : 'disabled'} aria-label="Enable ${key}"><span class="track"></span></label>`;
   const catches = (config.honeypotKicks || 0) + (config.honeypotSoftbans || 0) + (config.honeypotBans || 0);
   const pct = (cur, target) => Math.max(0, Math.min(100, target > 0 ? (cur / target) * 100 : 0));
 %>
@@ -107,12 +122,12 @@
         <input id="globalSearch" type="search" placeholder="Search settings and commands …" autocomplete="off" aria-label="Search settings and commands">
         <div class="search-results" id="searchResults" role="listbox"></div>
       </div>
-      <a class="appbar-icon" href="/dashboard/<%= guild.id %>/embed" title="Embed Builder" aria-label="Embed Builder"><%- icon('brush') %></a>
+      <% if (can('embed')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/embed" title="Embed Builder" aria-label="Embed Builder"><%- icon('brush') %></a><% } %>
       <button class="appbar-icon" data-tab="logs" title="Server logs" aria-label="Server logs"><%- icon('bell') %><% if (!logChannelSet) { %><span class="badge-dot"></span><% } %></button>
       <div class="appbar-user">
         <div class="avatar-wrap"><img src="<%= viewer.avatarUrl %>" alt=""><span class="online"></span></div>
         <div class="user-meta">
-          <div><%= viewer.username %></div>
+          <div><%= viewer.username %><% if (!isAdmin) { %> <span class="badge boost" style="font-size:0.6rem;">Moderator</span><% } %></div>
           <a href="/auth/logout">Log out</a>
         </div>
       </div>
@@ -270,7 +285,7 @@
         </div>
         <div class="card">
           <h3>🖌️ Quick Links</h3>
-          <p class="muted"><a href="/dashboard/<%= guild.id %>/embed">Open the Embed Builder →</a></p>
+          <% if (can('embed')) { %><p class="muted"><a href="/dashboard/<%= guild.id %>/embed">Open the Embed Builder →</a></p><% } %>
           <p class="muted" style="margin-top:0.4rem;">Use the tabs above to configure everything else.</p>
         </div>
       </div>
@@ -393,7 +408,7 @@
 
       <div class="savebar">
         <span class="hint">“Send test” posts the current form to the channel, using you as the new member.</span>
-        <a class="btn secondary" href="/dashboard/<%= guild.id %>/embed?welcome=1">🖌️ Design in Embed Builder</a>
+        <% if (can('embed')) { %><a class="btn secondary" href="/dashboard/<%= guild.id %>/embed?welcome=1">🖌️ Design in Embed Builder</a><% } %>
         <button class="btn secondary" onclick="testWelcome()">📨 Send test</button>
         <button class="btn" onclick="saveWelcome()">Save changes</button>
       </div>
@@ -537,6 +552,7 @@
         <button data-sub="lv-mult">✖️ Multipliers</button>
         <button data-sub="lv-msg">📣 Level-up messages</button>
         <button data-sub="lv-colors">🎨 Level colors</button>
+        <button data-sub="lv-daily">🔥 Daily streaks</button>
         <button data-sub="lv-cards">🪪 Rank cards</button>
       </div>
 
@@ -656,6 +672,40 @@
         </div>
       </div>
 
+      <% const dly = Object.assign({ enabled: true, baseXp: 50, bonusPerDay: 10, maxBonus: 200, milestoneEvery: 7, milestoneBonus: 250 }, (config.daily && (config.daily.toObject ? config.daily.toObject() : config.daily)) || {}); %>
+      <div class="subpage hidden" data-page="lv-daily">
+        <div class="two-col">
+          <div class="card settings-card">
+            <div class="setting-row">
+              <div><div class="setting-title">/daily rewards</div><div class="setting-help">Members claim XP once per day (resets at midnight UTC). Consecutive days build a streak for bigger rewards; missing a day starts it over.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="dEnabled" <%= dly.enabled !== false ? 'checked' : '' %>><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Base reward</div><div class="setting-help">XP every claim.</div></div>
+              <div class="setting-control"><input type="number" id="dBase" min="0" value="<%= dly.baseXp %>" class="daily-input"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Streak bonus</div><div class="setting-help">Extra XP per streak day, up to a cap.</div></div>
+              <div class="setting-control">
+                <span class="muted" style="font-size:0.8rem;">+</span><input type="number" id="dBonus" min="0" value="<%= dly.bonusPerDay %>" class="daily-input" style="flex:0 0 90px; min-width:90px;">
+                <span class="muted" style="font-size:0.8rem;">per day, max</span><input type="number" id="dMax" min="0" value="<%= dly.maxBonus %>" class="daily-input" style="flex:0 0 100px; min-width:100px;">
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Milestones</div><div class="setting-help">A one-off bonus every N days (0 = off).</div></div>
+              <div class="setting-control">
+                <span class="muted" style="font-size:0.8rem;">every</span><input type="number" id="dEvery" min="0" value="<%= dly.milestoneEvery %>" class="daily-input" style="flex:0 0 80px; min-width:80px;">
+                <span class="muted" style="font-size:0.8rem;">days: +</span><input type="number" id="dMilestone" min="0" value="<%= dly.milestoneBonus %>" class="daily-input" style="flex:0 0 100px; min-width:100px;">
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top:0;">Reward by streak day</h3>
+            <table class="payout-table" id="dailyTable"></table>
+          </div>
+        </div>
+      </div>
+
       <div class="subpage hidden" data-page="lv-cards">
         <div class="card settings-card">
           <div class="setting-row">
@@ -735,6 +785,16 @@
             <div><div class="setting-title">Allowed channel</div><div class="setting-help">Keep gambling out of general chat.</div></div>
             <div class="setting-control"><select id="gChannel"><%- channelOptions(gambling.channelId, 'Any channel') %></select></div>
           </div>
+          <div class="setting-row">
+            <div><div class="setting-title">🎟️ Free play when broke</div><div class="setting-help">A player whose loss leaves them below the minimum bet gets one free bet — they keep any winnings. At most once per cooldown so it can't be farmed.</div></div>
+            <div class="setting-control">
+              <label class="switch sm"><input type="checkbox" id="gFreePlay" <%= gambling.freePlay.enabled ? 'checked' : '' %>><span class="track"></span></label>
+              <input type="number" id="gFreeAmount" min="1" value="<%= gambling.freePlay.amount %>" style="flex:0 0 90px; min-width:90px;" aria-label="Free play XP">
+              <span class="muted" style="font-size:0.8rem;">XP · every</span>
+              <input type="number" id="gFreeHours" min="0" value="<%= gambling.freePlay.cooldownMs / 3600000 %>" style="flex:0 0 70px; min-width:70px;" aria-label="Cooldown hours">
+              <span class="muted" style="font-size:0.8rem;">h</span>
+            </div>
+          </div>
         </div>
         <div class="card">
           <h3 style="margin-top:0;">Payouts at this edge</h3>
@@ -753,12 +813,12 @@
           <p>Edits, deletes, joins, leaves, voice and role changes — kept for 30 days and searchable here.</p>
           <div class="hero-status"><%- channelName(config.logChannelId) ? chip('good', 'Also posting to ' + esc(channelName(config.logChannelId))) : chip('', 'Dashboard only (no Discord channel)') %></div>
         </div>
-        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('logs', config.logsEnabled !== false, null) %></div>
+        <% if (can('logs')) { %><div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('logs', config.logsEnabled !== false, null) %></div><% } %>
       </div>
 
       <div class="subtabs" data-subtabs>
         <button class="active" data-sub="lg-view">🔎 Log viewer</button>
-        <button data-sub="lg-settings">⚙️ Settings</button>
+        <% if (can('logs')) { %><button data-sub="lg-settings">⚙️ Settings</button><% } %>
       </div>
 
       <div class="subpage" data-page="lg-view">
@@ -797,6 +857,213 @@
       </div>
     </div>
 
+    <!-- ALERTS -->
+    <div class="tab-panel hidden" id="tab-alerts">
+      <div class="module-hero">
+        <div class="hero-icon red">📡</div>
+        <div>
+          <h1>Go-live & Upload Alerts</h1>
+          <p>Post when a Twitch channel goes live or a YouTube channel uploads — with your own message, embed and ping.</p>
+          <div class="hero-status" id="alertsStatus"></div>
+        </div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('alerts', config.socialAlertsEnabled !== false, null) %></div>
+      </div>
+      <details class="card" id="twitchSetupNote" style="display:none; padding:1rem 1.4rem;">
+        <summary style="cursor:pointer; font-weight:600;">🟣 Optional: use Twitch's official API</summary>
+        <p class="muted" style="font-size:0.86rem; margin:0.6rem 0 0;">
+          Twitch alerts already work for any streamer — just paste their twitch.tv link. Right now the bot uses the same public
+          connection twitch.tv's website uses, which Twitch could change without notice. For the officially supported route, create a
+          free app at <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console/apps</a>
+          (OAuth redirect <code>http://localhost</code>) and add <code>TWITCH_CLIENT_ID</code> and <code>TWITCH_CLIENT_SECRET</code>
+          on Render — the bot switches over automatically.
+        </p>
+      </details>
+      <div class="split">
+        <div>
+          <div id="alertList"></div>
+          <button class="btn" id="alertAddBtn" onclick="openAlertEditor()">+ Add alert</button>
+
+          <div class="card" id="alertEditor" style="display:none; margin-top:1.25rem;">
+            <h3 style="margin-top:0;" id="alertEditorTitle">New alert</h3>
+            <input type="hidden" id="aId">
+            <div class="radio-cards" style="margin-bottom:0.5rem;">
+              <label class="radio-card"><input type="radio" name="aPlatform" value="twitch" checked><span class="rc-body"><span class="rc-title">🟣 Twitch</span><span class="rc-desc" style="display:block;">When a channel goes live</span></span></label>
+              <label class="radio-card"><input type="radio" name="aPlatform" value="youtube"><span class="rc-body"><span class="rc-title">🔴 YouTube</span><span class="rc-desc" style="display:block;">When a channel uploads</span></span></label>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Channel to follow</div><div class="setting-help" id="aAccountHelp">Twitch username</div></div>
+              <div class="setting-control"><input id="aAccount" placeholder="e.g. loofary"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Post in</div>
+              <div class="setting-control"><select id="aChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Ping</div><div class="setting-help">Leave empty for no ping.</div></div>
+              <div class="setting-control">
+                <select id="aPing">
+                  <option value="">No ping</option>
+                  <option value="<%= guild.id %>">@everyone</option>
+                  <% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Message</div><div class="setting-help">Placeholders: <code>{name}</code> <code>{title}</code> <code>{url}</code> <code>{game}</code> (Twitch). The ping goes in front automatically.</div></div>
+              <textarea id="aMessage" rows="2" maxlength="1500"></textarea>
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Embed</div>
+              <div class="setting-control">
+                <label class="switch" title="Show an embed"><input type="checkbox" id="aEmbed" checked><span class="track"></span></label>
+                <label class="switch" title="Show the stream thumbnail / video image"><input type="checkbox" id="aImage" checked><span class="track"></span></label>
+                <span class="muted" style="font-size:0.78rem;">embed · image</span>
+                <input type="color" id="aColor" style="flex:0 0 64px; min-width:64px;">
+              </div>
+            </div>
+            <div class="setting-row stack">
+              <input id="aTitle" maxlength="256" placeholder="Embed title">
+              <textarea id="aDesc" rows="2" maxlength="2000" placeholder="Embed description"></textarea>
+            </div>
+            <div style="display:flex; gap:0.6rem; justify-content:flex-end; flex-wrap:wrap;">
+              <button class="btn secondary" onclick="closeAlertEditor()">Cancel</button>
+              <button class="btn" id="aSaveBtn" onclick="saveAlert()">Save alert</button>
+            </div>
+          </div>
+        </div>
+        <div class="sticky-preview">
+          <div class="card" style="margin-bottom:0;">
+            <h3 style="margin-top:0;">Preview</h3>
+            <div class="discord-chat">
+              <div class="channel-name" id="apChannel"># alerts</div>
+              <div class="discord-message-preview">
+                <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                <div class="discord-message-body">
+                  <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
+                  <div class="desc" id="apContent"></div>
+                  <div class="discord-embed-preview" id="apEmbed" style="margin-top:0.4rem;">
+                    <div style="font-size:0.8rem; font-weight:600; margin-bottom:0.3rem;" id="apAuthor"></div>
+                    <div class="title" id="apTitle" style="color:#00a8fc;"></div>
+                    <div class="desc" id="apDesc"></div>
+                    <div id="apImage" style="margin-top:0.5rem; height:120px; border-radius:4px; background:linear-gradient(135deg,#3a3d44,#23252a); display:flex; align-items:center; justify-content:center; color:#949ba4; font-size:0.8rem;">thumbnail</div>
+                  </div>
+                  <div style="margin-top:0.4rem;"><span class="btn secondary small" style="pointer-events:none;" id="apButton">Watch stream</span></div>
+                </div>
+              </div>
+            </div>
+            <p class="muted" style="font-size:0.78rem; margin:0.75rem 0 0;">Shown with sample data. Stream-end: the alert is edited to “Stream ended · streamed for 2h 5m” (no second ping).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot }; %>
+    <% if (can('giveaways')) { %><%- include('partials/tab-giveaways', partialLocals) %><% } %>
+    <% if (can('reactionroles')) { %><%- include('partials/tab-reactionroles', partialLocals) %><% } %>
+    <% if (can('community')) { %><%- include('partials/tab-community', partialLocals) %><% } %>
+    <% if (can('moderation')) { %><%- include('partials/tab-moderation', partialLocals) %><% } %>
+
+    <% if (isAdmin) { %>
+    <!-- SETTINGS -->
+    <% const dAccess = Object.assign({ modRoleIds: [], modPages: ['leaderboard', 'commands', 'logviewer'] }, (config.dashboardAccess && (config.dashboardAccess.toObject ? config.dashboardAccess.toObject() : config.dashboardAccess)) || {}); %>
+    <div class="tab-panel hidden" id="tab-settings">
+      <div class="module-hero">
+        <div class="hero-icon">⚙️</div>
+        <div>
+          <h1>Server Settings</h1>
+          <p>Moderator access, bot problem alerts, change history and backups. Only admins can see this page.</p>
+        </div>
+      </div>
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="st-access">👮 Mod access</button>
+        <button data-sub="st-alerts">🚨 Bot alerts</button>
+        <button data-sub="st-history">🕘 Change history</button>
+        <button data-sub="st-backups">💾 Backups</button>
+      </div>
+
+      <div class="subpage" data-page="st-access">
+        <div class="two-col">
+          <div class="card">
+            <h3 style="margin-top:0;">Moderator roles</h3>
+            <p class="muted" style="font-size:0.85rem;">Members with any of these roles can open a limited dashboard. People with Manage Server always get full access.</p>
+            <input type="search" id="modRoleFilter" placeholder="Filter roles…" style="margin-bottom:0.6rem;">
+            <div id="modRoleList" style="max-height:320px; overflow-y:auto; display:flex; flex-direction:column; gap:0.1rem;">
+              <% roles.forEach(r => { %>
+                <label style="display:flex; align-items:center; gap:0.55rem; margin:0; padding:0.35rem 0.2rem; font-weight:500; color:var(--text-main);" data-name="<%= r.name.toLowerCase() %>">
+                  <input type="checkbox" class="mod-role" value="<%= r.id %>" style="width:auto;" <%= dAccess.modRoleIds.includes(r.id) ? 'checked' : '' %>> @<%= r.name %>
+                </label>
+              <% }) %>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top:0;">What moderators can use</h3>
+            <p class="muted" style="font-size:0.85rem;">Overview is always visible. Pages they can open, they can also change. Server Settings is admin-only.</p>
+            <% Object.entries(modPageOptions).forEach(([key, label]) => { %>
+              <div class="setting-row" style="padding:0.55rem 0;">
+                <div class="setting-title" style="font-weight:500;"><%= label %></div>
+                <div class="setting-control"><label class="switch sm"><input type="checkbox" class="mod-page" value="<%= key %>" <%= dAccess.modPages.includes(key) ? 'checked' : '' %>><span class="track"></span></label></div>
+              </div>
+            <% }) %>
+          </div>
+        </div>
+        <div class="savebar"><button class="btn" onclick="saveModAccess()">Save access</button></div>
+      </div>
+
+      <div class="subpage hidden" data-page="st-alerts">
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">Bot alerts channel</div><div class="setting-help">LoofaryBot posts here when something needs fixing: missing permissions, a role above the bot, a deleted channel, or an error. Repeats are grouped (once per 10 minutes).</div></div>
+            <div class="setting-control"><select id="alertsChannel"><%- channelOptions(config.alertsChannelId, 'Off') %></select></div>
+          </div>
+          <div class="setting-row stack"><div class="setting-help">Tip: use a private staff channel. The bot owner can also set <code>ERROR_ALERT_CHANNEL_ID</code> on Render to get every server's errors (with details) in one place.</div></div>
+        </div>
+        <div class="savebar"><button class="btn" onclick="saveAlertsChannel()">Save</button></div>
+      </div>
+
+      <div class="subpage hidden" data-page="st-history">
+        <div class="card">
+          <div class="log-toolbar">
+            <select id="auditSection">
+              <option value="">All sections</option>
+              <% ['Modules', 'Welcome', 'Honeypot', 'Leveling', 'Auto-Role', 'Gambling', 'Logs', 'Alerts', 'Embed Builder', 'Settings', 'Backups', 'Overview'].forEach(sct => { %><option value="<%= sct %>"><%= sct %></option><% }) %>
+            </select>
+            <button class="btn secondary small" onclick="loadAudit(1)">↻ Refresh</button>
+          </div>
+          <div class="log-list" id="auditList"><div class="empty-state">Loading…</div></div>
+          <div class="pagination">
+            <button class="btn secondary small" id="auditPrev" onclick="loadAudit(auditState.page - 1)">← Newer</button>
+            <span class="muted" id="auditPageLabel"></span>
+            <button class="btn secondary small" id="auditNext" onclick="loadAudit(auditState.page + 1)">Older →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="st-backups">
+        <div class="two-col">
+          <div class="card">
+            <h3 style="margin-top:0;">Export & import</h3>
+            <p class="muted" style="font-size:0.85rem;">A file with every LoofaryBot setting for this server: modules, welcome, alerts and embed templates. Optionally include members' XP and streaks.</p>
+            <label style="display:flex; align-items:center; gap:0.5rem; font-weight:500; color:var(--text-main);"><input type="checkbox" id="exportXp" style="width:auto;"> Include member XP</label>
+            <button class="btn secondary" style="margin-top:0.6rem;" onclick="exportSettings()">⬇️ Download settings file</button>
+            <div class="subpanel">
+              <p class="muted" style="font-size:0.85rem;">Import replaces the current setup. A backup is taken automatically first, so you can undo it.</p>
+              <input type="file" id="importFile" accept="application/json,.json">
+              <div id="importPreview" style="margin-top:0.75rem;"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              <h3 style="margin:0;">Backups</h3>
+              <button class="btn small" onclick="createBackup()">+ Back up now</button>
+            </div>
+            <p class="muted" style="font-size:0.82rem;">Automatic daily backups (last 7 kept) include settings and member XP. MongoDB's free tier has no backups of its own.</p>
+            <div id="backupList" class="log-list"><div class="empty-state">Loading…</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <% } %>
+
     <!-- COMMANDS -->
     <div class="tab-panel hidden" id="tab-commands">
       <div class="module-hero">
@@ -820,7 +1087,7 @@
             <div class="cmd-card-head">
               <div class="hero-icon"><%= g.icon %></div>
               <div><h3><%= g.group %></h3><p><%= g.blurb %></p></div>
-              <% if (g.tab) { %><a href="#<%= g.tab %>" data-tab="<%= g.tab %>">Settings →</a><% } %>
+              <% if (g.tab && can(g.tab)) { %><a href="#<%= g.tab %>" data-tab="<%= g.tab %>">Open page →</a><% } %>
             </div>
             <div class="cmd-list">
               <% g.commands.forEach(c => { %>
@@ -853,6 +1120,23 @@
           <button class="btn secondary small" id="lbNext" onclick="changeLeaderboardPage(1)">Next →</button>
         </div>
       </div>
+      <% if (can('leveling')) { %>
+      <div class="card settings-card" id="memberXpCard">
+        <div class="setting-row">
+          <div><div class="setting-title">✏️ Adjust a member's XP</div><div class="setting-help">Same as <code>/levels givexp · takexp · resetxp</code>. Giving XP also hands out any role rewards they reach; resetting keeps roles they already earned.</div></div>
+          <div class="setting-control member-picker">
+            <input id="mxUser" placeholder="Member name" autocomplete="off" aria-label="Member">
+            <select id="mxAction" style="flex:0 0 120px; min-width:120px;" aria-label="Action">
+              <option value="give">Give XP</option>
+              <option value="take">Take XP</option>
+              <option value="reset">Reset to 0</option>
+            </select>
+            <input type="number" id="mxAmount" min="1" placeholder="Amount" style="flex:0 0 110px; min-width:110px;" aria-label="Amount">
+            <button class="btn" id="mxBtn" onclick="applyMemberXp()">Apply</button>
+          </div>
+        </div>
+      </div>
+      <% } %>
     </div>
     </main>
   </div>
@@ -862,6 +1146,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
   <script src="/js/mentions.js"></script>
+  <script src="/js/dash-manage.js"></script>
   <script>
     const guildId = '<%= guild.id %>';
     const roles = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
@@ -881,13 +1166,17 @@
     let joinChart = null; // created once join data loads
 
     // --- Navigation (sidebar, module rows and app-bar buttons all carry data-tab) ---
+    const ALLOWED_TABS = <%- JSON.stringify(NAV.map((n) => n[0])) %>;
     function showTab(tab) {
       const panel = document.getElementById(`tab-${tab}`);
-      if (!panel) return;
+      if (!panel || !ALLOWED_TABS.includes(tab)) return;
       document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
       panel.classList.remove('hidden');
       document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
       if (tab === 'leaderboard') loadLeaderboard();
+      if (tab === 'alerts' && !alertState.loaded) loadAlerts();
+      if (typeof onManageTabShown === 'function') onManageTabShown(tab); // giveaways, role panels, polls, moderation
+      if (tab === 'settings' && !auditState.loaded) { auditState.loaded = true; loadAudit(1); loadBackups(); }
       if (tab === 'logs' && !logState.loaded) {
         logState.loaded = true;
         loadLogs(1);
@@ -1161,7 +1450,10 @@
           houseEdge: document.getElementById('gEdge').value,
           minBet: document.getElementById('gMin').value,
           maxBet: document.getElementById('gMax').value,
-          channelId: document.getElementById('gChannel').value
+          channelId: document.getElementById('gChannel').value,
+          freePlayEnabled: document.getElementById('gFreePlay').checked,
+          freePlayAmount: document.getElementById('gFreeAmount').value,
+          freePlayCooldownHours: document.getElementById('gFreeHours').value
         },
         '✅ Gambling settings saved.'
       );
@@ -1422,6 +1714,315 @@
       } catch (err) {
         showToast(`❌ ${err.message}`);
       }
+    }
+
+    // --- Daily streaks ---
+    function readDaily() {
+      const n = (id) => Number(document.getElementById(id).value) || 0;
+      return { enabled: document.getElementById('dEnabled').checked, baseXp: n('dBase'), bonusPerDay: n('dBonus'), maxBonus: n('dMax'), milestoneEvery: n('dEvery'), milestoneBonus: n('dMilestone') };
+    }
+    function renderDailyTable() {
+      const d = readDaily();
+      const days = [1, 2, 3, 5, 7, 10, 14, 21, 30];
+      const rows = days.map((day) => {
+        const bonus = Math.min(d.bonusPerDay * (day - 1), d.maxBonus);
+        const milestone = d.milestoneEvery > 0 && day % d.milestoneEvery === 0 ? d.milestoneBonus : 0;
+        return `<tr><td>Day ${day}</td><td class="muted">${d.baseXp} + ${bonus}${milestone ? ` + 🏅${milestone}` : ''}</td><td>+${fmt(d.baseXp + bonus + milestone)} XP</td></tr>`;
+      });
+      document.getElementById('dailyTable').innerHTML = '<tr><th>Streak</th><th>Base + bonus</th><th style="text-align:right;">Reward</th></tr>' + rows.join('');
+    }
+    document.querySelectorAll('.daily-input').forEach((el) => el.addEventListener('input', renderDailyTable));
+    renderDailyTable();
+
+    // --- Go-live / upload alerts ---
+    const alertState = { loaded: false, subs: [], twitch: false, defaults: {} };
+    const aPlatform = () => (document.querySelector('input[name="aPlatform"]:checked') || {}).value || 'twitch';
+
+    async function loadAlerts() {
+      alertState.loaded = true;
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/alerts`);
+        const data = await res.json();
+        alertState.subs = data.subscriptions || [];
+        alertState.twitchOfficial = data.twitchOfficialApi;
+        alertState.defaults = data.defaults || {};
+        renderAlertList();
+      } catch {
+        document.getElementById('alertList').innerHTML = '<div class="card empty-state">❌ Failed to load alerts.</div>';
+      }
+    }
+
+    function renderAlertList() {
+      const subs = alertState.subs;
+      document.getElementById('twitchSetupNote').style.display = alertState.twitchOfficial ? 'none' : '';
+      document.getElementById('alertsStatus').innerHTML =
+        `<span class="status-chip"><span class="dot"></span>${subs.length} followed</span>` +
+        `<span class="status-chip good"><span class="dot"></span>Twitch ready${alertState.twitchOfficial ? ' (official API)' : ''}</span>` +
+        '<span class="status-chip good"><span class="dot"></span>YouTube ready</span>';
+      const list = document.getElementById('alertList');
+      if (!subs.length) {
+        list.innerHTML = '<div class="card empty-state"><div class="big">📡</div>No alerts yet — add a Twitch or YouTube channel.</div>';
+        return;
+      }
+      list.innerHTML = subs.map((sub) => {
+        const ch = channels.find((c) => c.id === sub.channelId);
+        const ping = sub.pingRoleId ? (sub.pingRoleId === guildId ? '@everyone' : '@' + ((roles.find((r) => r.id === sub.pingRoleId) || {}).name || 'deleted-role')) : 'no ping';
+        return `<div class="card" style="padding:1rem 1.2rem; margin-bottom:0.9rem;">
+          <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
+            <div class="hero-icon ${sub.platform === 'twitch' ? '' : 'red'}" style="width:40px; height:40px; font-size:1.1rem;">${sub.platform === 'twitch' ? '🟣' : '🔴'}</div>
+            <div style="min-width:0; flex:1;">
+              <div style="font-weight:700;">${esc(sub.displayName)} ${sub.state && sub.state.live ? '<span class="status-chip off" style="margin-left:0.3rem;"><span class="dot"></span>LIVE</span>' : ''}</div>
+              <div class="muted" style="font-size:0.8rem;">${sub.platform === 'twitch' ? 'Twitch go-live' : 'YouTube uploads'} → #${esc(ch ? ch.name : 'deleted-channel')} · ${esc(ping)}</div>
+            </div>
+            <label class="switch sm" title="Pause or resume this alert"><input type="checkbox" ${sub.enabled ? 'checked' : ''} onchange="toggleAlert('${sub._id}', this.checked)"><span class="track"></span></label>
+            <button class="btn secondary small" onclick="openAlertEditor('${sub._id}')">Edit</button>
+            <button class="btn secondary small" onclick="testAlert('${sub._id}')">Test</button>
+            <button class="btn danger small" onclick="deleteAlert('${sub._id}')">Remove</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function openAlertEditor(id = null) {
+      const sub = id ? alertState.subs.find((s) => s._id === id) : null;
+      document.getElementById('alertEditor').style.display = '';
+      document.getElementById('alertEditorTitle').textContent = sub ? `Edit ${sub.displayName}` : 'New alert';
+      document.getElementById('aId').value = sub ? sub._id : '';
+      const platform = sub ? sub.platform : 'twitch';
+      document.querySelector(`input[name="aPlatform"][value="${platform}"]`).checked = true;
+      document.getElementById('aAccount').value = sub ? sub.displayName : '';
+      document.getElementById('aChannel').value = sub ? sub.channelId : '';
+      document.getElementById('aPing').value = sub ? sub.pingRoleId || '' : '';
+      document.getElementById('aMessage').value = sub ? sub.message : '';
+      const e = (sub && sub.embed) || {};
+      document.getElementById('aEmbed').checked = e.enabled !== false;
+      document.getElementById('aImage').checked = e.showImage !== false;
+      document.getElementById('aTitle').value = e.title || '';
+      document.getElementById('aDesc').value = e.description || '';
+      applyPlatformDefaults(!sub, e.color);
+      document.getElementById('alertEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function closeAlertEditor() {
+      document.getElementById('alertEditor').style.display = 'none';
+    }
+    // Placeholders show the platform's default text; the color picker starts at the platform color.
+    function applyPlatformDefaults(resetColor = true, color = '') {
+      const p = aPlatform();
+      const d = alertState.defaults[p] || {};
+      document.getElementById('aMessage').placeholder = d.message || '';
+      document.getElementById('aTitle').placeholder = `Title (default: ${d.title || ''})`;
+      document.getElementById('aDesc').placeholder = `Description (default: ${(d.description || '').replace(/\n/g, ' ')})`;
+      document.getElementById('aAccountHelp').textContent = p === 'twitch' ? 'Paste any twitch.tv link, or just the username' : 'YouTube @handle, channel link, or channel ID';
+      document.getElementById('aAccount').placeholder = p === 'twitch' ? 'https://twitch.tv/streamer' : 'https://youtube.com/@channel';
+      if (resetColor || !color) document.getElementById('aColor').value = (color || d.color || '#5865F2');
+      else document.getElementById('aColor').value = color;
+      renderAlertPreview();
+    }
+    document.querySelectorAll('input[name="aPlatform"]').forEach((r) => r.addEventListener('change', () => applyPlatformDefaults(true)));
+    ['aMessage', 'aTitle', 'aDesc', 'aAccount', 'aColor', 'aEmbed', 'aImage', 'aPing', 'aChannel'].forEach((id) =>
+      document.getElementById(id).addEventListener(['aEmbed', 'aImage', 'aPing', 'aChannel'].includes(id) ? 'change' : 'input', renderAlertPreview)
+    );
+
+    function renderAlertPreview() {
+      const p = aPlatform();
+      const d = alertState.defaults[p] || {};
+      const raw = document.getElementById('aAccount').value.trim();
+      // Show the channel name, not the whole pasted link.
+      const name = raw.replace(/^https?:\/\//i, '').replace(/^(www\.|m\.)?(twitch\.tv|youtube\.com)\//i, '').replace(/[/?#].*$/, '').replace(/^@/, '') || (p === 'twitch' ? 'streamer' : 'Channel');
+      const vars = p === 'twitch'
+        ? { name, title: 'Ranked grind + chill vibes', game: 'Valorant', url: `https://twitch.tv/${name.toLowerCase()}` }
+        : { name, title: 'I built a Discord bot', game: '', url: 'https://youtube.com/watch?v=dQw4w9WgXcQ' };
+      const fillVars = (t) => String(t || '').replace(/\{(name|title|url|game)\}/gi, (m) => vars[m.slice(1, -1).toLowerCase()] ?? '');
+      const pingId = document.getElementById('aPing').value;
+      const ping = pingId ? `<span class="mention-pill">@${esc(pingId === guildId ? 'everyone' : ((roles.find((r) => r.id === pingId) || {}).name || 'role'))}</span> ` : '';
+      document.getElementById('apContent').innerHTML = ping + LoofMentions.markdown(esc(fillVars(document.getElementById('aMessage').value || d.message)));
+      const ch = channels.find((c) => c.id === document.getElementById('aChannel').value);
+      document.getElementById('apChannel').textContent = `# ${ch ? ch.name : 'alerts'}`;
+      const embedOn = document.getElementById('aEmbed').checked;
+      const emb = document.getElementById('apEmbed');
+      emb.style.display = embedOn ? '' : 'none';
+      emb.style.borderLeftColor = document.getElementById('aColor').value;
+      document.getElementById('apAuthor').textContent = name;
+      document.getElementById('apTitle').textContent = fillVars(document.getElementById('aTitle').value || d.title);
+      document.getElementById('apDesc').innerHTML = LoofMentions.markdown(esc(fillVars(document.getElementById('aDesc').value || d.description)));
+      document.getElementById('apImage').style.display = document.getElementById('aImage').checked ? 'flex' : 'none';
+      document.getElementById('apButton').textContent = p === 'twitch' ? 'Watch stream' : 'Watch video';
+    }
+
+    async function saveAlert() {
+      const id = document.getElementById('aId').value;
+      const existing = id ? alertState.subs.find((s) => s._id === id) : null;
+      const accountInput = document.getElementById('aAccount').value.trim();
+      const body = {
+        id: id || undefined,
+        platform: aPlatform(),
+        // Unchanged name on edit → keep the resolved account instead of re-resolving it.
+        account: existing && accountInput === existing.displayName ? existing.account : accountInput,
+        channelId: document.getElementById('aChannel').value,
+        pingRoleId: document.getElementById('aPing').value || null,
+        message: document.getElementById('aMessage').value,
+        embed: {
+          enabled: document.getElementById('aEmbed').checked,
+          showImage: document.getElementById('aImage').checked,
+          title: document.getElementById('aTitle').value,
+          description: document.getElementById('aDesc').value,
+          color: document.getElementById('aColor').value
+        }
+      };
+      if (!body.account) return showToast('❌ Enter the channel to follow.');
+      const btn = document.getElementById('aSaveBtn');
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/alerts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to save.');
+        showToast(`✅ Following ${data.subscription.displayName}.`);
+        closeAlertEditor();
+        await loadAlerts();
+      } catch (err) {
+        showToast(`❌ ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    async function toggleAlert(id, enabled) {
+      const sub = alertState.subs.find((s) => s._id === id);
+      const res = await fetch(`/api/guilds/${guildId}/alerts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sub, id, enabled }) });
+      showToast(res.ok ? (enabled ? '▶️ Alert resumed.' : '⏸️ Alert paused.') : '❌ Failed to update.');
+      if (res.ok) sub.enabled = enabled;
+    }
+    async function testAlert(id) {
+      const res = await fetch(`/api/guilds/${guildId}/alerts/${id}/test`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      showToast(res.ok ? '🧪 Test alert posted (no one was pinged).' : `❌ ${data.error || 'Failed.'}`);
+    }
+    async function deleteAlert(id) {
+      const sub = alertState.subs.find((s) => s._id === id);
+      if (!confirm(`Stop following ${sub ? sub.displayName : 'this channel'}?`)) return;
+      const res = await fetch(`/api/guilds/${guildId}/alerts/${id}`, { method: 'DELETE' });
+      showToast(res.ok ? '🗑️ Alert removed.' : '❌ Failed to remove.');
+      if (res.ok) loadAlerts();
+    }
+
+    // --- Server settings (admin only — the page isn't rendered for moderators) ---
+    const auditState = { page: 1, loaded: false };
+    const hasSettings = !!document.getElementById('tab-settings');
+
+    async function saveModAccess() {
+      const modRoleIds = [...document.querySelectorAll('.mod-role:checked')].map((el) => el.value);
+      const modPages = [...document.querySelectorAll('.mod-page:checked')].map((el) => el.value);
+      postJson('settings/access', { modRoleIds, modPages }, '✅ Moderator access saved.');
+    }
+    function saveAlertsChannel() {
+      postJson('settings/alerts-channel', { channelId: document.getElementById('alertsChannel').value || null }, '✅ Bot alerts channel saved.');
+    }
+    if (hasSettings) {
+      document.getElementById('modRoleFilter').addEventListener('input', (ev) => {
+        const q = ev.target.value.trim().toLowerCase();
+        document.querySelectorAll('#modRoleList label').forEach((l) => (l.style.display = !q || l.dataset.name.includes(q) ? '' : 'none'));
+      });
+      document.getElementById('auditSection').addEventListener('change', () => loadAudit(1));
+      document.getElementById('importFile').addEventListener('change', previewImport);
+    }
+
+    async function loadAudit(page = 1) {
+      const list = document.getElementById('auditList');
+      const params = new URLSearchParams({ page: Math.max(1, page), section: document.getElementById('auditSection').value });
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/audit?${params}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load.');
+        auditState.page = data.page;
+        document.getElementById('auditPageLabel').textContent = `Page ${data.page} of ${data.totalPages} · ${fmt(data.total)} change(s)`;
+        document.getElementById('auditPrev').disabled = data.page <= 1;
+        document.getElementById('auditNext').disabled = data.page >= data.totalPages;
+        list.innerHTML = data.entries.length
+          ? data.entries.map((e) => `<div class="log-row">
+              ${e.avatarUrl ? `<img src="${esc(e.avatarUrl)}" alt="">` : '<div class="log-avatar"></div>'}
+              <div style="min-width:0;">
+                <div class="log-head"><strong>${esc(e.username || e.userId)}</strong>${e.role === 'mod' ? '<span class="log-type roles">Moderator</span>' : ''}<span class="log-type voice">${esc(e.section)}</span></div>
+                <div style="font-size:0.9rem; margin-top:0.15rem;">${esc(e.action)}</div>
+                ${e.detail ? `<div class="log-summary">${esc(e.detail)}</div>` : ''}
+              </div>
+              <div class="log-meta" title="${esc(new Date(e.createdAt).toLocaleString())}">${relTime(e.createdAt)}</div>
+            </div>`).join('')
+          : '<div class="empty-state"><div class="big">🕘</div>No dashboard changes recorded yet.</div>';
+      } catch (err) {
+        list.innerHTML = `<div class="empty-state">❌ ${esc(err.message)}</div>`;
+      }
+    }
+
+    const REASONS = { daily: 'Daily (automatic)', manual: 'Manual', 'before-import': 'Before an import', 'before-restore': 'Before a restore' };
+    async function loadBackups() {
+      const list = document.getElementById('backupList');
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/backups`);
+        const data = await res.json();
+        list.innerHTML = data.backups.length
+          ? data.backups.map((b) => `<div class="log-row" style="grid-template-columns: minmax(0,1fr) auto;">
+              <div>
+                <div class="log-head"><strong>${esc(new Date(b.createdAt).toLocaleString())}</strong><span class="log-type ${b.reason === 'daily' ? 'voice' : 'messageEdit'}">${esc(REASONS[b.reason] || b.reason)}</span></div>
+                <div class="log-summary">${b.memberCount ? `${fmt(b.memberCount)} members' XP · ` : ''}${(b.sizeBytes / 1024).toFixed(1)} KB${b.createdBy ? ` · by ${esc(b.createdBy)}` : ''}</div>
+              </div>
+              <div class="log-meta" style="display:flex; gap:0.4rem; align-items:center;">
+                <a class="btn secondary small" href="/api/guilds/${guildId}/backups/${b._id}/download">⬇️</a>
+                <button class="btn secondary small" onclick="restoreBackup('${b._id}', ${b.memberCount > 0})">Restore</button>
+              </div>
+            </div>`).join('')
+          : '<div class="empty-state"><div class="big">💾</div>No backups yet — the first automatic one runs shortly after the bot starts.</div>';
+      } catch {
+        list.innerHTML = '<div class="empty-state">❌ Failed to load backups.</div>';
+      }
+    }
+    async function createBackup() {
+      const res = await fetch(`/api/guilds/${guildId}/backups`, { method: 'POST' });
+      showToast(res.ok ? '💾 Backup created.' : '❌ Backup failed.');
+      if (res.ok) loadBackups();
+    }
+    async function restoreBackup(id, hasXp) {
+      if (!confirm('Restore this backup? Current settings are replaced (a safety backup is taken first).')) return;
+      const includeXp = hasXp && confirm('Also restore members\' XP from this backup? Choose Cancel to keep everyone\'s current XP.');
+      const res = await fetch(`/api/guilds/${guildId}/backups/${id}/restore`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ includeXp }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return showToast(`❌ ${data.error || 'Restore failed.'}`);
+      showToast('✅ Backup restored — reloading…');
+      setTimeout(() => location.reload(), 1200);
+    }
+    function exportSettings() {
+      location.href = `/api/guilds/${guildId}/export${document.getElementById('exportXp').checked ? '?xp=1' : ''}`;
+    }
+
+    let importPayload = null;
+    async function previewImport(ev) {
+      const box = document.getElementById('importPreview');
+      importPayload = null;
+      const file = ev.target.files[0];
+      if (!file) return (box.innerHTML = '');
+      try {
+        importPayload = JSON.parse(await file.text());
+        const res = await fetch(`/api/guilds/${guildId}/import/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload: importPayload }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invalid file.');
+        const s = data.summary;
+        box.innerHTML = `<div class="log-content">
+          <strong>${esc(s.guildName)}</strong> · exported ${s.exportedAt ? esc(new Date(s.exportedAt).toLocaleString()) : 'unknown date'}<br>
+          <span class="muted">${[s.hasSettings && 'module settings', s.hasWelcome && 'welcome', s.alerts && `${s.alerts} alert(s)`, s.embedTemplates && `${s.embedTemplates} embed template(s)`, s.members && `${fmt(s.members)} members' XP`].filter(Boolean).join(' · ')}</span>
+          ${s.crossServer ? '<br><span style="color:var(--c-yellow);">⚠️ This file is from a different server — channel and role picks won\'t match here and will need re-selecting.</span>' : ''}
+        </div>
+        ${s.members ? '<label style="display:flex; align-items:center; gap:0.5rem; font-weight:500; color:var(--text-main);"><input type="checkbox" id="importXp" style="width:auto;"> Also import members\' XP (overwrites current XP)</label>' : ''}
+        <button class="btn danger" style="margin-top:0.6rem;" onclick="runImport()">Import & replace current settings</button>`;
+      } catch (err) {
+        box.innerHTML = `<div class="log-content">❌ ${esc(err.message)}</div>`;
+      }
+    }
+    async function runImport() {
+      if (!importPayload || !confirm('Replace this server\'s LoofaryBot settings with the file? A backup is taken first.')) return;
+      const includeXp = !!(document.getElementById('importXp') && document.getElementById('importXp').checked);
+      const res = await fetch(`/api/guilds/${guildId}/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload: importPayload, includeXp }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return showToast(`❌ ${data.error || 'Import failed.'}`);
+      showToast('✅ Settings imported — reloading…');
+      setTimeout(() => location.reload(), 1200);
     }
 
     // --- Level color tiers ---
@@ -1774,6 +2375,7 @@
         levelXpBase: document.getElementById('levelXpBase').value,
         levelUpChannelId: document.getElementById('levelUpChannel').value,
         rankCardBoosterOnly: document.getElementById('cardBoosterOnly').checked,
+        daily: readDaily(),
         xpMultipliers: [...document.querySelectorAll('.multiplier-row')].map((row) => ({
           type: row.querySelector('.mul-type').value,
           targetId: row.querySelector('.mul-target').value,

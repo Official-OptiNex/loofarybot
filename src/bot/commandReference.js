@@ -2,14 +2,15 @@
 // Used by /loof help, the dashboard's Commands page and its search bar — kept separate from the
 // SlashCommandBuilder definitions so the web side doesn't import discord.js command internals.
 //
-// perm: who can use it (null = everyone). tab: the dashboard page for that module, if any.
+// perm: who can use it (null = everyone — these are also listed on the public home page).
+// tab: the dashboard page for that module, if any.
 module.exports = [
   {
     id: 'giveaways',
     group: 'Giveaways',
     icon: '🎁',
     blurb: 'Timed giveaways and first-to-click drops, with optional entry requirements.',
-    tab: null,
+    tab: 'giveaways',
     commands: [
       { usage: '/loof start', perm: 'Admin', description: 'Start a giveaway right away with inline options (requirements included).' },
       { usage: '/loof create', perm: 'Admin', description: 'Set up a giveaway step by step in a popup form.' },
@@ -29,6 +30,7 @@ module.exports = [
     blurb: 'Members earn XP for chatting, level up, and unlock role rewards.',
     tab: 'leveling',
     commands: [
+      { usage: '/daily', perm: null, description: 'Claim daily XP — consecutive days build a streak for bigger rewards.' },
       { usage: '/levels rank', perm: null, description: "See your (or someone's) level, XP and server rank." },
       { usage: '/levels leaderboard', perm: null, description: 'The server XP leaderboard.' },
       { usage: '/levels card', perm: null, description: 'Customize your rank card color, background and tagline.' },
@@ -62,6 +64,19 @@ module.exports = [
     ]
   },
   {
+    id: 'alerts',
+    group: 'Creator Alerts',
+    icon: '📡',
+    blurb: 'Twitch go-live and YouTube upload alerts with custom embeds and pings.',
+    tab: 'alerts',
+    commands: [
+      { usage: '/alerts add', perm: 'Manage Server', description: 'Paste any twitch.tv or YouTube link to follow it and pick where alerts go.' },
+      { usage: '/alerts list', perm: 'Manage Server', description: 'Every followed channel and whether it is live.' },
+      { usage: '/alerts test', perm: 'Manage Server', description: 'Post a sample alert (no one is pinged).' },
+      { usage: '/alerts remove', perm: 'Manage Server', description: 'Stop following a channel.' }
+    ]
+  },
+  {
     id: 'honeypot',
     group: 'Honeypot',
     icon: '🍯',
@@ -82,7 +97,7 @@ module.exports = [
     group: 'Moderation & Logs',
     icon: '🛡️',
     blurb: 'Server logs, lockdowns and cleanup tools.',
-    tab: 'logs',
+    tab: 'moderation',
     commands: [
       { usage: '/logs set', perm: 'Manage Server', description: 'Choose the channel that receives server logs.' },
       { usage: '/logs toggle', perm: 'Manage Server', description: 'Switch individual log types on or off.' },
@@ -98,7 +113,7 @@ module.exports = [
     group: 'Roles',
     icon: '🎭',
     blurb: 'Automatic and self-assignable roles.',
-    tab: 'autorole',
+    tab: 'reactionroles',
     commands: [
       { usage: '/autorole set', perm: 'Manage Roles', description: 'Role every new member gets on join.' },
       { usage: '/autorole sync', perm: 'Manage Roles', description: 'Give the auto-role to existing members missing it.' },
@@ -113,7 +128,7 @@ module.exports = [
     group: 'Community',
     icon: '💬',
     blurb: 'Polls and reminders for everyone.',
-    tab: null,
+    tab: 'community',
     commands: [
       { usage: '/poll create', perm: null, description: 'Button poll — public or anonymous, with an optional timer.' },
       { usage: '/poll end', perm: null, description: 'Close a poll early (creator or moderators).' },

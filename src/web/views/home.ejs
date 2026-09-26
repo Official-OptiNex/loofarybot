@@ -3,64 +3,173 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LoofaryBot Dashboard</title>
+  <title><%= botName %> · Giveaways, leveling & moderation for Discord</title>
+  <meta name="description" content="<%= botName %> runs giveaways, XP leveling, gambling, go-live alerts, an anti-raid honeypot and moderation tools — all controllable from slash commands or the web dashboard.">
   <link rel="stylesheet" href="/css/style.css">
   <script src="/js/theme.js"></script>
 </head>
-<body>
-  <nav>
-    <div class="brand">🎁 LoofaryBot</div>
-    <% if (user) { %>
-      <a class="btn" href="/dashboard">Go to Dashboard</a>
-    <% } else { %>
-      <a class="btn" href="/auth/discord">Login with Discord</a>
-    <% } %>
-  </nav>
-  <div class="container">
-    <div class="hero">
-      <div class="hero-badge"><span class="pulse-dot"></span> Online as <%= botTag %> · in <%= guildCount %> server<%= guildCount === 1 ? '' : 's' %></div>
-      <h1>Everything LoofaryBot does, in one place</h1>
-      <p>Persistent giveaways, an anti-raid honeypot, XP leveling with role rewards, auto-role on join,
-        and a visual embed builder with saved templates — configure it all without touching a slash command.</p>
-      <% if (!user) { %>
-        <a class="btn" href="/auth/discord">Login with Discord →</a>
-      <% } else { %>
-        <a class="btn" href="/dashboard">Go to Dashboard →</a>
-      <% } %>
-    </div>
+<body class="site">
+<%
+  const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n.toLocaleString();
+  const FEATURES = [
+    ['🎁', 'Giveaways & drops', 'Timed giveaways with entry requirements, or first-to-click drops. Survive restarts, reroll any time.', ''],
+    ['📈', 'Leveling', 'XP for chatting, role rewards, name-color roles, multipliers, daily streaks and custom rank cards.', 'yellow'],
+    ['🎰', 'XP gambling', 'Coinflip, blackjack, mines and high-low with a fair, adjustable house edge — plus a free play when you go broke.', 'red'],
+    ['📡', 'Go-live alerts', 'Paste any Twitch or YouTube link and get a custom alert the moment they go live or upload.', 'red'],
+    ['🍯', 'Honeypot', 'A trap channel that instantly removes raid bots and hacked accounts before they spam.', 'green'],
+    ['🛡️', 'Moderation & logs', 'Lockdowns, purge, and a full server log with a searchable viewer and before/after edits.', ''],
+    ['🎭', 'Roles', 'Auto-role on join and self-assign panels with buttons or dropdowns.', 'green'],
+    ['👋', 'Welcome messages', 'Greet new members with text or a rich embed, previewed live as you type.', 'yellow'],
+    ['📊', 'Polls & reminders', 'Button polls (public or anonymous) and reminders for you or a whole channel.', '']
+  ];
+%>
+  <%- include('partials/site-bar') %>
 
-    <div class="feature-grid">
-      <div class="feature-card">
-        <div class="feature-icon">🎁</div>
-        <h3>Giveaways</h3>
-        <p class="muted">Persistent giveaways that survive redeploys, with a form-based or slash-command flow.</p>
+  <main class="site-main">
+    <section class="site-hero">
+      <div class="site-hero-copy">
+        <div class="hero-badge"><span class="pulse-dot"></span> Online · in <%= stats.servers.toLocaleString() %> server<%= stats.servers === 1 ? '' : 's' %></div>
+        <h1>Run your whole Discord server from <span class="gradient-text">one bot</span></h1>
+        <p>Giveaways, leveling, gambling, go-live alerts, an anti-raid honeypot and moderation — control every feature with slash commands <em>or</em> the web dashboard. Your choice, every time.</p>
+        <div class="site-cta">
+          <a class="btn" href="<%= inviteUrl %>" target="_blank" rel="noopener">➕ Add to Discord</a>
+          <% if (user) { %>
+            <a class="btn secondary" href="/dashboard">Open dashboard →</a>
+          <% } else { %>
+            <a class="btn secondary" href="/auth/discord">Log in to the dashboard</a>
+          <% } %>
+        </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🍯</div>
-        <h3>Honeypot</h3>
-        <p class="muted">Instant kick/ban/soft-ban trap channel with a live, self-updating counter.</p>
+
+      <div class="site-hero-art" aria-hidden="true">
+        <div class="discord-chat">
+          <div class="channel-name"># giveaways</div>
+          <div class="discord-message-preview">
+            <img class="discord-avatar" src="<%= botAvatar %>" alt="">
+            <div class="discord-message-body">
+              <div class="discord-message-header"><span class="discord-bot-name"><%= botName %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
+              <div class="discord-embed-preview" style="border-left-color:#5865F2;">
+                <div class="title">🎁 Giveaway: Discord Nitro</div>
+                <div class="desc">Click the button below to enter!
+
+<strong>Requirements:</strong>
+• Be <strong>Level 5+</strong>
+
+<strong>Ends:</strong> in 2 days
+<strong>Winners:</strong> 2</div>
+                <div class="embed-footer">Entries: 184</div>
+              </div>
+              <div class="mock-buttons"><span class="mock-button primary">🎉 Enter</span></div>
+            </div>
+          </div>
+          <div class="discord-message-preview" style="margin-top:1rem;">
+            <img class="discord-avatar" src="<%= botAvatar %>" alt="">
+            <div class="discord-message-body">
+              <div class="discord-message-header"><span class="discord-bot-name"><%= botName %></span><span class="discord-bot-badge">BOT</span></div>
+              <div class="desc">🎉 <span class="mention-pill">@nova</span>, you leveled up to <strong>Level 12</strong>!</div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">📈</div>
-        <h3>Leveling</h3>
-        <p class="muted">Tunable XP curve, cooldowns, and automatic role rewards at any milestone.</p>
+    </section>
+
+    <section class="stat-cards site-stats" aria-label="Bot stats">
+      <div class="stat-card tone-blue"><div class="stat-body"><div class="stat-label">Servers</div><div class="stat-value"><%= fmt(stats.servers) %></div></div><div class="stat-footer"><span>Using <%= botName %></span></div></div>
+      <div class="stat-card tone-green"><div class="stat-body"><div class="stat-label">Members reached</div><div class="stat-value"><%= fmt(stats.members) %></div></div><div class="stat-footer"><span>Across every server</span></div></div>
+      <div class="stat-card tone-yellow"><div class="stat-body"><div class="stat-label">Slash commands</div><div class="stat-value"><%= stats.commands %></div></div><div class="stat-footer"><span>In <%= stats.modules %> categories</span></div></div>
+      <div class="stat-card tone-red"><div class="stat-body"><div class="stat-label">Ways to control it</div><div class="stat-value">2</div></div><div class="stat-footer"><span>Slash commands or the dashboard</span></div></div>
+    </section>
+
+    <section id="features" class="site-section">
+      <div class="section-head">
+        <h2>Everything in one place</h2>
+        <p class="muted">Each feature can be switched on or off per server and configured from Discord or the dashboard.</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🛡️</div>
-        <h3>Auto-Role</h3>
-        <p class="muted">Grant a role to every new member automatically, and sync it onto existing members too.</p>
+      <div class="feature-grid">
+        <% FEATURES.forEach(([icon, title, text, tone]) => { %>
+          <div class="feature-card">
+            <div class="hero-icon <%= tone %>"><%= icon %></div>
+            <h3><%= title %></h3>
+            <p class="muted"><%= text %></p>
+          </div>
+        <% }) %>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🖌️</div>
-        <h3>Embed Builder</h3>
-        <p class="muted">Live @/#/emoji autocomplete, a real message-style preview, and saved templates.</p>
+    </section>
+
+    <section id="commands" class="site-section">
+      <div class="section-head">
+        <h2>Commands anyone can use</h2>
+        <p class="muted"><%= publicCommands.reduce((n, g) => n + g.commands.length, 0) %> commands every member can run — no login needed. Staff commands are listed in the dashboard after you log in.</p>
       </div>
-      <div class="feature-card">
-        <div class="feature-icon">🏆</div>
-        <h3>Leaderboard</h3>
-        <p class="muted">A paginated, avatar-rich XP leaderboard for every server, right in the browser.</p>
+      <div class="cmd-toolbar">
+        <input type="search" id="cmdSearch" placeholder="Filter commands…" aria-label="Filter commands">
       </div>
-    </div>
-  </div>
+      <div class="cmd-grid">
+        <% publicCommands.forEach(g => { %>
+          <div class="cmd-card" data-group="<%= g.id %>">
+            <div class="cmd-card-head">
+              <div class="hero-icon"><%= g.icon %></div>
+              <div><h3><%= g.group %></h3><p><%= g.blurb %></p></div>
+            </div>
+            <div class="cmd-list">
+              <% g.commands.forEach(c => { %>
+                <div class="cmd-item" data-text="<%= (c.usage + ' ' + c.description).toLowerCase() %>">
+                  <code title="Click to copy" data-copy="<%= c.usage.split(' · ')[0] %>"><%= c.usage %></code>
+                  <span class="desc"><%= c.description %></span>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+      <p class="muted cmd-empty" id="cmdEmpty" style="display:none;">No commands match that search.</p>
+    </section>
+
+    <section class="site-section site-final card">
+      <div>
+        <h2>Ready to set it up?</h2>
+        <p class="muted">Add <%= botName %> to your server, then log in to configure everything from your browser.</p>
+      </div>
+      <div class="site-cta">
+        <a class="btn" href="<%= inviteUrl %>" target="_blank" rel="noopener">➕ Add to Discord</a>
+        <a class="btn secondary" href="<%= user ? '/dashboard' : '/auth/discord' %>"><%= user ? 'Open dashboard →' : 'Log in' %></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>© <%= new Date().getFullYear() %> <%= botName %></span>
+    <span><a href="#commands">Commands</a> · <a href="<%= user ? '/dashboard' : '/auth/discord' %>">Dashboard</a></span>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+  <script>
+    // Filter + click-to-copy for the public command list.
+    const search = document.getElementById('cmdSearch');
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      let shown = 0;
+      document.querySelectorAll('.cmd-card').forEach((card) => {
+        let visible = 0;
+        card.querySelectorAll('.cmd-item').forEach((item) => {
+          const hit = !q || item.dataset.text.includes(q);
+          item.style.display = hit ? '' : 'none';
+          if (hit) visible++;
+        });
+        card.style.display = visible ? '' : 'none';
+        shown += visible;
+      });
+      document.getElementById('cmdEmpty').style.display = shown ? 'none' : '';
+    });
+    document.querySelectorAll('[data-copy]').forEach((el) =>
+      el.addEventListener('click', () => {
+        navigator.clipboard?.writeText(el.dataset.copy).catch(() => {});
+        const t = document.getElementById('toast');
+        t.textContent = `📋 Copied ${el.dataset.copy}`;
+        t.style.display = 'block';
+        setTimeout(() => (t.style.display = 'none'), 1800);
+      })
+    );
+  </script>
 </body>
 </html>

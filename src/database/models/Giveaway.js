@@ -13,6 +13,7 @@ const GiveawaySchema = new mongoose.Schema(
     customDesc: { type: String, default: 'Click the button below to enter!' },
     hostId: { type: String, required: true },
     entries: { type: [String], default: [] },
+    winners: { type: [String], default: [] }, // drawn when it ends (rerolls are appended)
     ended: { type: Boolean, default: false },
     // 'drop' = first-to-click: the first `winnerCount` people to claim win instantly.
     type: { type: String, enum: ['timed', 'drop'], default: 'timed' },

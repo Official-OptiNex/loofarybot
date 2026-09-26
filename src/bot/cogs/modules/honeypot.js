@@ -162,7 +162,12 @@ async function handleHoneypotMessage(message) {
         break;
     }
   } catch (err) {
-    console.error(`Honeypot enforcement failed for ${member.id}:`, err.message);
+    require('../../utils/errorReporter').reportIssue(
+      message.guild.id,
+      'Honeypot could not punish a member',
+      `${member.user.tag} posted in the trap but the ${config.honeypotAction} failed: ${err.message}. ` +
+        'LoofaryBot needs Kick/Ban Members and a role above theirs.'
+    );
     return; // don't increment counters or save if enforcement failed
   }
 
