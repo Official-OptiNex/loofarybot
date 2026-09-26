@@ -98,12 +98,17 @@ No manual schema setup needed — Mongoose creates collections automatically on 
 Same subcommands as before (`start`, `create`, `end`, `reroll`, `delete`, `list`, `edit`, `ping`,
 `help`) — now persisted in MongoDB instead of a local JSON file, and automatically rescheduled
 on every restart/redeploy so no giveaway is ever lost or silently skipped.
+`/loof help` is an interactive menu anyone can use: an overview of every category, a dropdown to
+browse each category's commands (with 🔒 permission tags), and a link to the web dashboard.
 
 ### Honeypot (`/honeypot ...` or the web dashboard)
 - `setup` a trap channel — posts a live counter embed there.
 - `action` sets the punishment: kick, soft ban (ban+unban to purge messages), or permanent ban.
 - Any message posted in the trap channel is deleted and the author is instantly punished;
   the counter embed updates in place.
+- Caught members get a **DM first** explaining what happened, the likely cause (a compromised
+  account, a self-bot, or a mistake), their punishment, and how to secure their account.
+  Turn it off with `/honeypot dm enabled:false` or on the dashboard. `/honeypot toggle` pauses the trap.
 - `embed` opens an editor to disguise the trap message (title, text, color, footer, image,
   and whether the kick/ban counters show). Also editable with a live preview on the dashboard.
 
@@ -124,7 +129,10 @@ on every restart/redeploy so no giveaway is ever lost or silently skipped.
   `/levels cardaccess boosters_only:true` makes it a booster perk.
 
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
+- Every finished game shows the player's updated XP balance and level, win or lose.
 - `coinflip` — 50/50, pays `2 × (1 − edge)`.
+- `blackjack` — 6-deck shoe, dealer stands on 17, blackjack pays 3:2, double down on the first
+  two cards (no splits). The house edge is taken from winnings.
 - `mines` — a 5×5 board with 1–24 mines. Every gem multiplies your winnings by
   `tiles left ÷ safe tiles left`; hit a mine and the bet is lost. Cash out any time.
 - `highlow` — call whether the next card (A–K) is higher-or-same or lower-or-same. Each correct
@@ -142,6 +150,10 @@ on every restart/redeploy so no giveaway is ever lost or silently skipped.
 - `/loof drop` posts a **Claim!** button; the first N members to click win instantly.
 
 ### Moderation & Security
+- Logs are stored for 30 days and shown in the dashboard's **Log viewer** (search by user, text or
+  channel, filter by event type). Posting to a Discord channel is optional.
+- Message edit/delete logs include a **Jump to message** button, and edits highlight exactly what
+  changed (~~removed~~ words struck through, added words in bold).
 - `/logs set #channel` — logs message edits/deletes, member joins/leaves, voice joins/leaves/moves,
   and role changes. `/logs toggle` switches individual event types; also on the dashboard's Logs tab.
 - `/lockdown scope:channel|server` — denies Send Messages (and thread creation/posting) for
@@ -175,7 +187,17 @@ on every restart/redeploy so no giveaway is ever lost or silently skipped.
 - **Sync Join Data** backfills history from every current member's join date (members who left
   can't be recovered, and rejoiners only report their latest join). Limited to once per 5 minutes.
 
+### Member data
+- When someone leaves, their XP/level/rank card, reminders in that server and entries in running
+  giveaways are deleted, so they drop off the leaderboard. Anyone who left while the bot was
+  offline is cleaned up on the next startup. Anonymous join/leave counts are kept for the charts.
+
 ### Web Dashboard
+- Every module has an on/off switch — in the sidebar, on its Overview card and in its page header.
+- Module pages are split into sub-tabs (e.g. Leveling: XP & speed · Role rewards · Multipliers ·
+  Level-up messages · Rank cards) with a sticky **Save changes** bar.
+- Every text field the bot sends (welcome message/embed, honeypot trap message) supports the same
+  `@member`, `@role`, `#channel` and `:emoji:` autocomplete as the Embed Builder.
 - Sidebar navigation with module on/off status, a search bar that jumps to any settings page or
   command, and a **Sun / Moon** switch for light or dark theme (remembered per browser).
 - Visit the deployed URL → **Login with Discord** → pick a server where you have

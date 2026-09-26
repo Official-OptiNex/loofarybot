@@ -113,20 +113,15 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="/js/mentions.js"></script>
   <script>
     const guildId = '<%= guild.id %>';
-    let mentionable = { users: [], channels: [], roles: [], emojis: [] };
     let templates = [];
     let fieldCounter = 0;
 
     // ---------- Load real guild data for autocomplete ----------
     async function loadMentionable() {
-      try {
-        const res = await fetch(`/api/guilds/${guildId}/mentionable`);
-        if (res.ok) mentionable = await res.json();
-      } catch (e) {
-        console.error('Failed to load autocomplete data', e);
-      }
+      await LoofMentions.load(guildId);
     }
 
     // ---------- Templates ----------
@@ -138,7 +133,7 @@
         const select = document.getElementById('templateSelect');
         select.innerHTML =
           '<option value="">— New / unsaved —</option>' +
-          templates.map((t) => `<option value="${t.name}">${t.name}</option>`).join('');
+          templates.map((t) => `<option value="${LoofMentions.esc(t.name)}">${LoofMentions.esc(t.name)}</option>`).join("");
       } catch (e) {
         console.error('Failed to load templates', e);
       }
@@ -220,143 +215,9 @@
     // ---------- Autocomplete engine ----------
     // Finds the trigger (@, #, :) immediately before the cursor, if any, and the partial
     // query typed after it, so we know what to search and what to replace on selection.
-    function findTrigger(text, cursorPos) {
-      const upToCursor = text.slice(0, cursorPos);
-      const match = upToCursor.match(/(?:^|\s)([@#:])([a-zA-Z0-9_]*)$/);
-      if (!match) return null;
-      return { trigger: match[1], query: match[2].toLowerCase(), start: cursorPos - match[2].length - 1 };
-    }
-
-    function getMatches(trigger, query) {
-      if (trigger === '@') {
-        const userMatches = mentionable.users
-          .filter((u) => u.name.toLowerCase().includes(query) || u.username.toLowerCase().includes(query))
-          .slice(0, 6)
-          .map((u) => ({ label: u.name, sublabel: `@${u.username}`, insert: `<@${u.id}>` }));
-        const roleMatches = mentionable.roles
-          .filter((r) => r.name.toLowerCase().includes(query))
-          .slice(0, 4)
-          .map((r) => ({ label: `@${r.name}`, sublabel: 'role', insert: `<@&${r.id}>` }));
-        return [...userMatches, ...roleMatches].slice(0, 8);
-      }
-      if (trigger === '#') {
-        return mentionable.channels
-          .filter((c) => c.name.toLowerCase().includes(query))
-          .slice(0, 8)
-          .map((c) => ({ label: `#${c.name}`, insert: `<#${c.id}>` }));
-      }
-      if (trigger === ':') {
-        return mentionable.emojis
-          .filter((e) => e.name.toLowerCase().includes(query))
-          .slice(0, 8)
-          .map((e) => ({ label: e.name, iconUrl: e.url, insert: `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>` }));
-      }
-      return [];
-    }
-
-    function attachAutocomplete(inputEl, dropdownEl) {
-      let currentMatches = [];
-      let highlightedIndex = 0;
-
-      function render() {
-        if (currentMatches.length === 0) {
-          dropdownEl.classList.remove('visible');
-          dropdownEl.innerHTML = '';
-          return;
-        }
-        dropdownEl.innerHTML = currentMatches
-          .map(
-            (m, i) => `
-            <div class="autocomplete-item ${i === highlightedIndex ? 'highlighted' : ''}" data-index="${i}">
-              ${m.iconUrl ? `<img src="${m.iconUrl}">` : ''}
-              <span>${m.label}</span>
-              ${m.sublabel ? `<span class="muted" style="font-size:0.8rem;">${m.sublabel}</span>` : ''}
-            </div>`
-          )
-          .join('');
-        dropdownEl.classList.add('visible');
-        dropdownEl.querySelectorAll('.autocomplete-item').forEach((el) => {
-          el.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            select(currentMatches[Number(el.dataset.index)]);
-          });
-        });
-      }
-
-      function select(match) {
-        const text = inputEl.value;
-        const cursorPos = inputEl.selectionStart;
-        const trig = findTrigger(text, cursorPos);
-        if (!trig) return;
-        const before = text.slice(0, trig.start);
-        const after = text.slice(cursorPos);
-        inputEl.value = `${before}${match.insert} ${after}`;
-        const newCursor = (before + match.insert + ' ').length;
-        inputEl.setSelectionRange(newCursor, newCursor);
-        currentMatches = [];
-        render();
-        updatePreview();
-        inputEl.focus();
-      }
-
-      inputEl.addEventListener('input', () => {
-        const trig = findTrigger(inputEl.value, inputEl.selectionStart);
-        currentMatches = trig ? getMatches(trig.trigger, trig.query) : [];
-        highlightedIndex = 0;
-        render();
-        updatePreview();
-      });
-
-      inputEl.addEventListener('keydown', (e) => {
-        if (currentMatches.length === 0) return;
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          highlightedIndex = (highlightedIndex + 1) % currentMatches.length;
-          render();
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          highlightedIndex = (highlightedIndex - 1 + currentMatches.length) % currentMatches.length;
-          render();
-        } else if (e.key === 'Enter' || e.key === 'Tab') {
-          e.preventDefault();
-          select(currentMatches[highlightedIndex]);
-        } else if (e.key === 'Escape') {
-          currentMatches = [];
-          render();
-        }
-      });
-
-      inputEl.addEventListener('blur', () => setTimeout(() => { currentMatches = []; render(); }, 150));
-    }
-
-    // ---------- Rendering raw embed/message text the way Discord would show it ----------
-    function renderMentionText(raw) {
-      if (!raw) return '';
-      let html = raw
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-      html = html
-        .replace(/&lt;@&(\d+)&gt;/g, (_, id) => {
-          const r = mentionable.roles.find((x) => x.id === id);
-          return `<span class="mention-pill">@${r ? r.name : 'unknown-role'}</span>`;
-        })
-        .replace(/&lt;@(\d+)&gt;/g, (_, id) => {
-          const u = mentionable.users.find((x) => x.id === id);
-          return `<span class="mention-pill">@${u ? u.name : 'unknown-user'}</span>`;
-        })
-        .replace(/&lt;#(\d+)&gt;/g, (_, id) => {
-          const c = mentionable.channels.find((x) => x.id === id);
-          return `<span class="channel-pill">#${c ? c.name : 'unknown-channel'}</span>`;
-        })
-        .replace(/&lt;a?:(\w+):(\d+)&gt;/g, (_, name, id) => {
-          const e = mentionable.emojis.find((x) => x.id === id);
-          return e ? `<img class="custom-emoji" src="${e.url}" alt=":${name}:">` : `:${name}:`;
-        });
-
-      return html;
-    }
+    // Autocomplete + mention rendering live in /js/mentions.js (shared with the dashboard).
+    const attachAutocomplete = (inputEl, dropdownEl) => LoofMentions.attach(inputEl, { onChange: updatePreview, dropdown: dropdownEl });
+    const renderMentionText = (raw) => LoofMentions.render(raw);
 
     function updatePreview() {
       const content = document.getElementById('content').value;
@@ -397,11 +258,11 @@
       row.className = 'field-row field-entry';
       row.innerHTML = `
         <div class="autocomplete-wrapper" style="flex:1;">
-          <input class="f-name" placeholder="Field name" value="${name}">
+          <input class="f-name" placeholder="Field name" value="${LoofMentions.esc(name)}">
           <div class="autocomplete-dropdown" id="ac-fname-${id}"></div>
         </div>
         <div class="autocomplete-wrapper" style="flex:1;">
-          <input class="f-value" placeholder="Field value" value="${value}">
+          <input class="f-value" placeholder="Field value" value="${LoofMentions.esc(value)}">
           <div class="autocomplete-dropdown" id="ac-fvalue-${id}"></div>
         </div>
         <label style="display:flex; align-items:center; gap:0.3rem; flex:0 0 auto;">

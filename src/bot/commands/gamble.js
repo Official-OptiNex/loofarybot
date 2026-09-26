@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
-const { getGamblingSettings, minesMultiplier, playCoinflip, startMines, startHighLow } = require('../cogs/modules/gambling');
+const { getGamblingSettings, minesMultiplier, playCoinflip, startMines, startHighLow, startBlackjack } = require('../cogs/modules/gambling');
 
 const betOption = (opt) => opt.setName('bet').setDescription('How much XP to bet').setMinValue(1).setRequired(true);
 
@@ -32,6 +32,9 @@ const data = new SlashCommandBuilder()
   .addSubcommand((sub) =>
     sub.setName('highlow').setDescription('Guess if the next card is higher or lower — build a streak and cash out').addIntegerOption(betOption)
   )
+  .addSubcommand((sub) =>
+    sub.setName('blackjack').setDescription('Beat the dealer to 21 — hit, stand or double down').addIntegerOption(betOption)
+  )
   .addSubcommand((sub) => sub.setName('info').setDescription('Show payouts, the house edge, and bet limits'))
   .addSubcommand((sub) =>
     sub
@@ -62,6 +65,9 @@ async function execute(interaction) {
   if (sub === 'highlow') {
     return startHighLow(interaction, interaction.options.getInteger('bet'));
   }
+  if (sub === 'blackjack') {
+    return startBlackjack(interaction, interaction.options.getInteger('bet'));
+  }
 
   if (sub === 'info') {
     const config = await getOrCreateConfig(interaction.guildId);
@@ -82,6 +88,10 @@ async function execute(interaction) {
         {
           name: '🃏 High-Low',
           value: `Each correct call multiplies your winnings by \`1 / chance\` (edge taken once at cash-out) — e.g. one call on a 7 pays ${((1 - s.edge) / (7 / 13)).toFixed(2)}x.`
+        },
+        {
+          name: '🂡 Blackjack',
+          value: `Win pays **${(2 - s.edge).toFixed(2)}x**, blackjack **${(1 + 1.5 * (1 - s.edge)).toFixed(2)}x**, push returns your bet. Dealer stands on 17; double down on your first two cards.`
         }
       );
     return interaction.reply({ embeds: [embed], ephemeral: true });

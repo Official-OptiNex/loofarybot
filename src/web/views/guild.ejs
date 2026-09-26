@@ -45,14 +45,17 @@
     ['commands', 'terminal', 'Commands']
   ];
   const logChannelSet = !!(config.logChannelId && channels.find(c => c.id === config.logChannelId));
+  // [tab, label, enabled flag] — the switches mirror each module's on/off setting.
   const MODULES = [
-    ['welcome', 'Welcome', !!(welcome.enabled && welcome.channelId)],
-    ['honeypot', 'Honeypot', !!config.honeypotChannelId],
+    ['welcome', 'Welcome', !!welcome.enabled],
+    ['honeypot', 'Honeypot', config.honeypotEnabled !== false],
     ['leveling', 'Leveling', config.levelingEnabled !== false],
-    ['autorole', 'Auto-Role', !!(config.autoRoleId && config.autoRoleEnabled !== false)],
+    ['autorole', 'Auto-Role', config.autoRoleEnabled !== false],
     ['gambling', 'Gambling', gambling.enabled],
-    ['logs', 'Logs', logChannelSet]
+    ['logs', 'Logs', config.logsEnabled !== false]
   ];
+  const sideToggle = (key, on) =>
+    `<label class="switch sm" title="Turn ${key} on or off"><input type="checkbox" class="module-toggle" data-module="${key}" ${on ? 'checked' : ''} aria-label="Enable ${key}"><span class="track"></span></label>`;
   const catches = (config.honeypotKicks || 0) + (config.honeypotSoftbans || 0) + (config.honeypotBans || 0);
   const pct = (cur, target) => Math.max(0, Math.min(100, target > 0 ? (cur / target) * 100 : 0));
 %>
@@ -82,7 +85,7 @@
     <div class="nav-section">
       <div class="nav-heading"><span class="ring-dot green"></span>Modules</div>
       <% MODULES.forEach(([tab, label, on]) => { %>
-        <button class="module-row" data-tab="<%= tab %>"><span><%= label %></span><span class="pill <%= on ? 'on' : '' %>"><%= on ? 'ON' : 'OFF' %></span></button>
+        <div class="module-row"><button class="module-link" data-tab="<%= tab %>"><%= label %></button><%- sideToggle(tab, on) %></div>
       <% }) %>
     </div>
 
@@ -224,11 +227,11 @@
       <div class="grid">
         <div class="card">
           <% const wChannel = welcome.channelId ? channels.find(c => c.id === welcome.channelId) : null; %>
-          <h3>👋 Welcome <span class="badge <%= welcome.enabled && wChannel ? 'on' : 'off' %>"><%= welcome.enabled && wChannel ? 'Active' : 'Off' %></span></h3>
+          <h3>👋 Welcome <%- sideToggle('welcome', !!welcome.enabled) %></h3>
           <p class="muted"><%= wChannel ? 'Greeting new members in #' + wChannel.name : 'Set up a greeting in the Welcome tab.' %></p>
         </div>
         <div class="card">
-          <h3>🍯 Honeypot <span class="badge <%= config.honeypotChannelId ? 'on' : 'off' %>"><%= config.honeypotChannelId ? 'Active' : 'Not set up' %></span></h3>
+          <h3>🍯 Honeypot <%- sideToggle('honeypot', config.honeypotEnabled !== false) %></h3>
           <% if (config.honeypotChannelId) {
                const hpChannel = channels.find(c => c.id === config.honeypotChannelId);
           %>
@@ -239,7 +242,7 @@
           <% } %>
         </div>
         <div class="card">
-          <h3>📈 Leveling <span class="badge <%= config.levelingEnabled === false ? 'off' : 'on' %>"><%= config.levelingEnabled === false ? 'Disabled' : 'Enabled' %></span></h3>
+          <h3>📈 Leveling <%- sideToggle('leveling', config.levelingEnabled !== false) %></h3>
           <p class="muted">XP per message: <strong><%= effectiveXp.xpMin %>–<%= effectiveXp.xpMax %></strong>,
             cooldown <strong><%= effectiveXp.cooldownMs / 1000 %>s</strong></p>
           <p class="muted"><%= (config.levelRoles || []).length %> role reward(s) configured.</p>
@@ -247,7 +250,7 @@
           <p class="muted">Level-up messages: <strong><%= lvlChannel ? '#' + lvlChannel.name : 'same channel' %></strong></p>
         </div>
         <div class="card">
-          <h3>🛡️ Auto-Role <span class="badge <%= (config.autoRoleId && config.autoRoleEnabled !== false) ? 'on' : 'off' %>"><%= (config.autoRoleId && config.autoRoleEnabled !== false) ? 'Active' : 'Not set up' %></span></h3>
+          <h3>🛡️ Auto-Role <%- sideToggle('autorole', config.autoRoleEnabled !== false) %></h3>
           <% if (stats.autoRoleName) { %>
             <p class="muted">New members receive <strong><%= stats.autoRoleName %></strong> automatically.</p>
           <% } else { %>
@@ -255,15 +258,15 @@
           <% } %>
         </div>
         <div class="card">
-          <h3>🎰 Gambling <span class="badge <%= gambling.enabled ? 'on' : 'off' %>"><%= gambling.enabled ? 'Enabled' : 'Disabled' %></span></h3>
+          <h3>🎰 Gambling <%- sideToggle('gambling', gambling.enabled) %></h3>
           <p class="muted">House edge <strong><%= gambling.edgePercent %>%</strong> · Bets <strong><%= gambling.minBet %>–<%= gambling.maxBet || '∞' %> XP</strong></p>
           <% const gChannel = gambling.channelId ? channels.find(c => c.id === gambling.channelId) : null; %>
           <p class="muted">Channel: <strong><%= gChannel ? '#' + gChannel.name : 'anywhere' %></strong></p>
         </div>
         <div class="card">
           <% const logCh = config.logChannelId ? channels.find(c => c.id === config.logChannelId) : null; %>
-          <h3>📋 Logs <span class="badge <%= logCh ? 'on' : 'off' %>"><%= logCh ? 'Active' : 'Not set up' %></span></h3>
-          <p class="muted"><%= logCh ? 'Logging to #' + logCh.name : 'Pick a log channel in the Logs tab.' %></p>
+          <h3>📋 Logs <%- sideToggle('logs', config.logsEnabled !== false) %></h3>
+          <p class="muted"><%= logCh ? 'Also posting to #' + logCh.name : 'Viewable on the Logs page' %> · <a href="#logs" data-tab="logs">Open log viewer →</a></p>
         </div>
         <div class="card">
           <h3>🖌️ Quick Links</h3>
@@ -273,77 +276,90 @@
       </div>
     </div>
 
+<%
+  // Shared building blocks for module pages.
+  const moduleToggle = (key, on, id, size = '') =>
+    `<label class="switch ${size}" title="Turn this module on or off"><input type="checkbox" class="module-toggle" data-module="${key}" ${id ? `id="${id}"` : ''} ${on ? 'checked' : ''} aria-label="Enable ${key}"><span class="track"></span></label>`;
+  const chip = (tone, text) => `<span class="status-chip ${tone}"><span class="dot"></span>${text}</span>`;
+  const channelName = (id) => { const c = id ? channels.find(x => x.id === id) : null; return c ? '#' + c.name : null; };
+  const channelOptions = (selected, emptyLabel) =>
+    `<option value="">${emptyLabel}</option>` + channels.map(c => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>#${esc(c.name)}</option>`).join('');
+  function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+  const hpe = config.honeypotEmbed || {};
+  const we = welcome.embedConfig || {};
+%>
     <!-- WELCOME -->
-    <% const we = welcome.embedConfig || {}; %>
     <div class="tab-panel hidden" id="tab-welcome">
+      <div class="module-hero">
+        <div class="hero-icon">👋</div>
+        <div>
+          <h1>Welcome Messages</h1>
+          <p>Greet every new member automatically with a message, an embed, or both.</p>
+          <div class="hero-status">
+            <%- channelName(welcome.channelId) ? chip('good', 'Posting in ' + esc(channelName(welcome.channelId))) : chip('warn', 'No channel picked') %>
+          </div>
+        </div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('welcome', welcome.enabled, 'wEnabled') %></div>
+      </div>
+
       <div class="split">
-        <div class="card">
-          <h2>👋 Welcome Messages</h2>
-          <p class="muted">Greet every new member automatically. Placeholders are filled in when someone joins.</p>
-
-          <label class="switch" style="margin-top:0.5rem;">
-            <input type="checkbox" id="wEnabled" <%= welcome.enabled ? 'checked' : '' %>>
-            <span class="track"></span>
-            Enable welcome messages
-          </label>
-
-          <label for="wChannel">Channel</label>
-          <select id="wChannel" onchange="renderWelcomePreview()">
-            <option value="">— Select a channel —</option>
-            <% channels.forEach(c => { %>
-              <option value="<%= c.id %>" <%= welcome.channelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
-            <% }) %>
-          </select>
-
-          <label for="wContent">Message text</label>
-          <textarea id="wContent" maxlength="2000" rows="3" oninput="renderWelcomePreview()" placeholder="Welcome to {server}, {user}!"><%= welcome.messageContent || '' %></textarea>
-          <div class="chip-row" aria-label="Insert placeholder">
-            <button type="button" class="chip" data-insert="{user}" title="Mentions the new member">{user}</button>
-            <button type="button" class="chip" data-insert="{username}" title="Their username">{username}</button>
-            <button type="button" class="chip" data-insert="{server}" title="Server name">{server}</button>
-            <button type="button" class="chip" data-insert="{membercount}" title="Member count after they joined">{membercount}</button>
+        <div>
+          <div class="subtabs" data-subtabs>
+            <button class="active" data-sub="w-message">✉️ Message</button>
+            <button data-sub="w-embed">🧩 Embed</button>
           </div>
 
-          <div class="subpanel">
-            <label class="switch" style="margin-top:1rem;">
-              <input type="checkbox" id="wEmbedEnabled" <%= welcome.embedEnabled ? 'checked' : '' %> onchange="toggleWelcomeEmbed()">
-              <span class="track"></span>
-              Include a rich embed
-            </label>
-            <div id="wEmbedFields" class="<%= welcome.embedEnabled ? '' : 'disabled' %>">
-              <div class="field-row">
-                <div>
-                  <label for="wTitle">Embed title</label>
-                  <input id="wTitle" maxlength="256" value="<%= we.title || '' %>" placeholder="Welcome, {username}!" oninput="renderWelcomePreview()">
-                </div>
-                <div style="flex:0 0 110px;">
-                  <label for="wColor">Color</label>
-                  <input id="wColor" type="color" value="<%= we.color || '#5865F2' %>" oninput="renderWelcomePreview()">
+          <div class="subpage" data-page="w-message">
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">Channel</div><div class="setting-help">Where new members are greeted.</div></div>
+                <div class="setting-control"><select id="wChannel" onchange="renderWelcomePreview()"><%- channelOptions(welcome.channelId, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Message text</div><div class="setting-help">Type <code>@</code>, <code>#</code> or <code>:</code> to insert members, roles, channels and emoji. Click a placeholder to insert it.</div></div>
+                <textarea id="wContent" maxlength="2000" rows="4" placeholder="Welcome to {server}, {user}!"><%= welcome.messageContent || '' %></textarea>
+                <div class="chip-row" aria-label="Insert placeholder">
+                  <button type="button" class="chip" data-insert="{user}" title="Mentions the new member">{user}</button>
+                  <button type="button" class="chip" data-insert="{username}" title="Their username">{username}</button>
+                  <button type="button" class="chip" data-insert="{server}" title="Server name">{server}</button>
+                  <button type="button" class="chip" data-insert="{membercount}" title="Member count after they joined">{membercount}</button>
                 </div>
               </div>
-              <label for="wDesc">Embed description</label>
-              <textarea id="wDesc" maxlength="4096" rows="4" oninput="renderWelcomePreview()" placeholder="Grab your roles in #roles and say hi!"><%= we.description || '' %></textarea>
-              <div class="field-row">
-                <div>
-                  <label for="wImage">Image URL</label>
-                  <input id="wImage" value="<%= we.imageUrl || '' %>" placeholder="https://…" oninput="renderWelcomePreview()">
-                </div>
-                <div>
-                  <label for="wThumb">Thumbnail URL <span class="muted" style="font-weight:400;">(or {avatar})</span></label>
-                  <input id="wThumb" value="<%= we.thumbnailUrl || '' %>" placeholder="{avatar}" oninput="renderWelcomePreview()">
-                </div>
-              </div>
-              <label for="wFooter">Footer</label>
-              <input id="wFooter" maxlength="2048" value="<%= we.footer || '' %>" placeholder="You are member #{membercount}" oninput="renderWelcomePreview()">
             </div>
           </div>
 
-          <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:1.5rem;">
-            <button class="btn" onclick="saveWelcome()">Save Welcome Settings</button>
-            <button class="btn secondary" onclick="testWelcome()">📨 Send test</button>
-            <a class="btn secondary" href="/dashboard/<%= guild.id %>/embed?welcome=1">🖌️ Design in Embed Builder</a>
+          <div class="subpage hidden" data-page="w-embed">
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">Include a rich embed</div><div class="setting-help">Shown under the message text.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="wEmbedEnabled" <%= welcome.embedEnabled ? 'checked' : '' %> onchange="toggleWelcomeEmbed()"><span class="track"></span></label></div>
+              </div>
+              <div id="wEmbedFields" class="subpanel <%= welcome.embedEnabled ? '' : 'disabled' %>" style="border:none; margin:0; padding:0;">
+                <div class="setting-row">
+                  <div><div class="setting-title">Title & color</div></div>
+                  <div class="setting-control">
+                    <input id="wTitle" maxlength="256" value="<%= we.title || '' %>" placeholder="Welcome, {username}!">
+                    <input id="wColor" type="color" value="<%= we.color || '#5865F2' %>" oninput="renderWelcomePreview()" style="flex:0 0 64px; min-width:64px;">
+                  </div>
+                </div>
+                <div class="setting-row stack">
+                  <div class="setting-title">Description</div>
+                  <textarea id="wDesc" maxlength="4096" rows="4" placeholder="Grab your roles in #roles and say hi!"><%= we.description || '' %></textarea>
+                </div>
+                <div class="setting-row">
+                  <div><div class="setting-title">Images</div><div class="setting-help">Use <code>{avatar}</code> as the thumbnail to show the new member's avatar.</div></div>
+                  <div class="setting-control">
+                    <input id="wImage" value="<%= we.imageUrl || '' %>" placeholder="Image https://…" oninput="renderWelcomePreview()">
+                    <input id="wThumb" value="<%= we.thumbnailUrl || '' %>" placeholder="Thumbnail or {avatar}" oninput="renderWelcomePreview()">
+                  </div>
+                </div>
+                <div class="setting-row stack">
+                  <div class="setting-title">Footer</div>
+                  <input id="wFooter" maxlength="2048" value="<%= we.footer || '' %>" placeholder="You are member #{membercount}">
+                </div>
+              </div>
+            </div>
           </div>
-          <p class="muted" style="font-size:0.8rem; margin-top:0.75rem;">“Send test” posts the current form (saved or not) to the chosen channel, using you as the new member.</p>
         </div>
 
         <div class="sticky-preview">
@@ -374,256 +390,417 @@
           </div>
         </div>
       </div>
+
+      <div class="savebar">
+        <span class="hint">“Send test” posts the current form to the channel, using you as the new member.</span>
+        <a class="btn secondary" href="/dashboard/<%= guild.id %>/embed?welcome=1">🖌️ Design in Embed Builder</a>
+        <button class="btn secondary" onclick="testWelcome()">📨 Send test</button>
+        <button class="btn" onclick="saveWelcome()">Save changes</button>
+      </div>
     </div>
 
     <!-- HONEYPOT -->
     <div class="tab-panel hidden" id="tab-honeypot">
-      <div class="card">
-        <h2>🍯 Honeypot Trap</h2>
-        <p class="muted">Anyone who posts in this channel is instantly punished. A live counter embed is posted there.</p>
-        <label for="hpChannel">Trap Channel</label>
-        <select id="hpChannel">
-          <option value="">— Select a channel —</option>
-          <% channels.forEach(c => { %>
-            <option value="<%= c.id %>" <%= config.honeypotChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
-          <% }) %>
-        </select>
-        <label for="hpAction">Enforcement Action</label>
-        <select id="hpAction">
-          <option value="kick" <%= config.honeypotAction === 'kick' ? 'selected' : '' %>>Kick</option>
-          <option value="softban" <%= config.honeypotAction === 'softban' ? 'selected' : '' %>>Soft Ban (purge messages)</option>
-          <option value="ban" <%= config.honeypotAction === 'ban' ? 'selected' : '' %>>Permanent Ban</option>
-        </select>
-        <p class="muted" style="margin-top:0.75rem;">
-          Current counts — Kicks: <strong><%= config.honeypotKicks || 0 %></strong>,
-          Soft Bans: <strong><%= config.honeypotSoftbans || 0 %></strong>,
-          Bans: <strong><%= config.honeypotBans || 0 %></strong>
-        </p>
-        <% const hpe = config.honeypotEmbed || {}; %>
-        <h3 style="margin-top:1.5rem;">Trap Message Appearance</h3>
-        <p class="muted">Disguise the trap as something innocent (e.g. a fake "verify here" channel). Blank fields use the default shown as the placeholder.</p>
-        <div class="field-row">
-          <div>
-            <label for="hpTitle">Title</label>
-            <input type="text" id="hpTitle" maxlength="256" placeholder="<%= defaultTrapEmbed.title %>" value="<%= hpe.title || '' %>" oninput="renderHpPreview()">
-          </div>
-          <div style="flex:0 0 140px;">
-            <label for="hpColor">Color</label>
-            <input type="color" id="hpColor" value="<%= hpe.color || defaultTrapEmbed.color %>" oninput="renderHpPreview()">
+      <div class="module-hero">
+        <div class="hero-icon green">🍯</div>
+        <div>
+          <h1>Honeypot</h1>
+          <p>A trap channel real members never post in. Anyone who does is removed instantly — usually raid bots and hacked accounts.</p>
+          <div class="hero-status">
+            <%- channelName(config.honeypotChannelId) ? chip('good', 'Armed in ' + esc(channelName(config.honeypotChannelId))) : chip('warn', 'No trap channel yet') %>
+            <%- chip('', 'Action: ' + ({ kick: 'Kick', softban: 'Soft ban', ban: 'Ban' }[config.honeypotAction || 'kick'])) %>
+            <%- config.honeypotDmEnabled === false ? chip('', 'No DM') : chip('good', 'DMs caught members') %>
           </div>
         </div>
-        <label for="hpDesc">Description</label>
-        <textarea id="hpDesc" rows="4" maxlength="4000" placeholder="<%= defaultTrapEmbed.description %>" oninput="renderHpPreview()"><%= hpe.description || '' %></textarea>
-        <label for="hpFooter">Footer</label>
-        <input type="text" id="hpFooter" maxlength="2048" placeholder="<%= defaultTrapEmbed.footer %>" value="<%= hpe.footer || '' %>" oninput="renderHpPreview()">
-        <div class="field-row">
-          <div>
-            <label for="hpImage">Image URL</label>
-            <input type="text" id="hpImage" placeholder="https://…" value="<%= hpe.imageUrl || '' %>" oninput="renderHpPreview()">
-          </div>
-          <div>
-            <label for="hpThumb">Thumbnail URL</label>
-            <input type="text" id="hpThumb" placeholder="https://…" value="<%= hpe.thumbnailUrl || '' %>" oninput="renderHpPreview()">
-          </div>
-        </div>
-        <label style="display:flex; align-items:center; gap:0.5rem;">
-          <input type="checkbox" id="hpShowCounts" style="width:auto;" <%= hpe.showCounts === false ? '' : 'checked' %> onchange="renderHpPreview()">
-          Show kick/ban counters (turn off to disguise it better)
-        </label>
-        <label>Preview</label>
-        <div class="discord-embed-preview" id="hpPreview"></div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('honeypot', config.honeypotEnabled !== false, null) %></div>
+      </div>
 
-        <button class="btn" style="margin-top:1rem;" onclick="saveHoneypot()">Save Honeypot Settings</button>
+      <div class="mini-stats">
+        <div class="mini-stat"><div class="value"><%= (config.honeypotKicks || 0) + (config.honeypotSoftbans || 0) + (config.honeypotBans || 0) %></div><div class="label">Total catches</div></div>
+        <div class="mini-stat"><div class="value"><%= config.honeypotKicks || 0 %></div><div class="label">Kicks</div></div>
+        <div class="mini-stat"><div class="value"><%= config.honeypotSoftbans || 0 %></div><div class="label">Soft bans</div></div>
+        <div class="mini-stat"><div class="value"><%= config.honeypotBans || 0 %></div><div class="label">Bans</div></div>
+      </div>
+
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="hp-setup">⚙️ Setup</button>
+        <button data-sub="hp-message">🪤 Trap message</button>
+        <button data-sub="hp-dm">✉️ Member DM</button>
+      </div>
+
+      <div class="subpage" data-page="hp-setup">
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">Trap channel</div><div class="setting-help">Changing it posts a fresh trap message in the new channel.</div></div>
+            <div class="setting-control"><select id="hpChannel"><%- channelOptions(config.honeypotChannelId, '— Select a channel —') %></select></div>
+          </div>
+          <div class="setting-row stack">
+            <div><div class="setting-title">Punishment</div><div class="setting-help">What happens to anyone who posts in the trap.</div></div>
+            <div class="radio-cards">
+              <% [['kick', 'Kick', 'Removed, can rejoin with an invite.'], ['softban', 'Soft ban', 'Banned & unbanned — deletes their last 24h of messages.'], ['ban', 'Permanent ban', 'Removed for good until unbanned.']].forEach(([v, t, d]) => { %>
+                <label class="radio-card"><input type="radio" name="hpAction" value="<%= v %>" <%= (config.honeypotAction || 'kick') === v ? 'checked' : '' %>><span class="rc-body"><span class="rc-title"><%= t %></span><span class="rc-desc" style="display:block;"><%= d %></span></span></label>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="hp-message">
+        <div class="split">
+          <div class="card settings-card">
+            <div class="setting-row stack">
+              <div><div class="setting-title">Disguise the trap</div><div class="setting-help">Blank fields use the default shown as the placeholder. Type <code>@</code> or <code>#</code> to insert mentions.</div></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Title & color</div>
+              <div class="setting-control">
+                <input type="text" id="hpTitle" maxlength="256" placeholder="<%= defaultTrapEmbed.title %>" value="<%= hpe.title || '' %>">
+                <input type="color" id="hpColor" value="<%= hpe.color || defaultTrapEmbed.color %>" oninput="renderHpPreview()" style="flex:0 0 64px; min-width:64px;">
+              </div>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-title">Description</div>
+              <textarea id="hpDesc" rows="4" maxlength="4000" placeholder="<%= defaultTrapEmbed.description %>"><%= hpe.description || '' %></textarea>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-title">Footer</div>
+              <input type="text" id="hpFooter" maxlength="2048" placeholder="<%= defaultTrapEmbed.footer %>" value="<%= hpe.footer || '' %>">
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Images</div>
+              <div class="setting-control">
+                <input type="text" id="hpImage" placeholder="Image https://…" value="<%= hpe.imageUrl || '' %>" oninput="renderHpPreview()">
+                <input type="text" id="hpThumb" placeholder="Thumbnail https://…" value="<%= hpe.thumbnailUrl || '' %>" oninput="renderHpPreview()">
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Show counters</div><div class="setting-help">Turn off to make the trap look like a normal channel.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="hpShowCounts" <%= hpe.showCounts === false ? '' : 'checked' %> onchange="renderHpPreview()"><span class="track"></span></label></div>
+            </div>
+          </div>
+          <div class="sticky-preview">
+            <div class="card" style="margin-bottom:0;">
+              <h3 style="margin-top:0;">Preview</h3>
+              <div class="discord-chat"><div class="discord-embed-preview" id="hpPreview"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="hp-dm">
+        <div class="split">
+          <div class="card settings-card">
+            <div class="setting-row">
+              <div><div class="setting-title">DM caught members</div><div class="setting-help">Sent just before the punishment, explaining what happened, the likely cause (a compromised account or bot) and how to secure their account.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="hpDm" <%= config.honeypotDmEnabled === false ? '' : 'checked' %>><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-help">The punishment line follows the Setup tab's choice. Members with DMs closed are still punished — they just don't get the message.</div>
+            </div>
+          </div>
+          <div class="sticky-preview">
+            <div class="card" style="margin-bottom:0;">
+              <h3 style="margin-top:0;">What they receive</h3>
+              <div class="discord-chat">
+                <div class="discord-embed-preview" id="hpDmPreview" style="border-left-color:#ED4245;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="savebar">
+        <span class="hint">Changes apply to the live trap message immediately.</span>
+        <button class="btn" onclick="saveHoneypot()">Save changes</button>
       </div>
     </div>
 
     <!-- LEVELING -->
     <div class="tab-panel hidden" id="tab-leveling">
-      <div class="card">
-        <h2>📈 Leveling</h2>
-        <label style="display:flex; align-items:center; gap:0.5rem;">
-          <input type="checkbox" id="lvlEnabled" style="width:auto;" <%= config.levelingEnabled === false ? '' : 'checked' %>>
-          Enable XP gain from chat messages
-        </label>
-
-        <h3 style="margin-top:1.5rem;">Level-Up Messages</h3>
-        <label for="levelUpChannel">Send level-up messages to</label>
-        <select id="levelUpChannel">
-          <option value="">Same channel the member was chatting in</option>
-          <% channels.forEach(c => { %>
-            <option value="<%= c.id %>" <%= config.levelUpChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
-          <% }) %>
-        </select>
-        <% if (config.levelUpChannelId && !channels.find(c => c.id === config.levelUpChannelId)) { %>
-          <p class="muted" style="color:#FEE75C;">⚠️ The configured level-up channel no longer exists — messages are falling back to the same channel.</p>
-        <% } %>
-
-        <h3 style="margin-top:1.5rem;">XP Tuning</h3>
-        <p class="muted">Leave a field blank to use the site-wide default shown as its placeholder.</p>
-        <div class="field-row">
-          <div>
-            <label for="xpMin">Min XP / message</label>
-            <input type="number" id="xpMin" min="0" placeholder="<%= effectiveXp.xpMin %>" value="<%= config.xpMin ?? '' %>">
-          </div>
-          <div>
-            <label for="xpMax">Max XP / message</label>
-            <input type="number" id="xpMax" min="0" placeholder="<%= effectiveXp.xpMax %>" value="<%= config.xpMax ?? '' %>">
+      <div class="module-hero">
+        <div class="hero-icon yellow">📈</div>
+        <div>
+          <h1>Leveling</h1>
+          <p>Members earn XP for chatting, level up, and unlock role rewards.</p>
+          <div class="hero-status">
+            <%- chip('', levelStats.ranked.toLocaleString() + ' ranked members') %>
+            <%- chip('', 'Top level ' + levelStats.topLevel) %>
+            <%- chip('', effectiveXp.xpMin + '–' + effectiveXp.xpMax + ' XP / message') %>
           </div>
         </div>
-        <div class="field-row">
-          <div>
-            <label for="xpCooldown">Cooldown (seconds)</label>
-            <input type="number" id="xpCooldown" min="0" placeholder="<%= effectiveXp.cooldownMs / 1000 %>" value="<%= config.xpCooldownSeconds ?? '' %>">
-          </div>
-          <div>
-            <label for="levelXpBase">Level curve base (higher = slower)</label>
-            <input type="number" id="levelXpBase" min="1" placeholder="<%= effectiveXp.levelXpBase %>" value="<%= config.levelXpBase ?? '' %>">
-          </div>
-        </div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">XP gain</span><%- moduleToggle('leveling', config.levelingEnabled !== false, 'lvlEnabled') %></div>
+      </div>
 
-        <h3 style="margin-top:1.5rem;">XP Multipliers</h3>
-        <p class="muted">Channel multiplier × the member's best role multiplier. Use 0 to disable XP in a channel (e.g. bot spam), 2 for double XP (e.g. boosters).</p>
-        <div id="multiplierRows"></div>
-        <button class="btn secondary" type="button" onclick="addMultiplierRow()">+ Add Multiplier</button>
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="lv-xp">⚡ XP & speed</button>
+        <button data-sub="lv-rewards">🏅 Role rewards</button>
+        <button data-sub="lv-mult">✖️ Multipliers</button>
+        <button data-sub="lv-msg">📣 Level-up messages</button>
+        <button data-sub="lv-cards">🪪 Rank cards</button>
+      </div>
 
-        <h3 style="margin-top:1.5rem;">Rank Cards</h3>
-        <label style="display:flex; align-items:center; gap:0.5rem;">
-          <input type="checkbox" id="cardBoosterOnly" style="width:auto;" <%= config.rankCardBoosterOnly ? 'checked' : '' %>>
-          Only server boosters can customize their <code>/levels card</code>
-        </label>
-
-        <h3 style="margin-top:1.5rem;">Level-Up Role Rewards</h3>
-        <div id="levelRoleRows">
-          <% (config.levelRoles || []).forEach(lr => {
-               const role = roles.find(r => r.id === lr.roleId);
-          %>
-            <div class="field-row level-role-row">
-              <input type="number" min="1" class="lr-level" value="<%= lr.level %>" placeholder="Level">
-              <select class="lr-role">
-                <% roles.forEach(r => { %>
-                  <option value="<%= r.id %>" <%= r.id === lr.roleId ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
-                <% }) %>
-              </select>
-              <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
+      <div class="subpage" data-page="lv-xp">
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">XP per message</div><div class="setting-help">A random amount in this range, once per cooldown. Blank = default.</div></div>
+            <div class="setting-control">
+              <input type="number" id="xpMin" min="0" placeholder="Min <%= effectiveXp.xpMin %>" value="<%= config.xpMin ?? '' %>">
+              <input type="number" id="xpMax" min="0" placeholder="Max <%= effectiveXp.xpMax %>" value="<%= config.xpMax ?? '' %>">
             </div>
-            <% if (role && !role.assignable) { %>
-              <p class="muted" style="color:#FEE75C; margin-top:-0.3rem;">⚠️ LoofaryBot's role is below <%= role.name %> — move LoofaryBot's role higher in Server Settings → Roles.</p>
-            <% } %>
-          <% }) %>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Cooldown</div><div class="setting-help">Seconds between messages that earn XP — stops spam farming.</div></div>
+            <div class="setting-control"><input type="number" id="xpCooldown" min="0" placeholder="<%= effectiveXp.cooldownMs / 1000 %> seconds" value="<%= config.xpCooldownSeconds ?? '' %>"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Level curve</div><div class="setting-help">Higher = slower leveling. XP for level N ≈ base × N<sup>1.5</sup>.</div></div>
+            <div class="setting-control"><input type="number" id="levelXpBase" min="1" placeholder="Base <%= effectiveXp.levelXpBase %>" value="<%= config.levelXpBase ?? '' %>"></div>
+          </div>
         </div>
-        <button class="btn secondary" type="button" onclick="addLevelRoleRow()">+ Add Role Reward</button>
-        <br>
-        <button class="btn" style="margin-top:1rem;" onclick="saveLevels()">Save Leveling Settings</button>
+      </div>
+
+      <div class="subpage hidden" data-page="lv-rewards">
+        <div class="card">
+          <div class="setting-title">Roles granted at levels</div>
+          <div class="setting-help" style="margin-bottom:1rem;">Members keep earned roles even if they lose XP later.</div>
+          <div id="levelRoleRows">
+            <% (config.levelRoles || []).sort((a, b) => a.level - b.level).forEach(lr => {
+                 const role = roles.find(r => r.id === lr.roleId);
+            %>
+              <div class="field-row level-role-row">
+                <input type="number" min="1" class="lr-level" value="<%= lr.level %>" placeholder="Level" style="flex:0 0 110px;">
+                <select class="lr-role">
+                  <% roles.forEach(r => { %>
+                    <option value="<%= r.id %>" <%= r.id === lr.roleId ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
+                  <% }) %>
+                </select>
+                <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
+              </div>
+              <% if (role && !role.assignable) { %>
+                <p class="muted" style="color:var(--c-yellow); margin-top:-0.3rem; font-size:0.8rem;">⚠️ LoofaryBot's role is below <%= role.name %> — move LoofaryBot's role higher in Server Settings → Roles.</p>
+              <% } %>
+            <% }) %>
+          </div>
+          <button class="btn secondary small" type="button" onclick="addLevelRoleRow()">+ Add role reward</button>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="lv-mult">
+        <div class="card">
+          <div class="setting-title">XP multipliers</div>
+          <div class="setting-help" style="margin-bottom:1rem;">Earned XP = base × channel multiplier × the member's best role multiplier. Use <strong>0</strong> to switch XP off in a channel (e.g. bot spam) or <strong>2</strong> for double XP (e.g. boosters).</div>
+          <div id="multiplierRows"></div>
+          <button class="btn secondary small" type="button" onclick="addMultiplierRow()">+ Add multiplier</button>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="lv-msg">
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">Where level-up messages go</div><div class="setting-help">Keep bot spam out of chat by sending them to one channel.</div></div>
+            <div class="setting-control"><select id="levelUpChannel"><%- channelOptions(config.levelUpChannelId, 'Same channel the member was chatting in') %></select></div>
+          </div>
+          <% if (config.levelUpChannelId && !channels.find(c => c.id === config.levelUpChannelId)) { %>
+            <div class="setting-row stack"><div class="setting-help" style="color:var(--c-yellow);">⚠️ The chosen channel no longer exists — messages are going to the same channel for now.</div></div>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="lv-cards">
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">Boosters only</div><div class="setting-help">When on, only Server Boosters (and admins) can use <code>/levels card</code> to set their rank card color, background and tagline. Same as <code>/levels cardaccess</code>.</div></div>
+            <div class="setting-control"><label class="switch"><input type="checkbox" id="cardBoosterOnly" <%= config.rankCardBoosterOnly ? 'checked' : '' %>><span class="track"></span></label></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="savebar">
+        <span class="hint">Saves every leveling tab at once.</span>
+        <button class="btn" onclick="saveLevels()">Save changes</button>
       </div>
     </div>
 
     <!-- AUTO-ROLE -->
     <div class="tab-panel hidden" id="tab-autorole">
-      <div class="card">
-        <h2>🛡️ Auto-Role</h2>
-        <p class="muted">Automatically grant a role to every member when they join. Use Sync to also grant it to everyone already in the server.</p>
-
-        <label style="display:flex; align-items:center; gap:0.5rem;">
-          <input type="checkbox" id="arEnabled" style="width:auto;" <%= config.autoRoleEnabled === false ? '' : 'checked' %>>
-          Enable auto-role on join
-        </label>
-
-        <label for="arRole">Role to grant</label>
-        <select id="arRole">
-          <option value="">— None —</option>
-          <% roles.forEach(r => { %>
-            <option value="<%= r.id %>" <%= config.autoRoleId === r.id ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
-          <% }) %>
-        </select>
-
-        <button class="btn" style="margin-top:1rem;" onclick="saveAutoRole()">Save Auto-Role Settings</button>
-        <button class="btn secondary" style="margin-top:1rem;" onclick="syncAutoRole()">🔄 Sync to Existing Members</button>
-        <p class="muted" id="arSyncResult" style="margin-top:0.75rem;"></p>
+      <div class="module-hero">
+        <div class="hero-icon">🛡️</div>
+        <div>
+          <h1>Auto-Role</h1>
+          <p>Give every new member a role the moment they join.</p>
+          <div class="hero-status"><%- stats.autoRoleName ? chip('good', 'Grants @' + esc(stats.autoRoleName)) : chip('warn', 'No role picked') %></div>
+        </div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('autorole', config.autoRoleEnabled !== false, 'arEnabled') %></div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <h3 style="margin-top:0;">Role to grant</h3>
+          <p class="muted" style="font-size:0.85rem;">LoofaryBot's own role must sit above this role in Server Settings → Roles.</p>
+          <select id="arRole">
+            <option value="">— None —</option>
+            <% roles.forEach(r => { %>
+              <option value="<%= r.id %>" <%= config.autoRoleId === r.id ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
+            <% }) %>
+          </select>
+          <button class="btn" style="margin-top:1rem;" onclick="saveAutoRole()">Save role</button>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">Existing members</h3>
+          <p class="muted" style="font-size:0.85rem;">Auto-role only applies to new joins. Sync gives the saved role to everyone already here who doesn't have it.</p>
+          <button class="btn secondary" onclick="syncAutoRole()">🔄 Sync to existing members</button>
+          <p class="muted" id="arSyncResult" style="margin-top:0.75rem; font-size:0.85rem;"></p>
+        </div>
       </div>
     </div>
 
     <!-- GAMBLING -->
     <div class="tab-panel hidden" id="tab-gambling">
-      <div class="card">
-        <h2>🎰 XP Gambling</h2>
-        <p class="muted">Members bet XP on <code>/gamble coinflip</code>, <code>/gamble mines</code> and <code>/gamble highlow</code>. The house edge is taken off every payout multiplier.</p>
-        <label style="display:flex; align-items:center; gap:0.5rem;">
-          <input type="checkbox" id="gEnabled" style="width:auto;" <%= gambling.enabled ? 'checked' : '' %>>
-          Enable XP gambling
-        </label>
-        <div class="field-row">
-          <div>
-            <label for="gEdge">House edge (%)</label>
-            <input type="number" id="gEdge" min="0" max="50" step="0.5" value="<%= gambling.edgePercent %>" oninput="renderOdds()">
-          </div>
-          <div>
-            <label for="gMin">Min bet (XP)</label>
-            <input type="number" id="gMin" min="1" value="<%= gambling.minBet %>">
-          </div>
-          <div>
-            <label for="gMax">Max bet (XP, blank = no limit)</label>
-            <input type="number" id="gMax" min="1" value="<%= gambling.maxBet || '' %>">
+      <div class="module-hero">
+        <div class="hero-icon red">🎰</div>
+        <div>
+          <h1>XP Gambling</h1>
+          <p>Members bet XP on coinflip, blackjack, mines and high-low.</p>
+          <div class="hero-status">
+            <%- chip('', gambling.edgePercent + '% house edge') %>
+            <%- chip('', 'Bets ' + gambling.minBet + '–' + (gambling.maxBet || '∞') + ' XP') %>
+            <%- chip('', channelName(gambling.channelId) ? 'Only in ' + esc(channelName(gambling.channelId)) : 'Any channel') %>
           </div>
         </div>
-        <label for="gChannel">Allowed channel</label>
-        <select id="gChannel">
-          <option value="">Any channel</option>
-          <% channels.forEach(c => { %>
-            <option value="<%= c.id %>" <%= gambling.channelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
-          <% }) %>
-        </select>
-        <p class="muted" id="gOdds" style="margin-top:0.75rem;"></p>
-        <button class="btn" style="margin-top:1rem;" onclick="saveGambling()">Save Gambling Settings</button>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('gambling', gambling.enabled, 'gEnabled') %></div>
       </div>
+      <div class="two-col">
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">House edge</div><div class="setting-help">Taken from every payout. 4% means players get back 96% on average.</div></div>
+            <div class="setting-control"><input type="number" id="gEdge" min="0" max="50" step="0.5" value="<%= gambling.edgePercent %>" oninput="renderOdds()"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Bet limits</div><div class="setting-help">Leave max blank for no limit.</div></div>
+            <div class="setting-control">
+              <input type="number" id="gMin" min="1" value="<%= gambling.minBet %>" placeholder="Min">
+              <input type="number" id="gMax" min="1" value="<%= gambling.maxBet || '' %>" placeholder="Max">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Allowed channel</div><div class="setting-help">Keep gambling out of general chat.</div></div>
+            <div class="setting-control"><select id="gChannel"><%- channelOptions(gambling.channelId, 'Any channel') %></select></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">Payouts at this edge</h3>
+          <table class="payout-table" id="gOdds"></table>
+        </div>
+      </div>
+      <div class="savebar"><button class="btn" onclick="saveGambling()">Save changes</button></div>
     </div>
 
     <!-- LOGS -->
     <div class="tab-panel hidden" id="tab-logs">
-      <div class="card">
-        <h2>📋 Server Logs</h2>
-        <p class="muted">Send a record of server activity to a private staff channel.</p>
-        <label for="logChannel">Log channel</label>
-        <select id="logChannel">
-          <option value="">— Logging off —</option>
-          <% channels.forEach(c => { %>
-            <option value="<%= c.id %>" <%= config.logChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+      <div class="module-hero">
+        <div class="hero-icon">📋</div>
+        <div>
+          <h1>Server Logs</h1>
+          <p>Edits, deletes, joins, leaves, voice and role changes — kept for 30 days and searchable here.</p>
+          <div class="hero-status"><%- channelName(config.logChannelId) ? chip('good', 'Also posting to ' + esc(channelName(config.logChannelId))) : chip('', 'Dashboard only (no Discord channel)') %></div>
+        </div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('logs', config.logsEnabled !== false, null) %></div>
+      </div>
+
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="lg-view">🔎 Log viewer</button>
+        <button data-sub="lg-settings">⚙️ Settings</button>
+      </div>
+
+      <div class="subpage" data-page="lg-view">
+        <div class="card">
+          <div class="log-toolbar">
+            <input type="search" id="logSearch" placeholder="Search by user, message text or channel…">
+            <select id="logType">
+              <option value="">All events</option>
+              <% Object.entries(logEvents).forEach(([key, label]) => { %><option value="<%= key %>"><%= label %></option><% }) %>
+            </select>
+            <button class="btn secondary small" onclick="loadLogs(1)">↻ Refresh</button>
+          </div>
+          <div class="log-list" id="logList"><div class="empty-state">Loading…</div></div>
+          <div class="pagination">
+            <button class="btn secondary small" id="logPrev" onclick="loadLogs(logState.page - 1)">← Newer</button>
+            <span class="muted" id="logPageLabel"></span>
+            <button class="btn secondary small" id="logNext" onclick="loadLogs(logState.page + 1)">Older →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="lg-settings">
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">Discord log channel</div><div class="setting-help">Optional — logs always appear in the viewer. Edit/delete logs there get a Jump button and highlighted changes.</div></div>
+            <div class="setting-control"><select id="logChannel"><%- channelOptions(config.logChannelId, 'Dashboard only') %></select></div>
+          </div>
+          <% Object.entries(logEvents).forEach(([key, label]) => { %>
+            <div class="setting-row">
+              <div class="setting-title"><%= label %></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" class="log-event" data-key="<%= key %>" <%= (config.logEvents && config.logEvents[key] === false) ? '' : 'checked' %>><span class="track"></span></label></div>
+            </div>
           <% }) %>
-        </select>
-        <label style="margin-top:1rem;">Events to log</label>
-        <% Object.entries(logEvents).forEach(([key, label]) => { %>
-          <label style="display:flex; align-items:center; gap:0.5rem; font-weight:normal;">
-            <input type="checkbox" class="log-event" data-key="<%= key %>" style="width:auto;" <%= (config.logEvents && config.logEvents[key] === false) ? '' : 'checked' %>>
-            <%= label %>
-          </label>
-        <% }) %>
-        <button class="btn" style="margin-top:1rem;" onclick="saveLogs()">Save Log Settings</button>
+        </div>
+        <div class="savebar"><button class="btn" onclick="saveLogs()">Save changes</button></div>
       </div>
     </div>
 
     <!-- COMMANDS -->
     <div class="tab-panel hidden" id="tab-commands">
-      <% commandReference.forEach(group => { %>
-        <div class="card">
-          <h3><%= group.group %></h3>
-          <% group.commands.forEach(cmd => { %>
-            <div class="cmd-row">
-              <code><%= cmd.usage %></code>
-              <span class="muted"><%= cmd.description %></span>
-            </div>
-          <% }) %>
+      <div class="module-hero">
+        <div class="hero-icon">⌨️</div>
+        <div>
+          <h1>Commands</h1>
+          <p><%= commandReference.reduce((n, g) => n + g.commands.length, 0) %> slash commands in <%= commandReference.length %> categories. Click a command to copy it.</p>
         </div>
-      <% }) %>
+      </div>
+      <div class="cmd-toolbar">
+        <input type="search" id="cmdSearch" placeholder="Filter commands…" oninput="filterCommands()">
+        <div class="chip-filter" id="cmdPermFilter">
+          <button class="active" data-perm="all">All</button>
+          <button data-perm="everyone">Everyone</button>
+          <button data-perm="staff">Staff</button>
+        </div>
+      </div>
+      <div class="cmd-grid">
+        <% commandReference.forEach(g => { %>
+          <div class="cmd-card" data-group="<%= g.id %>">
+            <div class="cmd-card-head">
+              <div class="hero-icon"><%= g.icon %></div>
+              <div><h3><%= g.group %></h3><p><%= g.blurb %></p></div>
+              <% if (g.tab) { %><a href="#<%= g.tab %>" data-tab="<%= g.tab %>">Settings →</a><% } %>
+            </div>
+            <div class="cmd-list">
+              <% g.commands.forEach(c => { %>
+                <div class="cmd-item" data-perm="<%= c.perm ? 'staff' : 'everyone' %>" data-text="<%= (c.usage + ' ' + c.description).toLowerCase() %>">
+                  <code title="Click to copy" data-copy="<%= c.usage.split(' · ')[0].split(' ')[0] + (c.usage.split(' ')[1] ? ' ' + c.usage.split(' ')[1] : '') %>"><%= c.usage %></code>
+                  <span class="desc"><%= c.description %></span>
+                  <span class="perm-badge <%= c.perm ? '' : 'everyone' %>"><%= c.perm || 'Everyone' %></span>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        <% }) %>
+      </div>
     </div>
 
     <!-- LEADERBOARD -->
     <div class="tab-panel hidden" id="tab-leaderboard">
+      <div class="module-hero">
+        <div class="hero-icon yellow">🏆</div>
+        <div>
+          <h1>XP Leaderboard</h1>
+          <p>Members who leave are removed automatically along with their XP.</p>
+        </div>
+      </div>
       <div class="card">
-        <h2>🏆 XP Leaderboard</h2>
         <div id="leaderboardRows" class="muted">Loading…</div>
         <div class="pagination">
-          <button class="btn secondary" id="lbPrev" onclick="changeLeaderboardPage(-1)">← Prev</button>
+          <button class="btn secondary small" id="lbPrev" onclick="changeLeaderboardPage(-1)">← Prev</button>
           <span class="muted" id="lbPageLabel">Page 1</span>
-          <button class="btn secondary" id="lbNext" onclick="changeLeaderboardPage(1)">Next →</button>
+          <button class="btn secondary small" id="lbNext" onclick="changeLeaderboardPage(1)">Next →</button>
         </div>
       </div>
     </div>
@@ -634,6 +811,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <script src="/js/mentions.js"></script>
   <script>
     const guildId = '<%= guild.id %>';
     const roles = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
@@ -660,6 +838,10 @@
       panel.classList.remove('hidden');
       document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
       if (tab === 'leaderboard') loadLeaderboard();
+      if (tab === 'logs' && !logState.loaded) {
+        logState.loaded = true;
+        loadLogs(1);
+      }
       if (tab === 'overview' && joinChart) joinChart.resize();
       history.replaceState(null, '', tab === 'overview' ? location.pathname : `#${tab}`);
       toggleSidebar(false);
@@ -775,9 +957,9 @@
             (e) => `
             <div class="leaderboard-row">
               <div class="leaderboard-rank ${e.rank <= 3 ? 'top3' : ''}">#${e.rank}</div>
-              ${e.avatarUrl ? `<img class="leaderboard-avatar" src="${e.avatarUrl}">` : '<div class="leaderboard-avatar"></div>'}
-              <div class="leaderboard-name">${e.name}</div>
-              <div class="leaderboard-stats">Level ${e.level} · ${e.xp} XP</div>
+              ${e.avatarUrl ? `<img class="leaderboard-avatar" src="${esc(e.avatarUrl)}" alt="">` : '<div class="leaderboard-avatar"></div>'}
+              <div class="leaderboard-name">${esc(e.name)}</div>
+              <div class="leaderboard-stats">Level ${e.level} · ${fmt(e.xp)} XP</div>
             </div>`
           )
           .join('');
@@ -850,13 +1032,13 @@
       el.style.borderLeftColor = e.color || trapDefaults.color;
       let html = '';
       if (e.thumbnailUrl) html += `<img src="${esc(e.thumbnailUrl)}" style="float:right; max-width:80px; margin:0 0 0.5rem 0.5rem;">`;
-      html += `<div class="title">${esc(e.title || trapDefaults.title)}</div>`;
-      html += `<div class="desc">${esc(e.description || trapDefaults.description)}</div>`;
+      html += `<div class="title">${LoofMentions.render(e.title || trapDefaults.title)}</div>`;
+      html += `<div class="desc">${LoofMentions.markdown(LoofMentions.render(e.description || trapDefaults.description))}</div>`;
       if (e.showCounts) {
         html += `<div class="desc" style="margin-top:0.5rem;"><strong>Kicks</strong> ${trapCounts.kicks} · <strong>Soft Bans</strong> ${trapCounts.softbans} · <strong>Bans</strong> ${trapCounts.bans}</div>`;
       }
       if (e.imageUrl) html += `<img src="${esc(e.imageUrl)}">`;
-      html += `<div class="muted" style="font-size:0.75rem; margin-top:0.5rem;">${esc(e.footer || trapDefaults.footer)}</div>`;
+      html += `<div style="font-size:0.75rem; margin-top:0.5rem; color:#949ba4;">${LoofMentions.render(e.footer || trapDefaults.footer)}</div>`;
       el.innerHTML = html;
     }
 
@@ -865,7 +1047,8 @@
         'honeypot',
         {
           channelId: document.getElementById('hpChannel').value,
-          action: document.getElementById('hpAction').value,
+          action: (document.querySelector('input[name="hpAction"]:checked') || {}).value,
+          dmEnabled: document.getElementById('hpDm').checked,
           embed: readHpEmbed()
         },
         '✅ Honeypot settings saved.'
@@ -900,16 +1083,24 @@
     // --- Gambling ---
     function renderOdds() {
       const edge = Math.min(Math.max(Number(document.getElementById('gEdge').value) || 0, 0), 50) / 100;
+      const x = (v) => `${v.toFixed(2)}x`;
       const mines = (k, m) => {
-        let x = 1;
-        for (let i = 0; i < k; i++) x *= (25 - i) / (25 - m - i);
-        return (x * (1 - edge)).toFixed(2);
+        let v = 1;
+        for (let i = 0; i < k; i++) v *= (25 - i) / (25 - m - i);
+        return v * (1 - edge);
       };
+      const rows = [
+        ['🪙 Coinflip', 'Win (50/50)', x(2 * (1 - edge))],
+        ['🂡 Blackjack', 'Win · push returns the bet', x(2 - edge)],
+        ['🂡 Blackjack', 'Natural blackjack (3:2)', x(1 + 1.5 * (1 - edge))],
+        ['💣 Mines', '3 mines, 1 gem → 5 gems', `${x(mines(1, 3))} → ${x(mines(5, 3))}`],
+        ['💣 Mines', '10 mines, 1 gem → 3 gems', `${x(mines(1, 10))} → ${x(mines(3, 10))}`],
+        ['🃏 High-Low', 'One correct call on a 7', x((1 - edge) / (7 / 13))]
+      ];
       document.getElementById('gOdds').innerHTML =
-        `Coinflip pays <strong>${(2 * (1 - edge)).toFixed(2)}x</strong> · ` +
-        `Mines (3 mines): 1 gem <strong>${mines(1, 3)}x</strong>, 5 gems <strong>${mines(5, 3)}x</strong> · ` +
-        `Mines (10 mines): 3 gems <strong>${mines(3, 10)}x</strong> · ` +
-        `High-Low: one correct call on a 7 pays <strong>${((1 - edge) / (7 / 13)).toFixed(2)}x</strong>`;
+        '<tr><th>Game</th><th>Result</th><th style="text-align:right;">Pays</th></tr>' +
+        rows.map(([g, r, p]) => `<tr><td>${g}</td><td class="muted">${r}</td><td>${p}</td></tr>`).join('') +
+        `<tr><td colspan="3" class="muted" style="font-size:0.78rem;">Players get back ${(100 - edge * 100).toFixed(1)}% of what they bet on average.</td></tr>`;
     }
 
     function saveGambling() {
@@ -1076,25 +1267,17 @@
     }
 
     // --- Welcome ---
-    function fillPlaceholders(text, { html }) {
+    // Escaped + mention-rendered text with {placeholders} filled for the preview.
+    function fillPlaceholders(text) {
       const map = {
-        '{user}': html ? `<span class="mention-pill">@${esc(viewer.username)}</span>` : '@' + viewer.username,
-        '{username}': html ? esc(viewer.username) : viewer.username,
-        '{server}': html ? esc(guildName) : guildName,
+        '{user}': `<span class="mention-pill">@${esc(viewer.username)}</span>`,
+        '{username}': esc(viewer.username),
+        '{server}': esc(guildName),
         '{membercount}': fmt(memberCount)
       };
-      const source = html ? esc(text) : text;
-      return source.replace(/\{(user|username|server|membercount)\}/gi, (t) => map[t.toLowerCase()]);
+      return LoofMentions.render(text || '').replace(/\{(user|username|server|membercount)\}/gi, (t) => map[t.toLowerCase()]);
     }
-
-    // Light Discord-flavoured markdown for the preview: **bold**, *italic*, __underline__, `code`.
-    function miniMarkdown(htmlText) {
-      return htmlText
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/__(.+?)__/g, '<u>$1</u>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
-    }
+    const miniMarkdown = (html) => LoofMentions.markdown(html);
 
     function readWelcomeForm() {
       return {
@@ -1126,7 +1309,7 @@
       const w = readWelcomeForm();
       const channel = channels.find((c) => c.id === w.channelId);
       document.getElementById('wpChannel').textContent = `# ${channel ? channel.name : 'welcome'}`;
-      document.getElementById('wpContent').innerHTML = miniMarkdown(fillPlaceholders(w.messageContent, { html: true }));
+      document.getElementById('wpContent').innerHTML = miniMarkdown(fillPlaceholders(w.messageContent));
 
       const e = w.embedConfig;
       const embedEl = document.getElementById('wpEmbed');
@@ -1134,9 +1317,9 @@
       embedEl.style.display = hasEmbed ? 'block' : 'none';
       if (!hasEmbed) return;
       embedEl.style.borderLeftColor = e.color || '#5865F2';
-      document.getElementById('wpTitle').innerHTML = fillPlaceholders(e.title, { html: true });
-      document.getElementById('wpDesc').innerHTML = miniMarkdown(fillPlaceholders(e.description, { html: true }));
-      document.getElementById('wpFooter').innerHTML = fillPlaceholders(e.footer, { html: true });
+      document.getElementById('wpTitle').innerHTML = fillPlaceholders(e.title);
+      document.getElementById('wpDesc').innerHTML = miniMarkdown(fillPlaceholders(e.description));
+      document.getElementById('wpFooter').innerHTML = fillPlaceholders(e.footer);
 
       setPreviewImage(document.getElementById('wpImage'), safeUrl(e.imageUrl));
       setPreviewImage(document.getElementById('wpThumb'), e.thumbnailUrl === '{avatar}' ? viewer.avatarUrl : safeUrl(e.thumbnailUrl));
@@ -1182,7 +1365,202 @@
       }
     }
 
+    // --- Sub-tabs inside module pages ---
+    document.querySelectorAll('[data-subtabs]').forEach((bar) => {
+      const panel = bar.closest('.tab-panel');
+      bar.querySelectorAll('button').forEach((btn) =>
+        btn.addEventListener('click', () => {
+          bar.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+          panel.querySelectorAll('.subpage').forEach((pg) => pg.classList.toggle('hidden', pg.dataset.page !== btn.dataset.sub));
+          if (btn.dataset.sub === 'lg-view') loadLogs(logState.page);
+        })
+      );
+    });
+
+    // --- Module on/off switches (sidebar, overview cards and page headers stay in sync) ---
+    document.querySelectorAll('.module-toggle').forEach((input) => {
+      input.addEventListener('click', (ev) => ev.stopPropagation());
+      input.addEventListener('change', async () => {
+        const module = input.dataset.module;
+        const enabled = input.checked;
+        const all = document.querySelectorAll(`.module-toggle[data-module="${module}"]`);
+        all.forEach((el) => (el.disabled = true));
+        try {
+          const res = await fetch(`/api/guilds/${guildId}/modules/${module}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'Failed to update.');
+          all.forEach((el) => (el.checked = enabled));
+          const label = module.charAt(0).toUpperCase() + module.slice(1);
+          showToast(`${enabled ? '✅' : '⏸️'} ${label} ${enabled ? 'enabled' : 'disabled'}.${data.note ? ' ' + data.note : ''}`);
+        } catch (err) {
+          input.checked = !enabled;
+          showToast(`❌ ${err.message}`);
+        } finally {
+          all.forEach((el) => (el.disabled = false));
+        }
+      });
+    });
+
+    // --- Honeypot DM preview (mirrors buildHoneypotNotice on the bot) ---
+    const PUNISH = {
+      kick: ['Kick', 'You were <strong>kicked</strong>. You can rejoin with a new invite once your account is secure.'],
+      softban: ['Soft ban', 'You were <strong>soft-banned</strong>: briefly banned so your recent messages were deleted, then unbanned. You can rejoin with a new invite once your account is secure.'],
+      ban: ['Permanent ban', 'You were <strong>banned</strong>. If you believe this was a mistake, contact the server staff to appeal.']
+    };
+    function renderHpDmPreview() {
+      const action = (document.querySelector('input[name="hpAction"]:checked') || {}).value || 'kick';
+      const ch = channels.find((c) => c.id === document.getElementById('hpChannel').value);
+      const [label, detail] = PUNISH[action];
+      const el = document.getElementById('hpDmPreview');
+      el.style.opacity = document.getElementById('hpDm').checked ? '1' : '0.4';
+      el.innerHTML = `
+        <div class="title">⚠️ You were removed from ${esc(guildName)}</div>
+        <div class="desc">Your account sent a message in <strong>#${esc(ch ? ch.name : 'trap-channel')}</strong>, a hidden trap channel that real members are told never to post in. Posting there triggers an automatic anti-raid action.</div>
+        <div class="desc" style="margin-top:0.6rem;"><strong>Punishment</strong><br><strong>${label}</strong> — ${detail}</div>
+        <div class="desc" style="margin-top:0.6rem;"><strong>Why this usually happens</strong><br>• <strong>Your account may be compromised</strong> — scam bots often hijack accounts and spam every channel they can see.<br>• <strong>The account is a self-bot or automation</strong> posting on its own.<br>• <strong>It was a mistake</strong> — you posted without reading the channel's warning.</div>
+        <div class="desc" style="margin-top:0.6rem;"><strong>Secure your account</strong><br>1. Change your Discord password.<br>2. Turn on Two-Factor Authentication.<br>3. Settings → Authorized Apps: remove anything you don't recognize.<br>4. Never scan QR codes or run scripts people send you to "verify".</div>`;
+    }
+    document.querySelectorAll('input[name="hpAction"], #hpDm, #hpChannel').forEach((el) => el.addEventListener('change', renderHpDmPreview));
+
+    // --- Server log viewer ---
+    const logState = { page: 1, totalPages: 1 };
+    const LOG_LABELS = { messageEdit: 'Edited', messageDelete: 'Deleted', memberJoin: 'Joined', memberLeave: 'Left', voice: 'Voice', roles: 'Roles' };
+
+    // Word diff (same algorithm as the bot's log embeds) for highlighting edits.
+    function diffWords(a, b) {
+      const A = String(a || '').split(/(\s+)/).filter(Boolean);
+      const B = String(b || '').split(/(\s+)/).filter(Boolean);
+      if (A.length > 600 || B.length > 600) return [{ t: 'del', s: a }, { t: 'add', s: b }];
+      const dp = Array.from({ length: A.length + 1 }, () => new Uint16Array(B.length + 1));
+      for (let i = A.length - 1; i >= 0; i--)
+        for (let j = B.length - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      const out = [];
+      let i = 0, j = 0;
+      while (i < A.length && j < B.length) {
+        if (A[i] === B[j]) { out.push({ t: 'same', s: A[i] }); i++; j++; }
+        else if (dp[i + 1][j] >= dp[i][j + 1]) out.push({ t: 'del', s: A[i++] });
+        else out.push({ t: 'add', s: B[j++] });
+      }
+      while (i < A.length) out.push({ t: 'del', s: A[i++] });
+      while (j < B.length) out.push({ t: 'add', s: B[j++] });
+      return out;
+    }
+
+    function relTime(iso) {
+      const sec = Math.round((Date.now() - new Date(iso)) / 1000);
+      if (sec < 60) return 'just now';
+      const units = [['d', 86400], ['h', 3600], ['m', 60]];
+      for (const [u, n] of units) if (sec >= n) return `${Math.floor(sec / n)}${u} ago`;
+      return 'just now';
+    }
+
+    function renderLogEntry(e) {
+      const avatar = e.userAvatar ? `<img src="${esc(e.userAvatar)}" alt="">` : '<div class="log-avatar"></div>';
+      let body = '';
+      if (e.type === 'messageEdit') {
+        if (e.details && e.details.beforeUnknown) {
+          body = `<div class="log-content"><span class="lbl">After</span>${esc(e.after)}</div>`;
+        } else {
+          const ops = diffWords(e.before, e.after);
+          const before = ops.filter((o) => o.t !== 'add').map((o) => (o.t === 'del' ? `<span class="diff-del">${esc(o.s)}</span>` : esc(o.s))).join('');
+          const after = ops.filter((o) => o.t !== 'del').map((o) => (o.t === 'add' ? `<span class="diff-add">${esc(o.s)}</span>` : esc(o.s))).join('');
+          body = `<div class="log-content"><span class="lbl">Before</span>${before || '<em>(empty)</em>'}</div><div class="log-content"><span class="lbl">After</span>${after || '<em>(empty)</em>'}</div>`;
+        }
+      } else if (e.type === 'messageDelete') {
+        body = e.details && e.details.contentUnknown
+          ? '<div class="log-content muted">Content unavailable — sent before the bot last restarted.</div>'
+          : `<div class="log-content">${esc(e.before) || '<em>(no text)</em>'}${e.details && e.details.attachments && e.details.attachments.length ? `<br><span class="muted">📎 ${e.details.attachments.map(esc).join(', ')}</span>` : ''}</div>`;
+      } else if (e.type === 'roles' && e.details) {
+        const add = (e.details.added || []).map((r) => `<span class="diff-add">+${esc(r)}</span>`).join(' ');
+        const rem = (e.details.removed || []).map((r) => `<span class="diff-del">−${esc(r)}</span>`).join(' ');
+        body = `<div class="log-content">${[add, rem].filter(Boolean).join(' ')}${e.details.executor ? `<br><span class="muted">by ${esc(e.details.executor)}</span>` : ''}</div>`;
+      } else if (e.type === 'memberJoin' && e.details && e.details.newAccount) {
+        body = `<div class="log-content"><span class="diff-del" style="text-decoration:none;">⚠️ New account (${e.details.accountAgeDays}d old)</span></div>`;
+      }
+      const jump = e.messageUrl ? `<a href="${esc(e.messageUrl)}" target="_blank" rel="noopener">🔗 Jump</a>` : '';
+      return `<div class="log-row">
+        ${avatar}
+        <div style="min-width:0;">
+          <div class="log-head"><strong>${esc(e.userTag || 'Unknown user')}</strong><span class="log-type ${esc(e.type)}">${esc(LOG_LABELS[e.type] || e.type)}</span></div>
+          <div class="log-summary">${esc(e.summary)}</div>
+          ${body}
+        </div>
+        <div class="log-meta" title="${esc(new Date(e.createdAt).toLocaleString())}">${relTime(e.createdAt)}<br>${jump}</div>
+      </div>`;
+    }
+
+    async function loadLogs(page = 1) {
+      const list = document.getElementById('logList');
+      const params = new URLSearchParams({ page: Math.max(1, page), q: document.getElementById('logSearch').value.trim(), type: document.getElementById('logType').value });
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/logs?${params}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load logs.');
+        logState.page = data.page;
+        logState.totalPages = data.totalPages;
+        document.getElementById('logPageLabel').textContent = `Page ${data.page} of ${data.totalPages} · ${fmt(data.total)} event(s)`;
+        document.getElementById('logPrev').disabled = data.page <= 1;
+        document.getElementById('logNext').disabled = data.page >= data.totalPages;
+        list.innerHTML = data.entries.length
+          ? data.entries.map(renderLogEntry).join('')
+          : `<div class="empty-state"><div class="big">🗒️</div>${params.get('q') || params.get('type') ? 'No events match your search.' : 'No events logged yet. New activity shows up here automatically.'}</div>`;
+      } catch (err) {
+        list.innerHTML = `<div class="empty-state">❌ ${esc(err.message)}</div>`;
+      }
+    }
+    let logSearchTimer;
+    document.getElementById('logSearch').addEventListener('input', () => {
+      clearTimeout(logSearchTimer);
+      logSearchTimer = setTimeout(() => loadLogs(1), 300);
+    });
+    document.getElementById('logType').addEventListener('change', () => loadLogs(1));
+
+    // --- Commands page: filter + click to copy ---
+    let cmdPerm = 'all';
+    function filterCommands() {
+      const q = document.getElementById('cmdSearch').value.trim().toLowerCase();
+      document.querySelectorAll('.cmd-card').forEach((card) => {
+        let visible = 0;
+        card.querySelectorAll('.cmd-item').forEach((item) => {
+          const show = (!q || item.dataset.text.includes(q)) && (cmdPerm === 'all' || item.dataset.perm === cmdPerm);
+          item.style.display = show ? '' : 'none';
+          if (show) visible++;
+        });
+        card.style.display = visible ? '' : 'none';
+      });
+    }
+    document.querySelectorAll('#cmdPermFilter button').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#cmdPermFilter button').forEach((b) => b.classList.toggle('active', b === btn));
+        cmdPerm = btn.dataset.perm;
+        filterCommands();
+      })
+    );
+    document.querySelectorAll('.cmd-item code').forEach((code) =>
+      code.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(code.dataset.copy);
+          showToast(`📋 Copied ${code.dataset.copy}`);
+        } catch {
+          showToast('❌ Could not copy — select it manually.');
+        }
+      })
+    );
+
+    // --- @ / # / : autocomplete on every field the bot sends ---
+    LoofMentions.load(guildId).then(() => {
+      renderWelcomePreview();
+      renderHpPreview();
+    });
+    ['wContent', 'wTitle', 'wDesc', 'wFooter'].forEach((id) => LoofMentions.attach(document.getElementById(id), { onChange: renderWelcomePreview }));
+    ['hpTitle', 'hpDesc', 'hpFooter'].forEach((id) => LoofMentions.attach(document.getElementById(id), { onChange: renderHpPreview }));
+
     renderHpPreview();
+    renderHpDmPreview();
     renderOdds();
     renderWelcomePreview();
     loadJoinChart();

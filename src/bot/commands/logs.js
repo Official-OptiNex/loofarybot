@@ -27,7 +27,8 @@ const data = new SlashCommandBuilder()
       )
       .addBooleanOption((opt) => opt.setName('enabled').setDescription('Log this event?').setRequired(true))
   )
-  .addSubcommand((sub) => sub.setName('disable').setDescription('Stop sending logs entirely'))
+  .addSubcommand((sub) => sub.setName('enable').setDescription('Turn the logging module back on'))
+  .addSubcommand((sub) => sub.setName('disable').setDescription('Turn the logging module off (nothing is logged or stored)'))
   .addSubcommand((sub) => sub.setName('status').setDescription('Show the current logging setup'));
 
 async function execute(interaction) {
@@ -41,6 +42,7 @@ async function execute(interaction) {
       return interaction.reply({ content: `❌ LoofaryBot needs View Channel, Send Messages and Embed Links in ${channel}.`, ephemeral: true });
     }
     config.logChannelId = channel.id;
+    config.logsEnabled = true;
     await config.save();
     return interaction.reply({ content: `✅ Server logs will now be sent to ${channel}. Use \`/logs toggle\` to pick which events.`, ephemeral: true });
   }
@@ -53,10 +55,15 @@ async function execute(interaction) {
     return interaction.reply({ content: `✅ ${LOG_EVENTS[event]} logging **${enabled ? 'enabled' : 'disabled'}**.`, ephemeral: true });
   }
 
-  if (sub === 'disable') {
-    config.logChannelId = null;
+  if (sub === 'enable' || sub === 'disable') {
+    config.logsEnabled = sub === 'enable';
     await config.save();
-    return interaction.reply({ content: '✅ Logging disabled.', ephemeral: true });
+    return interaction.reply({
+      content: sub === 'enable'
+        ? `✅ Logging enabled.${config.logChannelId ? '' : ' Pick a channel with `/logs set` to also get logs in Discord (they always show on the dashboard).'}`
+        : '✅ Logging disabled — nothing will be logged or stored until you run `/logs enable`.',
+      ephemeral: true
+    });
   }
 
   if (sub === 'status') {
@@ -64,7 +71,8 @@ async function execute(interaction) {
       .setTitle('📋 Logging')
       .setColor('#5865F2')
       .addFields(
-        { name: 'Channel', value: config.logChannelId ? `<#${config.logChannelId}>` : 'Not set — use `/logs set`' },
+        { name: 'Module', value: config.logsEnabled === false ? '❌ Disabled' : '✅ Enabled', inline: true },
+        { name: 'Channel', value: config.logChannelId ? `<#${config.logChannelId}>` : 'Not set — dashboard only', inline: true },
         {
           name: 'Events',
           value: Object.entries(LOG_EVENTS)

@@ -2,13 +2,14 @@ const { handleButtonInteraction } = require('../cogs/modules/giveaways');
 const { handleGambleButton } = require('../cogs/modules/gambling');
 const { handleRoleButton, handleRoleSelect } = require('../cogs/modules/reactionRoles');
 const { handleVote } = require('../cogs/modules/polls');
+const { handleHelpSelect } = require('../cogs/modules/help');
 const loofCommand = require('../commands/loof');
 const honeypotCommand = require('../commands/honeypot');
 
 // Routes a component's customId to its feature by prefix.
 function routeButton(interaction) {
   const id = interaction.customId;
-  if (id.startsWith('gm:') || id.startsWith('hl:')) return handleGambleButton(interaction);
+  if (id.startsWith('gm:') || id.startsWith('hl:') || id.startsWith('bj:')) return handleGambleButton(interaction);
   if (id.startsWith('rr:')) return handleRoleButton(interaction);
   if (id.startsWith('poll:')) return handleVote(interaction);
   return handleButtonInteraction(interaction); // giveaways & drops
@@ -23,6 +24,7 @@ module.exports = function registerInteractionCreateEvent(client) {
 
       if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'rrsel') return await handleRoleSelect(interaction);
+        if (interaction.customId === 'help_cat') return await handleHelpSelect(interaction);
         return;
       }
 

@@ -45,6 +45,8 @@ const GuildConfigSchema = new mongoose.Schema(
     honeypotKicks: { type: Number, default: 0 },
     honeypotSoftbans: { type: Number, default: 0 },
     honeypotBans: { type: Number, default: 0 },
+    honeypotEnabled: { type: Boolean, default: true },
+    honeypotDmEnabled: { type: Boolean, default: true }, // explain the removal to the member by DM
     // Customizable look of the trap message so it can be disguised as something innocent.
     honeypotEmbed: {
       title: { type: String, default: '' },
@@ -77,6 +79,7 @@ const GuildConfigSchema = new mongoose.Schema(
     gamblingChannelId: { type: String, default: null }, // null = any channel
 
     // --- Logging ---
+    logsEnabled: { type: Boolean, default: true },
     logChannelId: { type: String, default: null },
     logEvents: {
       messageEdit: { type: Boolean, default: true },

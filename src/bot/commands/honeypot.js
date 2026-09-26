@@ -45,6 +45,18 @@ const data = new SlashCommandBuilder()
       .setDescription('Customize (disguise) the trap message — opens an editor')
       .addBooleanOption((opt) => opt.setName('show_counts').setDescription('Show the kick/ban counters (turn off to disguise it better)'))
   )
+  .addSubcommand((sub) =>
+    sub
+      .setName('dm')
+      .setDescription('DM caught members an explanation (compromised account, punishment, how to secure it)')
+      .addBooleanOption((opt) => opt.setName('enabled').setDescription('Send the DM?').setRequired(true))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('toggle')
+      .setDescription('Turn the honeypot trap on or off without removing its setup')
+      .addBooleanOption((opt) => opt.setName('enabled').setDescription('Trap active?').setRequired(true))
+  )
   .addSubcommand((sub) => sub.setName('embed_reset').setDescription('Reset the trap message to the default look'));
 
 async function execute(interaction, client) {
@@ -93,6 +105,20 @@ async function execute(interaction, client) {
     return interaction.showModal(modal);
   }
 
+  if (sub === 'dm' || sub === 'toggle') {
+    const enabled = interaction.options.getBoolean('enabled');
+    const config = await getOrCreateConfig(interaction.guildId);
+    if (sub === 'dm') config.honeypotDmEnabled = enabled;
+    else config.honeypotEnabled = enabled;
+    await config.save();
+    return interaction.reply({
+      content: sub === 'dm'
+        ? `✅ Caught members will ${enabled ? 'now' : 'no longer'} get a DM explaining what happened.`
+        : `✅ Honeypot trap **${enabled ? 'enabled' : 'disabled'}**.`,
+      ephemeral: true
+    });
+  }
+
   if (sub === 'embed_reset') {
     const config = await getOrCreateConfig(interaction.guildId);
     config.honeypotEmbed = { title: '', description: '', color: '', footer: '', imageUrl: '', thumbnailUrl: '', showCounts: true };
@@ -112,6 +138,8 @@ async function execute(interaction, client) {
       .addFields(
         { name: 'Channel', value: `<#${config.honeypotChannelId}>`, inline: true },
         { name: 'Action', value: config.honeypotAction, inline: true },
+        { name: 'Status', value: config.honeypotEnabled === false ? 'Disabled' : 'Active', inline: true },
+        { name: 'DM caught members', value: config.honeypotDmEnabled === false ? 'No' : 'Yes', inline: true },
         { name: 'Kicks', value: `${config.honeypotKicks}`, inline: true },
         { name: 'Soft Bans', value: `${config.honeypotSoftbans}`, inline: true },
         { name: 'Bans', value: `${config.honeypotBans}`, inline: true }

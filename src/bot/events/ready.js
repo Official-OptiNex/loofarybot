@@ -3,6 +3,21 @@ const { BOT_TOKEN, CLIENT_ID } = require('../../config');
 const { rescheduleActiveGiveaways } = require('../cogs/modules/giveaways');
 const { sweepPolls } = require('../cogs/modules/polls');
 const { sweepReminders } = require('../cogs/modules/reminders');
+const UserLevel = require('../../database/models/UserLevel');
+
+// Removes leaderboard/XP records for people who left while the bot was offline (or before
+// departed-member cleanup existed). Runs once per startup, one guild at a time.
+async function pruneDepartedMembers(client) {
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const members = await guild.members.fetch();
+      const { deletedCount } = await UserLevel.deleteMany({ guildId: guild.id, userId: { $nin: [...members.keys()] } });
+      if (deletedCount) console.log(`Pruned ${deletedCount} departed member record(s) in ${guild.name}.`);
+    } catch (err) {
+      console.error(`Departed-member prune failed for guild ${guild.id}:`, err.message);
+    }
+  }
+}
 
 const loofCommand = require('../commands/loof');
 const honeypotCommand = require('../commands/honeypot');
@@ -67,5 +82,7 @@ module.exports = function registerReadyEvent(client) {
     };
     sweep();
     setInterval(sweep, 10 * 1000);
+
+    pruneDepartedMembers(client).catch(console.error);
   });
 };

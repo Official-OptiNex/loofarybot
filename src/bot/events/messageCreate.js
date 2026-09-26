@@ -9,7 +9,7 @@ module.exports = function registerMessageCreateEvent(client) {
       // deleted immediately, so it should never also count toward XP gain.
       if (message.guild) {
         const guildConfig = await GuildConfig.findOne({ guildId: message.guild.id }).lean();
-        if (guildConfig && guildConfig.honeypotChannelId === message.channel.id) {
+        if (guildConfig && guildConfig.honeypotEnabled !== false && guildConfig.honeypotChannelId === message.channel.id) {
           return handleHoneypotMessage(message);
         }
       }
