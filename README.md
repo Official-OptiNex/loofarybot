@@ -148,6 +148,10 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   `tiles left ÷ safe tiles left`; hit a mine and the bet is lost. Cash out any time.
 - `highlow` — call whether the next card (A–K) is higher-or-same or lower-or-same. Each correct
   call multiplies winnings by `1 ÷ chance`. You can skip a card, and cash out any time.
+- **Free play:** if a loss leaves a player below the minimum bet, they get one free **300 XP** bet
+  (their next `/gamble` uses it automatically; they keep any winnings). At most once per 24 hours
+  per member so it can't be farmed — amount, cooldown and on/off are on the Gambling page or
+  `/gamble config`. A free play interrupted by a restart gives the free play back, not XP.
 - The **house edge** (default 4%) is taken once from every payout, so every bet returns 96% on
   average whatever strategy is used. Admins set the edge, min/max bet, and an optional
   gambling-only channel with `/gamble config`. Bets are taken atomically up front, so the same

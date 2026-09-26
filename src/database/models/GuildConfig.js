@@ -108,6 +108,10 @@ const GuildConfigSchema = new mongoose.Schema(
     gamblingMinBet: { type: Number, default: 10 },
     gamblingMaxBet: { type: Number, default: null }, // null = no cap
     gamblingChannelId: { type: String, default: null }, // null = any channel
+    // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
+    gamblingFreePlayEnabled: { type: Boolean, default: true },
+    gamblingFreePlayAmount: { type: Number, default: 300 },
+    gamblingFreePlayCooldownHours: { type: Number, default: 24 },
 
     // --- Logging ---
     logsEnabled: { type: Boolean, default: true },

@@ -777,6 +777,16 @@
             <div><div class="setting-title">Allowed channel</div><div class="setting-help">Keep gambling out of general chat.</div></div>
             <div class="setting-control"><select id="gChannel"><%- channelOptions(gambling.channelId, 'Any channel') %></select></div>
           </div>
+          <div class="setting-row">
+            <div><div class="setting-title">🎟️ Free play when broke</div><div class="setting-help">A player whose loss leaves them below the minimum bet gets one free bet — they keep any winnings. At most once per cooldown so it can't be farmed.</div></div>
+            <div class="setting-control">
+              <label class="switch sm"><input type="checkbox" id="gFreePlay" <%= gambling.freePlay.enabled ? 'checked' : '' %>><span class="track"></span></label>
+              <input type="number" id="gFreeAmount" min="1" value="<%= gambling.freePlay.amount %>" style="flex:0 0 90px; min-width:90px;" aria-label="Free play XP">
+              <span class="muted" style="font-size:0.8rem;">XP · every</span>
+              <input type="number" id="gFreeHours" min="0" value="<%= gambling.freePlay.cooldownMs / 3600000 %>" style="flex:0 0 70px; min-width:70px;" aria-label="Cooldown hours">
+              <span class="muted" style="font-size:0.8rem;">h</span>
+            </div>
+          </div>
         </div>
         <div class="card">
           <h3 style="margin-top:0;">Payouts at this edge</h3>
@@ -1407,7 +1417,10 @@
           houseEdge: document.getElementById('gEdge').value,
           minBet: document.getElementById('gMin').value,
           maxBet: document.getElementById('gMax').value,
-          channelId: document.getElementById('gChannel').value
+          channelId: document.getElementById('gChannel').value,
+          freePlayEnabled: document.getElementById('gFreePlay').checked,
+          freePlayAmount: document.getElementById('gFreeAmount').value,
+          freePlayCooldownHours: document.getElementById('gFreeHours').value
         },
         '✅ Gambling settings saved.'
       );

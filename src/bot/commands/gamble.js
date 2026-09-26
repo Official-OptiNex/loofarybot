@@ -51,6 +51,9 @@ const data = new SlashCommandBuilder()
           .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
       )
       .addBooleanOption((opt) => opt.setName('any_channel').setDescription('Allow gambling in every channel again'))
+      .addBooleanOption((opt) => opt.setName('free_play').setDescription('Give players who go broke one free bet'))
+      .addIntegerOption((opt) => opt.setName('free_play_xp').setDescription('Size of the free bet (default 300)').setMinValue(1).setMaxValue(1000000))
+      .addIntegerOption((opt) => opt.setName('free_play_cooldown').setDescription('Hours between free plays per member (default 24)').setMinValue(0).setMaxValue(720))
   );
 
 async function execute(interaction) {
@@ -83,6 +86,12 @@ async function execute(interaction) {
         { name: 'House edge', value: `${s.edgePercent}%`, inline: true },
         { name: 'Bet limits', value: `${s.minBet} – ${s.maxBet ? `${s.maxBet} XP` : 'no max'}`, inline: true },
         { name: 'Channel', value: s.channelId ? `<#${s.channelId}>` : 'Anywhere', inline: true },
+        {
+          name: '🎟️ Free play',
+          value: s.freePlay.enabled
+            ? `Go broke from gambling and you get one free **${s.freePlay.amount} XP** bet (once every ${s.freePlay.cooldownMs / 3600000}h). You keep the winnings.`
+            : 'Off'
+        },
         { name: '🪙 Coinflip', value: `50/50, pays **${(2 * (1 - s.edge)).toFixed(2)}x**` },
         { name: '💣 Mines', value: mineExamples },
         {
@@ -121,13 +130,20 @@ async function execute(interaction) {
     config.gamblingMaxBet = newMax;
     if (channel) config.gamblingChannelId = channel.id;
     if (anyChannel) config.gamblingChannelId = null;
+    const freePlay = interaction.options.getBoolean('free_play');
+    const freePlayXp = interaction.options.getInteger('free_play_xp');
+    const freePlayCooldown = interaction.options.getInteger('free_play_cooldown');
+    if (freePlay !== null) config.gamblingFreePlayEnabled = freePlay;
+    if (freePlayXp !== null) config.gamblingFreePlayAmount = freePlayXp;
+    if (freePlayCooldown !== null) config.gamblingFreePlayCooldownHours = freePlayCooldown;
     await config.save();
 
     const s = getGamblingSettings(config);
     return interaction.reply({
       content:
         `✅ Gambling is **${s.enabled ? 'enabled' : 'disabled'}** · House edge **${s.edgePercent}%** · ` +
-        `Bets **${s.minBet}–${s.maxBet || '∞'} XP** · Channel: ${s.channelId ? `<#${s.channelId}>` : 'anywhere'}`,
+        `Bets **${s.minBet}–${s.maxBet || '∞'} XP** · Channel: ${s.channelId ? `<#${s.channelId}>` : 'anywhere'} · ` +
+        `Free play: ${s.freePlay.enabled ? `**${s.freePlay.amount} XP** every ${s.freePlay.cooldownMs / 3600000}h` : 'off'}`,
       ephemeral: true
     });
   }

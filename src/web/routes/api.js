@@ -433,7 +433,7 @@ router.post('/guilds/:guildId/alerts/:id/test', requireAuth, requireGuildAccess,
 
 router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
-    const { enabled, houseEdge, minBet, maxBet, channelId } = req.body;
+    const { enabled, houseEdge, minBet, maxBet, channelId, freePlayEnabled, freePlayAmount, freePlayCooldownHours } = req.body;
     const edge = Number(houseEdge);
     const min = Number(minBet);
     const max = maxBet === '' || maxBet == null || Number(maxBet) === 0 ? null : Number(maxBet);
@@ -455,6 +455,11 @@ router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, guardA
     config.gamblingMinBet = min;
     config.gamblingMaxBet = max;
     config.gamblingChannelId = channelId || null;
+    if (typeof freePlayEnabled === 'boolean') config.gamblingFreePlayEnabled = freePlayEnabled;
+    const fpAmount = Math.round(Number(freePlayAmount));
+    if (Number.isFinite(fpAmount) && fpAmount >= 1) config.gamblingFreePlayAmount = Math.min(fpAmount, 1000000);
+    const fpHours = Number(freePlayCooldownHours);
+    if (freePlayCooldownHours !== undefined && Number.isFinite(fpHours) && fpHours >= 0) config.gamblingFreePlayCooldownHours = Math.min(fpHours, 720);
     await config.save();
     res.json({ ok: true });
   } catch (err) {

@@ -8,7 +8,9 @@ const ActiveBetSchema = new mongoose.Schema(
     guildId: { type: String, required: true },
     userId: { type: String, required: true },
     kind: { type: String, required: true },
-    amount: { type: Number, required: true },
+    amount: { type: Number, required: true }, // total stake in play
+    paidAmount: { type: Number, default: null }, // XP that actually came from the player (free plays = 0)
+    freePlay: { type: Boolean, default: false },
     channelId: { type: String, default: null }
   },
   { timestamps: true }
