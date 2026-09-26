@@ -5,6 +5,7 @@ const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const UserLevel = require('../../database/models/UserLevel');
 const { getEffectiveXpSettings } = require('../../bot/cogs/modules/leveling');
 const { getGamblingSettings } = require('../../bot/cogs/modules/gambling');
+const levelColors = require('../../bot/cogs/modules/levelColors');
 const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
 const { DEFAULT_TRAP_EMBED } = require('../../bot/cogs/modules/honeypot');
 const commandReference = require('../../bot/commandReference');
@@ -122,6 +123,9 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     channels: textChannels,
     roles,
     effectiveXp,
+    levelColorSettings: levelColors.settingsOf(config),
+    levelColorTiers: levelColors.describeTiers(configDoc || {}, guild),
+    levelColorPalette: levelColors.PALETTE,
     welcome: welcomeDoc || new WelcomeConfig({ guildId: guild.id }).toObject(),
     gambling: getGamblingSettings(config),
     logEvents: LOG_EVENTS,

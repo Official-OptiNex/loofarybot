@@ -4,6 +4,7 @@ const { rescheduleActiveGiveaways } = require('../cogs/modules/giveaways');
 const { sweepPolls } = require('../cogs/modules/polls');
 const { sweepReminders } = require('../cogs/modules/reminders');
 const UserLevel = require('../../database/models/UserLevel');
+const { setClient: setLevelColorClient } = require('../cogs/modules/levelColors');
 
 // Removes leaderboard/XP records for people who left while the bot was offline (or before
 // departed-member cleanup existed). Runs once per startup, one guild at a time.
@@ -56,6 +57,8 @@ const ALL_COMMANDS = [
 module.exports = function registerReadyEvent(client) {
   // Populate the in-memory command collection used by interactionCreate.
   ALL_COMMANDS.forEach((cmd) => client.commands.set(cmd.data.name, cmd));
+
+  setLevelColorClient(client);
 
   client.once('ready', async () => {
     console.log(`LoofaryBot logged in as ${client.user.tag}`);
