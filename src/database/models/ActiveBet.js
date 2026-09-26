@@ -11,7 +11,8 @@ const ActiveBetSchema = new mongoose.Schema(
     amount: { type: Number, required: true }, // total stake in play
     paidAmount: { type: Number, default: null }, // XP that actually came from the player (free plays = 0)
     freePlay: { type: Boolean, default: false },
-    channelId: { type: String, default: null }
+    channelId: { type: String, default: null },
+    lastActiveAt: { type: Date, default: null } // bumped while the game is being played (orphan sweep uses updatedAt)
   },
   { timestamps: true }
 );

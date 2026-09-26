@@ -100,10 +100,13 @@ module.exports = function registerReadyEvent(client) {
     // Daily automatic settings + XP backups (last 7 kept per server).
     require('../cogs/modules/backups').startDailyBackups(client);
 
-    // Refund bets from games that were interrupted by a crash (a clean shutdown settles them itself).
-    require('../cogs/modules/gambling')
+    // Refund bets from games that were interrupted by a crash (a clean shutdown settles them itself),
+    // then keep sweeping for stuck games every minute.
+    const gambling = require('../cogs/modules/gambling');
+    gambling
       .refundOrphanedBets(client)
       .then((n) => n && console.log(`Refunded ${n} interrupted game bet(s).`))
       .catch(console.error);
+    gambling.startGameSweeper(client);
   });
 };
