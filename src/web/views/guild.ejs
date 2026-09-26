@@ -12,22 +12,31 @@
     <a class="btn secondary" href="/dashboard">← All Servers</a>
   </nav>
   <div class="container">
-    <div class="guild-header">
-      <% if (guild.iconURL()) { %>
-        <img src="<%= guild.iconURL({ size: 128 }) %>">
-      <% } %>
-      <div>
-        <h1 style="margin:0;"><%= guild.name %></h1>
-        <p class="muted" style="margin:0.2rem 0 0;">
-          👥 <%= stats.memberCount %> members
-          <% if (stats.boostTier > 0) { %> · <span class="badge boost">⭐ Boost Tier <%= stats.boostTier %></span><% } %>
-        </p>
+    <% const serverAgeDays = Math.floor((Date.now() - stats.createdTimestamp) / 86400000); %>
+    <header class="topbar">
+      <div class="topbar-identity">
+        <% if (guild.iconURL()) { %>
+          <img src="<%= guild.iconURL({ size: 128 }) %>" alt="">
+        <% } else { %>
+          <div class="guild-icon-fallback"><%= guild.name.slice(0, 1) %></div>
+        <% } %>
+        <div style="min-width:0;">
+          <h1><%= guild.name %></h1>
+          <div class="sub">Owned by <%= stats.ownerTag %> · ID <code><%= guild.id %></code></div>
+        </div>
       </div>
-      <a class="btn" href="/dashboard/<%= guild.id %>/embed" style="margin-left:auto;">🖌️ Embed Builder</a>
-    </div>
+      <div class="quick-stats">
+        <div class="quick-stat"><span class="value"><%= stats.memberCount.toLocaleString() %></span><span class="label">Members</span></div>
+        <div class="quick-stat gold"><span class="value" id="qsJoins7">—</span><span class="label">Joined 7d</span></div>
+        <div class="quick-stat"><span class="value"><%= stats.boostCount %></span><span class="label">Boosts<%= stats.boostTier > 0 ? ' · T' + stats.boostTier : '' %></span></div>
+        <div class="quick-stat"><span class="value"><%= serverAgeDays.toLocaleString() %>d</span><span class="label">Server age</span></div>
+      </div>
+      <a class="btn" href="/dashboard/<%= guild.id %>/embed">🖌️ Embed Builder</a>
+    </header>
 
     <div class="tabs">
       <button class="tab-btn active" data-tab="overview">Overview</button>
+      <button class="tab-btn" data-tab="welcome">👋 Welcome</button>
       <button class="tab-btn" data-tab="honeypot">🍯 Honeypot</button>
       <button class="tab-btn" data-tab="leveling">📈 Leveling</button>
       <button class="tab-btn" data-tab="autorole">🛡️ Auto-Role</button>
@@ -39,17 +48,72 @@
 
     <!-- OVERVIEW -->
     <div class="tab-panel" id="tab-overview">
-      <div class="overview-stat-grid">
-        <div class="overview-stat"><div class="icon">👥</div><div class="value"><%= stats.memberCount %></div><div class="label">Members</div></div>
-        <div class="overview-stat"><div class="icon">💬</div><div class="value"><%= stats.channelCount %></div><div class="label">Channels</div></div>
-        <div class="overview-stat"><div class="icon">🎭</div><div class="value"><%= stats.roleCount %></div><div class="label">Roles</div></div>
-        <div class="overview-stat"><div class="icon">😀</div><div class="value"><%= stats.emojiCount %></div><div class="label">Emojis</div></div>
-        <div class="overview-stat"><div class="icon">⭐</div><div class="value"><%= stats.boostCount %></div><div class="label">Boosts</div></div>
-        <div class="overview-stat"><div class="icon">📅</div><div class="value"><%= new Date(stats.createdTimestamp).toLocaleDateString() %></div><div class="label">Created</div></div>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="metric-icon">👥</div>
+          <div class="metric-value"><%= stats.memberCount.toLocaleString() %></div>
+          <div class="metric-label">Total members</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon">📥</div>
+          <div class="metric-value" id="mJoins24">—</div>
+          <div class="metric-label">Joined in the last 24h</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon">📈</div>
+          <div class="metric-value" id="mJoinsRange">—</div>
+          <div class="metric-label" id="mJoinsRangeLabel">Joined in the last 30 days</div>
+          <div class="metric-delta" id="mJoinsDelta"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon">💬</div>
+          <div class="metric-value"><%= stats.channelCount %></div>
+          <div class="metric-label">Channels · <%= stats.roleCount %> roles</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon">😀</div>
+          <div class="metric-value"><%= stats.emojiCount %></div>
+          <div class="metric-label">Custom emojis</div>
+        </div>
       </div>
-      <p class="muted" style="margin-bottom:1.5rem;">Owned by <strong><%= stats.ownerTag %></strong> · Server ID <code><%= guild.id %></code></p>
 
+      <div class="card chart-card">
+        <div class="chart-header">
+          <div>
+            <h2>Join activity</h2>
+            <div class="muted" style="font-size:0.85rem;" id="chartSubtitle">New members over time (UTC)</div>
+          </div>
+          <div class="chart-controls">
+            <div class="segmented" id="rangeControl" role="group" aria-label="Date range">
+              <button data-days="7">7D</button>
+              <button data-days="30" class="active">30D</button>
+              <button data-days="90">90D</button>
+              <button data-days="365">1Y</button>
+            </div>
+            <div class="segmented" id="bucketControl" role="group" aria-label="Group by">
+              <button data-bucket="day" class="active">Daily</button>
+              <button data-bucket="week">Weekly</button>
+            </div>
+            <button class="btn secondary small" id="syncJoinsBtn" onclick="syncJoinData()">🔄 Sync Join Data</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="joinChart" aria-label="Join activity chart" role="img"></canvas>
+          <div class="chart-empty" id="chartEmpty">No join data yet. New joins are recorded automatically; click <strong>&nbsp;Sync Join Data&nbsp;</strong> to backfill current members.</div>
+        </div>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:#f5c542;"></span>New joins per period</span>
+          <span><span class="dot" style="background:#6d7dff;"></span>Total tracked joins</span>
+        </div>
+      </div>
+
+      <div class="section-title"><h2>Modules</h2></div>
       <div class="grid">
+        <div class="card">
+          <% const wChannel = welcome.channelId ? channels.find(c => c.id === welcome.channelId) : null; %>
+          <h3>👋 Welcome <span class="badge <%= welcome.enabled && wChannel ? 'on' : 'off' %>"><%= welcome.enabled && wChannel ? 'Active' : 'Off' %></span></h3>
+          <p class="muted"><%= wChannel ? 'Greeting new members in #' + wChannel.name : 'Set up a greeting in the Welcome tab.' %></p>
+        </div>
         <div class="card">
           <h3>🍯 Honeypot <span class="badge <%= config.honeypotChannelId ? 'on' : 'off' %>"><%= config.honeypotChannelId ? 'Active' : 'Not set up' %></span></h3>
           <% if (config.honeypotChannelId) {
@@ -92,6 +156,109 @@
           <h3>🖌️ Quick Links</h3>
           <p class="muted"><a href="/dashboard/<%= guild.id %>/embed">Open the Embed Builder →</a></p>
           <p class="muted" style="margin-top:0.4rem;">Use the tabs above to configure everything else.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- WELCOME -->
+    <% const we = welcome.embedConfig || {}; %>
+    <div class="tab-panel hidden" id="tab-welcome">
+      <div class="split">
+        <div class="card">
+          <h2>👋 Welcome Messages</h2>
+          <p class="muted">Greet every new member automatically. Placeholders are filled in when someone joins.</p>
+
+          <label class="switch" style="margin-top:0.5rem;">
+            <input type="checkbox" id="wEnabled" <%= welcome.enabled ? 'checked' : '' %>>
+            <span class="track"></span>
+            Enable welcome messages
+          </label>
+
+          <label for="wChannel">Channel</label>
+          <select id="wChannel" onchange="renderWelcomePreview()">
+            <option value="">— Select a channel —</option>
+            <% channels.forEach(c => { %>
+              <option value="<%= c.id %>" <%= welcome.channelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+            <% }) %>
+          </select>
+
+          <label for="wContent">Message text</label>
+          <textarea id="wContent" maxlength="2000" rows="3" oninput="renderWelcomePreview()" placeholder="Welcome to {server}, {user}!"><%= welcome.messageContent || '' %></textarea>
+          <div class="chip-row" aria-label="Insert placeholder">
+            <button type="button" class="chip" data-insert="{user}" title="Mentions the new member">{user}</button>
+            <button type="button" class="chip" data-insert="{username}" title="Their username">{username}</button>
+            <button type="button" class="chip" data-insert="{server}" title="Server name">{server}</button>
+            <button type="button" class="chip" data-insert="{membercount}" title="Member count after they joined">{membercount}</button>
+          </div>
+
+          <div class="subpanel">
+            <label class="switch" style="margin-top:1rem;">
+              <input type="checkbox" id="wEmbedEnabled" <%= welcome.embedEnabled ? 'checked' : '' %> onchange="toggleWelcomeEmbed()">
+              <span class="track"></span>
+              Include a rich embed
+            </label>
+            <div id="wEmbedFields" class="<%= welcome.embedEnabled ? '' : 'disabled' %>">
+              <div class="field-row">
+                <div>
+                  <label for="wTitle">Embed title</label>
+                  <input id="wTitle" maxlength="256" value="<%= we.title || '' %>" placeholder="Welcome, {username}!" oninput="renderWelcomePreview()">
+                </div>
+                <div style="flex:0 0 110px;">
+                  <label for="wColor">Color</label>
+                  <input id="wColor" type="color" value="<%= we.color || '#5865F2' %>" oninput="renderWelcomePreview()">
+                </div>
+              </div>
+              <label for="wDesc">Embed description</label>
+              <textarea id="wDesc" maxlength="4096" rows="4" oninput="renderWelcomePreview()" placeholder="Grab your roles in #roles and say hi!"><%= we.description || '' %></textarea>
+              <div class="field-row">
+                <div>
+                  <label for="wImage">Image URL</label>
+                  <input id="wImage" value="<%= we.imageUrl || '' %>" placeholder="https://…" oninput="renderWelcomePreview()">
+                </div>
+                <div>
+                  <label for="wThumb">Thumbnail URL <span class="muted" style="font-weight:400;">(or {avatar})</span></label>
+                  <input id="wThumb" value="<%= we.thumbnailUrl || '' %>" placeholder="{avatar}" oninput="renderWelcomePreview()">
+                </div>
+              </div>
+              <label for="wFooter">Footer</label>
+              <input id="wFooter" maxlength="2048" value="<%= we.footer || '' %>" placeholder="You are member #{membercount}" oninput="renderWelcomePreview()">
+            </div>
+          </div>
+
+          <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:1.5rem;">
+            <button class="btn" onclick="saveWelcome()">Save Welcome Settings</button>
+            <button class="btn secondary" onclick="testWelcome()">📨 Send test</button>
+            <a class="btn secondary" href="/dashboard/<%= guild.id %>/embed?welcome=1">🖌️ Design in Embed Builder</a>
+          </div>
+          <p class="muted" style="font-size:0.8rem; margin-top:0.75rem;">“Send test” posts the current form (saved or not) to the chosen channel, using you as the new member.</p>
+        </div>
+
+        <div class="sticky-preview">
+          <div class="card" style="margin-bottom:0;">
+            <h3 style="margin-top:0;">Live preview</h3>
+            <div class="discord-chat">
+              <div class="channel-name" id="wpChannel"># welcome</div>
+              <div class="discord-message-preview">
+                <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                <div class="discord-message-body">
+                  <div class="discord-message-header">
+                    <span class="discord-bot-name"><%= bot.name %></span>
+                    <span class="discord-bot-badge">BOT</span>
+                    <span class="discord-message-time">Today at 12:00 PM</span>
+                  </div>
+                  <div class="desc" id="wpContent"></div>
+                  <div class="discord-embed-preview" id="wpEmbed" style="margin-top:0.4rem; display:none;">
+                    <img id="wpThumb" alt="" style="float:right; width:72px; height:72px; object-fit:cover; margin:0 0 0.5rem 0.75rem; display:none;">
+                    <div class="title" id="wpTitle"></div>
+                    <div class="desc" id="wpDesc"></div>
+                    <img id="wpImage" alt="" style="display:none;">
+                    <div id="wpFooter" style="margin-top:0.5rem; font-size:0.75rem; color:#949ba4;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="muted" style="font-size:0.78rem; margin:0.75rem 0 0;">Previewed as if <strong><%= viewer.username %></strong> just joined. Only the new member is pinged.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -351,6 +518,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
   <script>
     const guildId = '<%= guild.id %>';
     const roles = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
@@ -358,6 +526,10 @@
     const initialMultipliers = <%- JSON.stringify(config.xpMultipliers || []).replace(/</g, '\\u003c') %>;
     const trapDefaults = <%- JSON.stringify(defaultTrapEmbed).replace(/</g, '\\u003c') %>;
     const trapCounts = { kicks: <%= config.honeypotKicks || 0 %>, softbans: <%= config.honeypotSoftbans || 0 %>, bans: <%= config.honeypotBans || 0 %> };
+
+    const guildName = <%- JSON.stringify(guild.name).replace(/</g, '\\u003c') %>;
+    const memberCount = <%= stats.memberCount %>;
+    const viewer = <%- JSON.stringify(viewer).replace(/</g, '\\u003c') %>;
 
     function esc(str) {
       return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -567,8 +739,240 @@
       postJson('logs', { channelId: document.getElementById('logChannel').value, events }, '✅ Log settings saved.');
     }
 
+    // --- Join analytics chart ---
+    let joinChart = null;
+    const chartState = { days: 30, bucket: 'day' };
+    const fmt = (n) => Number(n).toLocaleString();
+
+    function formatLabel(iso) {
+      const d = new Date(iso + 'T00:00:00Z');
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    }
+
+    async function loadJoinChart() {
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/joins?days=${chartState.days}&bucket=${chartState.bucket}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load.');
+        renderJoinChart(data);
+      } catch (err) {
+        document.getElementById('chartEmpty').textContent = `❌ ${err.message}`;
+        document.getElementById('chartEmpty').classList.add('visible');
+      }
+    }
+
+    function renderJoinChart(data) {
+      const { totals } = data;
+      document.getElementById('qsJoins7').textContent = fmt(totals.last7);
+      document.getElementById('mJoins24').textContent = fmt(totals.last24h);
+      document.getElementById('mJoinsRange').textContent = fmt(totals.inRange);
+      document.getElementById('mJoinsRangeLabel').textContent =
+        chartState.days === 365 ? 'Joined in the last year' : `Joined in the last ${chartState.days} days`;
+      const avg = totals.inRange / chartState.days;
+      document.getElementById('mJoinsDelta').textContent = totals.inRange ? `≈ ${avg < 10 ? avg.toFixed(1) : Math.round(avg)} per day` : '';
+      document.getElementById('mJoinsDelta').className = 'metric-delta' + (totals.inRange ? ' up' : '');
+      document.getElementById('chartEmpty').classList.toggle('visible', totals.tracked === 0);
+      document.getElementById('chartSubtitle').textContent =
+        `${chartState.bucket === 'week' ? 'Weekly' : 'Daily'} new members (UTC) · ${fmt(totals.tracked)} joins tracked`;
+
+      if (typeof Chart === 'undefined') return; // CDN blocked — metrics above still work
+      const ctx = document.getElementById('joinChart').getContext('2d');
+      const fill = ctx.createLinearGradient(0, 0, 0, 320);
+      fill.addColorStop(0, 'rgba(109, 125, 255, 0.35)');
+      fill.addColorStop(1, 'rgba(139, 92, 246, 0)');
+
+      const labels = data.labels.map(formatLabel);
+      const datasets = [
+        {
+          type: 'bar', label: 'New joins', data: data.joins, yAxisID: 'y',
+          backgroundColor: 'rgba(245, 197, 66, 0.85)', hoverBackgroundColor: '#f5c542',
+          borderRadius: 4, maxBarThickness: 18, order: 2
+        },
+        {
+          type: 'line', label: 'Total tracked', data: data.cumulative, yAxisID: 'y1',
+          borderColor: '#6d7dff', backgroundColor: fill, fill: true, tension: 0.35, borderWidth: 2.5,
+          pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#8b5cf6', order: 1
+        }
+      ];
+
+      if (joinChart) {
+        joinChart.data.labels = labels;
+        joinChart.data.datasets.forEach((ds, i) => (ds.data = datasets[i].data));
+        joinChart.update();
+        return;
+      }
+      const grid = 'rgba(138, 141, 155, 0.12)';
+      const tick = { color: '#8a8d9b', font: { family: "Inter, -apple-system, 'Segoe UI', sans-serif", size: 11 } };
+      joinChart = new Chart(ctx, {
+        data: { labels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1b1e2b', borderColor: '#353950', borderWidth: 1, padding: 10,
+              titleColor: '#eef0f6', bodyColor: '#c9cbd6', displayColors: true, boxPadding: 4,
+              callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, border: { display: false }, ticks: { ...tick, maxRotation: 0, autoSkipPadding: 16 } },
+            y: { position: 'left', beginAtZero: true, grid: { color: grid }, border: { display: false }, ticks: { ...tick, precision: 0 } },
+            y1: { position: 'right', beginAtZero: false, grid: { display: false }, border: { display: false }, ticks: { ...tick, precision: 0 } }
+          }
+        }
+      });
+    }
+
+    function bindSegmented(id, key, attr) {
+      document.querySelectorAll(`#${id} button`).forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll(`#${id} button`).forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          chartState[key] = key === 'days' ? Number(btn.dataset[attr]) : btn.dataset[attr];
+          loadJoinChart();
+        });
+      });
+    }
+    bindSegmented('rangeControl', 'days', 'days');
+    bindSegmented('bucketControl', 'bucket', 'bucket');
+
+    async function syncJoinData() {
+      const btn = document.getElementById('syncJoinsBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Syncing…';
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/joins/sync`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Sync failed.');
+        showToast(`✅ Scanned ${fmt(data.scanned)} members · ${fmt(data.added)} new join record(s).`);
+        await loadJoinChart();
+      } catch (err) {
+        showToast(`❌ ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync Join Data';
+      }
+    }
+
+    // --- Welcome ---
+    function fillPlaceholders(text, { html }) {
+      const map = {
+        '{user}': html ? `<span class="mention-pill">@${esc(viewer.username)}</span>` : '@' + viewer.username,
+        '{username}': html ? esc(viewer.username) : viewer.username,
+        '{server}': html ? esc(guildName) : guildName,
+        '{membercount}': fmt(memberCount)
+      };
+      const source = html ? esc(text) : text;
+      return source.replace(/\{(user|username|server|membercount)\}/gi, (t) => map[t.toLowerCase()]);
+    }
+
+    // Light Discord-flavoured markdown for the preview: **bold**, *italic*, __underline__, `code`.
+    function miniMarkdown(htmlText) {
+      return htmlText
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.+?)__/g, '<u>$1</u>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+
+    function readWelcomeForm() {
+      return {
+        enabled: document.getElementById('wEnabled').checked,
+        channelId: document.getElementById('wChannel').value,
+        messageContent: document.getElementById('wContent').value,
+        embedEnabled: document.getElementById('wEmbedEnabled').checked,
+        embedConfig: {
+          title: document.getElementById('wTitle').value,
+          description: document.getElementById('wDesc').value,
+          color: document.getElementById('wColor').value,
+          imageUrl: document.getElementById('wImage').value.trim(),
+          thumbnailUrl: document.getElementById('wThumb').value.trim(),
+          footer: document.getElementById('wFooter').value
+        }
+      };
+    }
+
+    const safeUrl = (u) => /^https?:\/\//i.test(u) ? u : '';
+
+    // An empty src would make the browser request the page itself, so drop the attribute instead.
+    function setPreviewImage(img, url) {
+      if (url) img.src = url;
+      else img.removeAttribute('src');
+      img.style.display = url ? 'block' : 'none';
+    }
+
+    function renderWelcomePreview() {
+      const w = readWelcomeForm();
+      const channel = channels.find((c) => c.id === w.channelId);
+      document.getElementById('wpChannel').textContent = `# ${channel ? channel.name : 'welcome'}`;
+      document.getElementById('wpContent').innerHTML = miniMarkdown(fillPlaceholders(w.messageContent, { html: true }));
+
+      const e = w.embedConfig;
+      const embedEl = document.getElementById('wpEmbed');
+      const hasEmbed = w.embedEnabled && (e.title || e.description || e.footer || e.imageUrl || e.thumbnailUrl);
+      embedEl.style.display = hasEmbed ? 'block' : 'none';
+      if (!hasEmbed) return;
+      embedEl.style.borderLeftColor = e.color || '#5865F2';
+      document.getElementById('wpTitle').innerHTML = fillPlaceholders(e.title, { html: true });
+      document.getElementById('wpDesc').innerHTML = miniMarkdown(fillPlaceholders(e.description, { html: true }));
+      document.getElementById('wpFooter').innerHTML = fillPlaceholders(e.footer, { html: true });
+
+      setPreviewImage(document.getElementById('wpImage'), safeUrl(e.imageUrl));
+      setPreviewImage(document.getElementById('wpThumb'), e.thumbnailUrl === '{avatar}' ? viewer.avatarUrl : safeUrl(e.thumbnailUrl));
+    }
+
+    function toggleWelcomeEmbed() {
+      document.getElementById('wEmbedFields').classList.toggle('disabled', !document.getElementById('wEmbedEnabled').checked);
+      renderWelcomePreview();
+    }
+
+    // Placeholder chips insert into whichever welcome text field was focused last.
+    let lastWelcomeField = document.getElementById('wContent');
+    ['wContent', 'wTitle', 'wDesc', 'wFooter'].forEach((id) =>
+      document.getElementById(id).addEventListener('focus', (ev) => (lastWelcomeField = ev.target))
+    );
+    document.querySelectorAll('.chip[data-insert]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const el = lastWelcomeField;
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? el.value.length;
+        el.value = el.value.slice(0, start) + chip.dataset.insert + el.value.slice(end);
+        el.focus();
+        el.selectionStart = el.selectionEnd = start + chip.dataset.insert.length;
+        renderWelcomePreview();
+      });
+    });
+
+    function saveWelcome() {
+      postJson('welcome', readWelcomeForm(), '✅ Welcome settings saved.');
+    }
+
+    async function testWelcome() {
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/welcome/test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(readWelcomeForm())
+        });
+        const data = await res.json().catch(() => ({}));
+        showToast(res.ok ? '📨 Test welcome sent!' : `❌ ${data.error || 'Failed to send.'}`);
+      } catch {
+        showToast('❌ Failed to send.');
+      }
+    }
+
     renderHpPreview();
     renderOdds();
+    renderWelcomePreview();
+    loadJoinChart();
+
+    // Deep link: /dashboard/:id#welcome opens that tab (used after saving from the Embed Builder).
+    if (location.hash) {
+      const btn = document.querySelector(`.tab-btn[data-tab="${location.hash.slice(1)}"]`);
+      if (btn) btn.click();
+    }
 
     async function saveLevels() {
       const enabled = document.getElementById('lvlEnabled').checked;

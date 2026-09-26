@@ -3,6 +3,9 @@ const { PermissionFlagsBits } = require('discord.js');
 const { requireAuth, requireGuildAccess } = require('../utils/authMiddleware');
 const { setupHoneypotChannel, refreshCounterEmbed, isHttpUrl } = require('../../bot/cogs/modules/honeypot');
 const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
+const { syncJoins, getJoinStats } = require('../../bot/cogs/modules/joinTracking');
+const { sendWelcome } = require('../../bot/cogs/modules/welcome');
+const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
 const EmbedTemplate = require('../../database/models/EmbedTemplate');
 
@@ -238,6 +241,127 @@ router.post('/guilds/:guildId/logs', requireAuth, requireGuildAccess, async (req
   } catch (err) {
     console.error('Failed to save logging config:', err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Join analytics ---
+
+router.get('/guilds/:guildId/joins', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 7), 365);
+    const bucket = req.query.bucket === 'week' ? 'week' : 'day';
+    res.json(await getJoinStats(req.guild.id, { days, bucket }));
+  } catch (err) {
+    console.error('Failed to load join stats:', err);
+    res.status(500).json({ error: 'Failed to load join data.' });
+  }
+});
+
+router.post('/guilds/:guildId/joins/sync', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const result = await syncJoins(req.guild);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err.status === 429) return res.status(429).json({ ok: false, error: err.message });
+    console.error('Join sync failed:', err);
+    res.status(500).json({ ok: false, error: 'Sync failed. Check that the Server Members intent is enabled.' });
+  }
+});
+
+// --- Welcome messages ---
+
+function cleanWelcomeInput(body, guild) {
+  const errors = [];
+  const embed = body.embedConfig && typeof body.embedConfig === 'object' ? body.embedConfig : {};
+  for (const key of ['imageUrl', 'thumbnailUrl']) {
+    const v = embed[key];
+    if (v && !(key === 'thumbnailUrl' && v === '{avatar}') && !isHttpUrl(v)) {
+      errors.push(`${key === 'imageUrl' ? 'Image' : 'Thumbnail'} URL must start with http(s)://`);
+    }
+  }
+  if (embed.color && !/^#[0-9A-F]{6}$/i.test(embed.color)) errors.push('Color must be a hex code like #5865F2.');
+  if (body.channelId) {
+    const channel = guild.channels.cache.get(String(body.channelId));
+    if (!channel || !channel.isTextBased() || channel.isThread()) errors.push('That welcome channel is not a text channel in this server.');
+  }
+  return {
+    errors,
+    data: {
+      enabled: !!body.enabled,
+      channelId: body.channelId ? String(body.channelId) : null,
+      messageContent: String(body.messageContent || '').slice(0, 2000),
+      embedEnabled: !!body.embedEnabled,
+      embedConfig: {
+        title: String(embed.title || '').slice(0, 256),
+        description: String(embed.description || '').slice(0, 4096),
+        color: embed.color || '#5865F2',
+        imageUrl: embed.imageUrl || '',
+        thumbnailUrl: embed.thumbnailUrl || '',
+        footer: String(embed.footer || '').slice(0, 2048)
+      }
+    }
+  };
+}
+
+router.get('/guilds/:guildId/welcome', requireAuth, requireGuildAccess, async (req, res) => {
+  const config = await WelcomeConfig.findOne({ guildId: req.guild.id }).lean();
+  res.json({ config: config || new WelcomeConfig({ guildId: req.guild.id }).toObject() });
+});
+
+router.post('/guilds/:guildId/welcome', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { errors, data } = cleanWelcomeInput(req.body, req.guild);
+    if (errors.length) return res.status(400).json({ ok: false, error: errors[0] });
+    if (data.enabled && !data.channelId) return res.status(400).json({ ok: false, error: 'Pick a welcome channel before enabling.' });
+    if (data.enabled && !data.messageContent.trim() && !data.embedEnabled) {
+      return res.status(400).json({ ok: false, error: 'Add a message or turn on the embed before enabling.' });
+    }
+    await WelcomeConfig.findOneAndUpdate({ guildId: req.guild.id }, { $set: data }, { upsert: true, setDefaultsOnInsert: true });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to save welcome config:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Called from the Embed Builder's "Use as Welcome Message" button: replaces the welcome text/embed
+// but keeps the existing channel and on/off state.
+router.post('/guilds/:guildId/welcome/from-embed', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { content, title, description, color, footer, imageUrl, thumbnailUrl } = req.body;
+    const existing = (await WelcomeConfig.findOne({ guildId: req.guild.id }).lean()) || {};
+    const { errors, data } = cleanWelcomeInput(
+      {
+        enabled: existing.enabled,
+        channelId: existing.channelId,
+        messageContent: content,
+        embedEnabled: !!(title || description || footer || imageUrl || thumbnailUrl),
+        embedConfig: { title, description, color, footer, imageUrl, thumbnailUrl }
+      },
+      req.guild
+    );
+    if (errors.length) return res.status(400).json({ ok: false, error: errors[0] });
+    await WelcomeConfig.findOneAndUpdate({ guildId: req.guild.id }, { $set: data }, { upsert: true, setDefaultsOnInsert: true });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to save welcome from embed builder:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Sends the (unsaved) form's welcome message to the chosen channel, as if the logged-in admin just joined.
+router.post('/guilds/:guildId/welcome/test', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { errors, data } = cleanWelcomeInput(req.body, req.guild);
+    if (errors.length) return res.status(400).json({ ok: false, error: errors[0] });
+    const member = await req.guild.members.fetch(req.session.user.id).catch(() => null);
+    if (!member) return res.status(400).json({ ok: false, error: "Couldn't find you in this server to use as the test member." });
+    const problem = await sendWelcome(member, { force: true, config: data });
+    if (problem) return res.status(400).json({ ok: false, error: problem });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Welcome test failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to send. Check that all URLs are valid.' });
   }
 });
 

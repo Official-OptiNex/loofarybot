@@ -19,11 +19,12 @@ LoofaryBot/
 │   │   ├── commands/             # one file per slash command (/loof, /levels, /gamble, /logs, …)
 │   │   ├── events/                # ready, interactionCreate, messageCreate
 │   │   ├── cogs/modules/          # core logic: giveaways, leveling, honeypot, gambling, logging,
-│   │   │                          #   lockdown, reactionRoles, polls, reminders
+│   │   │                          #   lockdown, reactionRoles, polls, reminders, welcome, joinTracking
 │   │   └── utils/                 # permissions.js, duration.js
 │   ├── database/
 │   │   ├── db.js                  # Mongoose connection
-│   │   └── models/                # Giveaway, GuildConfig, UserLevel, Poll, Reminder, ReactionRolePanel
+│   │   └── models/                # Giveaway, GuildConfig, UserLevel, Poll, Reminder, ReactionRolePanel,
+│   │                              #   MemberJoin, WelcomeConfig
 │   └── web/
 │       ├── server.js               # Express app, sessions, route mounting, /health
 │       ├── routes/                 # auth.js (OAuth2), dashboard.js, api.js, embedBuilder.js
@@ -156,6 +157,20 @@ on every restart/redeploy so no giveaway is ever lost or silently skipped.
 - `/remind me in:2h message:…` (DM, falling back to the channel if DMs are closed),
   `/remind channel …`, `/remind list`, `/remind cancel`. Reminders and timed polls are stored in
   MongoDB and survive restarts.
+
+### Welcome Messages (dashboard **Welcome** tab)
+- Greets every new member in a chosen channel with text, an optional rich embed, or both.
+- Placeholders: `{user}` (mention), `{username}`, `{server}`, `{membercount}`; use `{avatar}` as the
+  thumbnail URL to show the new member's avatar. Only the new member is ever pinged.
+- The tab has a live Discord-style preview and a **Send test** button that posts the current
+  form using you as the new member. **Design in Embed Builder** opens the full Embed Builder
+  with the welcome message loaded; its **Use as Welcome Message** button saves it back.
+
+### Join Analytics (dashboard **Overview** tab)
+- Every join is recorded automatically. The Overview shows daily or weekly joins over 7 days to
+  1 year alongside a running total, plus joins in the last 24h / 7 days.
+- **Sync Join Data** backfills history from every current member's join date (members who left
+  can't be recovered, and rejoiners only report their latest join). Limited to once per 5 minutes.
 
 ### Web Dashboard
 - Visit the deployed URL → **Login with Discord** → pick a server where you have
