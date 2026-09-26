@@ -6,7 +6,13 @@ const UserLevelSchema = new mongoose.Schema(
     userId: { type: String, required: true },
     xp: { type: Number, default: 0 },
     level: { type: Number, default: 0 },
-    lastMessageTimestamp: { type: Number, default: 0 }
+    lastMessageTimestamp: { type: Number, default: 0 },
+    // Personal /levels card customization.
+    card: {
+      color: { type: String, default: null },
+      backgroundUrl: { type: String, default: null },
+      text: { type: String, default: null }
+    }
   },
   { timestamps: true }
 );

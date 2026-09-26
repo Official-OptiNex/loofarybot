@@ -2,21 +2,47 @@ const { EmbedBuilder } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
 const { getOrCreateConfig } = require('./leveling'); // shares the same helper/model
 
+const DEFAULT_TRAP_EMBED = {
+  title: '🍯 Honeypot Trap',
+  description:
+    "**Do not send any messages in this channel.** It exists only to catch bots and raiders — " +
+    'sending a message here triggers an automatic, instant enforcement action.',
+  color: '#ED4245',
+  footer: 'LoofaryBot Honeypot System'
+};
+
+function isHttpUrl(str) {
+  try {
+    return ['http:', 'https:'].includes(new URL(str).protocol);
+  } catch {
+    return false;
+  }
+}
+
+// Builds the trap message from the guild's custom look (falling back to the defaults per field),
+// so admins can disguise the channel as e.g. a fake "verify here" or announcements channel.
 function buildCounterEmbed(config) {
-  return new EmbedBuilder()
-    .setTitle('🍯 Honeypot Trap')
-    .setDescription(
-      "**Do not send any messages in this channel.** It exists only to catch bots and raiders — " +
-        'sending a message here triggers an automatic, instant enforcement action.'
-    )
-    .addFields(
-      { name: 'Kicks', value: `${config.honeypotKicks}`, inline: true },
-      { name: 'Soft Bans', value: `${config.honeypotSoftbans}`, inline: true },
-      { name: 'Bans', value: `${config.honeypotBans}`, inline: true }
-    )
-    .setColor('#ED4245')
-    .setFooter({ text: 'LoofaryBot Honeypot System' })
-    .setTimestamp();
+  const custom = (config.honeypotEmbed && (config.honeypotEmbed.toObject ? config.honeypotEmbed.toObject() : config.honeypotEmbed)) || {};
+  const embed = new EmbedBuilder()
+    .setTitle((custom.title || DEFAULT_TRAP_EMBED.title).slice(0, 256))
+    .setDescription((custom.description || DEFAULT_TRAP_EMBED.description).slice(0, 4096))
+    .setColor(/^#[0-9A-F]{6}$/i.test(custom.color || '') ? custom.color : DEFAULT_TRAP_EMBED.color);
+
+  const footer = custom.footer || DEFAULT_TRAP_EMBED.footer;
+  if (footer) embed.setFooter({ text: footer.slice(0, 2048) });
+  if (custom.imageUrl && isHttpUrl(custom.imageUrl)) embed.setImage(custom.imageUrl);
+  if (custom.thumbnailUrl && isHttpUrl(custom.thumbnailUrl)) embed.setThumbnail(custom.thumbnailUrl);
+
+  if (custom.showCounts !== false) {
+    embed
+      .addFields(
+        { name: 'Kicks', value: `${config.honeypotKicks || 0}`, inline: true },
+        { name: 'Soft Bans', value: `${config.honeypotSoftbans || 0}`, inline: true },
+        { name: 'Bans', value: `${config.honeypotBans || 0}`, inline: true }
+      )
+      .setTimestamp();
+  }
+  return embed;
 }
 
 /**
@@ -88,6 +114,8 @@ async function handleHoneypotMessage(message) {
 }
 
 module.exports = {
+  DEFAULT_TRAP_EMBED,
+  isHttpUrl,
   buildCounterEmbed,
   setupHoneypotChannel,
   refreshCounterEmbed,

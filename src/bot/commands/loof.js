@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const Giveaway = require('../../database/models/Giveaway');
 const { isAuthorized } = require('../utils/permissions');
 const {
@@ -6,6 +6,7 @@ const {
   formatTime,
   resolveColor,
   buildGiveawayEmbed,
+  describeRequirements,
   launchGiveaway,
   finishGiveawayById,
   replyOrEdit
@@ -26,6 +27,36 @@ const data = new SlashCommandBuilder()
       .addStringOption((opt) => opt.setName('color').setDescription('Hex or name color (e.g., #FF5733, green)').setRequired(false))
       .addStringOption((opt) => opt.setName('button_emoji').setDescription('Emoji for entry button').setRequired(false))
       .addStringOption((opt) => opt.setName('description').setDescription('Custom description text').setRequired(false))
+      .addRoleOption((opt) => opt.setName('required_role').setDescription('Only members with this role can enter'))
+      .addIntegerOption((opt) => opt.setName('min_days').setDescription('Minimum days in the server to enter').setMinValue(1))
+      .addIntegerOption((opt) => opt.setName('min_level').setDescription('Minimum XP level to enter').setMinValue(1))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('drop')
+      .setDescription('Start a first-to-click drop — the first N people to claim win instantly')
+      .addChannelOption((opt) =>
+        opt.setName('channel').setDescription('Target channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true)
+      )
+      .addStringOption((opt) => opt.setName('prize').setDescription('Prize').setRequired(true))
+      .addIntegerOption((opt) => opt.setName('winners').setDescription('How many people can claim (default 1)').setMinValue(1).setMaxValue(100))
+      .addStringOption((opt) => opt.setName('expires').setDescription('Auto-close if unclaimed after (e.g. 10m, 1h — default 24h)'))
+      .addRoleOption((opt) => opt.setName('ping_role').setDescription('Role to ping'))
+      .addStringOption((opt) => opt.setName('color').setDescription('Hex or name color'))
+      .addStringOption((opt) => opt.setName('description').setDescription('Custom description text'))
+      .addRoleOption((opt) => opt.setName('required_role').setDescription('Only members with this role can claim'))
+      .addIntegerOption((opt) => opt.setName('min_days').setDescription('Minimum days in the server to claim').setMinValue(1))
+      .addIntegerOption((opt) => opt.setName('min_level').setDescription('Minimum XP level to claim').setMinValue(1))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('requirements')
+      .setDescription('Set or clear entry requirements on a running giveaway or drop')
+      .addStringOption((opt) => opt.setName('message_id').setDescription('Giveaway Message ID').setRequired(true))
+      .addRoleOption((opt) => opt.setName('role').setDescription('Required role'))
+      .addIntegerOption((opt) => opt.setName('min_days').setDescription('Minimum days in the server (0 = none)').setMinValue(0))
+      .addIntegerOption((opt) => opt.setName('min_level').setDescription('Minimum XP level (0 = none)').setMinValue(0))
+      .addBooleanOption((opt) => opt.setName('clear').setDescription('Remove all requirements'))
   )
   .addSubcommand((sub) =>
     sub
@@ -69,7 +100,15 @@ const data = new SlashCommandBuilder()
 // missed, regardless of Render/Atlas latency. `create` is excluded because showModal() must be
 // the interaction's first response and can't follow a deferReply. `ping`/`help` are fast/local
 // enough that deferring would only add a needless "thinking..." flash.
-const DEFER_SUBCOMMANDS = ['start', 'end', 'reroll', 'delete', 'edit', 'list'];
+const DEFER_SUBCOMMANDS = ['start', 'drop', 'requirements', 'end', 'reroll', 'delete', 'edit', 'list'];
+
+function readRequirementOptions(interaction) {
+  return {
+    roleId: interaction.options.getRole('required_role')?.id || null,
+    minDaysInServer: interaction.options.getInteger('min_days') || null,
+    minLevel: interaction.options.getInteger('min_level') || null
+  };
+}
 
 async function execute(interaction, client) {
   if (!isAuthorized(interaction)) {
@@ -100,6 +139,8 @@ async function execute(interaction, client) {
       .setDescription(
         '`/loof start` - Starts a giveaway with option arguments.\n' +
           '`/loof create` - Opens an interactive popup modal to configure a giveaway.\n' +
+          '`/loof drop` - First-to-click drop: the first N people to press Claim win instantly.\n' +
+          '`/loof requirements` - Require a role, days in the server, or an XP level to enter.\n' +
           '`/loof end` - Forces an active giveaway to end early.\n' +
           '`/loof reroll` - Selects a new winner from an ended giveaway.\n' +
           '`/loof delete` - Removes a giveaway message and cancels the draw.\n' +
@@ -135,7 +176,63 @@ async function execute(interaction, client) {
       pingRole,
       colorHex,
       emoji,
-      customDesc
+      customDesc,
+      requirements: readRequirementOptions(interaction)
+    });
+  }
+
+  if (sub === 'drop') {
+    const channel = interaction.options.getChannel('channel');
+    const expiresRaw = interaction.options.getString('expires');
+    const durationMs = expiresRaw ? parseDuration(expiresRaw) : 24 * 3600000;
+    if (!durationMs) {
+      return replyOrEdit(interaction, { content: '❌ Invalid `expires` format! Use e.g. `10m`, `1h`, `2d`.' });
+    }
+    return launchGiveaway(client, {
+      interaction,
+      channel,
+      durationMs,
+      winnerCount: interaction.options.getInteger('winners') || 1,
+      prize: interaction.options.getString('prize'),
+      pingRole: interaction.options.getRole('ping_role'),
+      colorHex: resolveColor(interaction.options.getString('color') || 'gold'),
+      emoji: '⚡',
+      customDesc: interaction.options.getString('description') || 'Be quick — first come, first served!',
+      type: 'drop',
+      requirements: readRequirementOptions(interaction)
+    });
+  }
+
+  if (sub === 'requirements') {
+    const msgId = interaction.options.getString('message_id').trim();
+    const g = await Giveaway.findOne({ messageId: msgId, guildId: interaction.guildId });
+    if (!g || g.ended) {
+      return replyOrEdit(interaction, { content: '❌ Giveaway not found or already ended.' });
+    }
+
+    const role = interaction.options.getRole('role');
+    const minDays = interaction.options.getInteger('min_days');
+    const minLevel = interaction.options.getInteger('min_level');
+    if (interaction.options.getBoolean('clear')) {
+      g.requirements = { roleId: null, minDaysInServer: null, minLevel: null };
+    } else {
+      if (!role && minDays === null && minLevel === null) {
+        return replyOrEdit(interaction, { content: '❌ Give at least one of `role`, `min_days`, `min_level` — or `clear`.' });
+      }
+      if (role) g.requirements.roleId = role.id;
+      if (minDays !== null) g.requirements.minDaysInServer = minDays || null;
+      if (minLevel !== null) g.requirements.minLevel = minLevel || null;
+    }
+    await g.save();
+
+    const channel = await client.channels.fetch(g.channelId).catch(() => null);
+    const msg = channel ? await channel.messages.fetch(g.messageId).catch(() => null) : null;
+    if (msg) await msg.edit({ embeds: [buildGiveawayEmbed(g)] }).catch(() => null);
+
+    const summary = describeRequirements(g.requirements) || '\n\nNo requirements — anyone can enter.';
+    return replyOrEdit(interaction, {
+      content: `✅ Requirements updated for \`${msgId}\`.${summary}` +
+        (g.type === 'timed' ? '\n_Existing entrants who no longer qualify are skipped at the draw._' : '')
     });
   }
 
@@ -193,6 +290,9 @@ async function execute(interaction, client) {
     if (!g || !g.ended) {
       return replyOrEdit(interaction, { content: '❌ Giveaway not found or has not ended yet.' });
     }
+    if (g.type === 'drop') {
+      return replyOrEdit(interaction, { content: "❌ Drops can't be rerolled — their winners are whoever claimed first." });
+    }
     if (g.entries.length === 0) {
       return replyOrEdit(interaction, { content: '❌ No entries to reroll from.' });
     }
@@ -225,7 +325,7 @@ async function execute(interaction, client) {
       return replyOrEdit(interaction, { content: 'No active giveaways currently running in this server.' });
     }
     const listStr = active
-      .map((g) => `• **${g.prize}** | ID: \`${g.messageId}\` | Channel: <#${g.channelId}> | Ends: ${formatTime(g.endTimestamp)}`)
+      .map((g) => `• ${g.type === 'drop' ? '⚡' : '🎁'} **${g.prize}** | ID: \`${g.messageId}\` | Channel: <#${g.channelId}> | Ends: ${formatTime(g.endTimestamp)}`)
       .join('\n');
     return replyOrEdit(interaction, { content: `**Active Giveaways (${active.length}):**\n${listStr}` });
   }

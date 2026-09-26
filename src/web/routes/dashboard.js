@@ -2,6 +2,9 @@ const express = require('express');
 const { requireAuth, requireGuildAccess, MANAGE_GUILD, ADMINISTRATOR } = require('../utils/authMiddleware');
 const GuildConfig = require('../../database/models/GuildConfig');
 const { getEffectiveXpSettings } = require('../../bot/cogs/modules/leveling');
+const { getGamblingSettings } = require('../../bot/cogs/modules/gambling');
+const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
+const { DEFAULT_TRAP_EMBED } = require('../../bot/cogs/modules/honeypot');
 const commandReference = require('../../bot/commandReference');
 const { XP_MIN, XP_MAX, XP_COOLDOWN_MS, LEVEL_XP_BASE } = require('../../config');
 
@@ -70,6 +73,9 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     channels: textChannels,
     roles,
     effectiveXp,
+    gambling: getGamblingSettings(config),
+    logEvents: LOG_EVENTS,
+    defaultTrapEmbed: DEFAULT_TRAP_EMBED,
     commandReference,
     stats
   });

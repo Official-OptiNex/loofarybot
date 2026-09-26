@@ -31,6 +31,8 @@
       <button class="tab-btn" data-tab="honeypot">🍯 Honeypot</button>
       <button class="tab-btn" data-tab="leveling">📈 Leveling</button>
       <button class="tab-btn" data-tab="autorole">🛡️ Auto-Role</button>
+      <button class="tab-btn" data-tab="gambling">🎰 Gambling</button>
+      <button class="tab-btn" data-tab="logs">📋 Logs</button>
       <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
       <button class="tab-btn" data-tab="commands">📜 Commands</button>
     </div>
@@ -76,6 +78,17 @@
           <% } %>
         </div>
         <div class="card">
+          <h3>🎰 Gambling <span class="badge <%= gambling.enabled ? 'on' : 'off' %>"><%= gambling.enabled ? 'Enabled' : 'Disabled' %></span></h3>
+          <p class="muted">House edge <strong><%= gambling.edgePercent %>%</strong> · Bets <strong><%= gambling.minBet %>–<%= gambling.maxBet || '∞' %> XP</strong></p>
+          <% const gChannel = gambling.channelId ? channels.find(c => c.id === gambling.channelId) : null; %>
+          <p class="muted">Channel: <strong><%= gChannel ? '#' + gChannel.name : 'anywhere' %></strong></p>
+        </div>
+        <div class="card">
+          <% const logCh = config.logChannelId ? channels.find(c => c.id === config.logChannelId) : null; %>
+          <h3>📋 Logs <span class="badge <%= logCh ? 'on' : 'off' %>"><%= logCh ? 'Active' : 'Not set up' %></span></h3>
+          <p class="muted"><%= logCh ? 'Logging to #' + logCh.name : 'Pick a log channel in the Logs tab.' %></p>
+        </div>
+        <div class="card">
           <h3>🖌️ Quick Links</h3>
           <p class="muted"><a href="/dashboard/<%= guild.id %>/embed">Open the Embed Builder →</a></p>
           <p class="muted" style="margin-top:0.4rem;">Use the tabs above to configure everything else.</p>
@@ -106,6 +119,40 @@
           Soft Bans: <strong><%= config.honeypotSoftbans || 0 %></strong>,
           Bans: <strong><%= config.honeypotBans || 0 %></strong>
         </p>
+        <% const hpe = config.honeypotEmbed || {}; %>
+        <h3 style="margin-top:1.5rem;">Trap Message Appearance</h3>
+        <p class="muted">Disguise the trap as something innocent (e.g. a fake "verify here" channel). Blank fields use the default shown as the placeholder.</p>
+        <div class="field-row">
+          <div>
+            <label for="hpTitle">Title</label>
+            <input type="text" id="hpTitle" maxlength="256" placeholder="<%= defaultTrapEmbed.title %>" value="<%= hpe.title || '' %>" oninput="renderHpPreview()">
+          </div>
+          <div style="flex:0 0 140px;">
+            <label for="hpColor">Color</label>
+            <input type="color" id="hpColor" value="<%= hpe.color || defaultTrapEmbed.color %>" oninput="renderHpPreview()">
+          </div>
+        </div>
+        <label for="hpDesc">Description</label>
+        <textarea id="hpDesc" rows="4" maxlength="4000" placeholder="<%= defaultTrapEmbed.description %>" oninput="renderHpPreview()"><%= hpe.description || '' %></textarea>
+        <label for="hpFooter">Footer</label>
+        <input type="text" id="hpFooter" maxlength="2048" placeholder="<%= defaultTrapEmbed.footer %>" value="<%= hpe.footer || '' %>" oninput="renderHpPreview()">
+        <div class="field-row">
+          <div>
+            <label for="hpImage">Image URL</label>
+            <input type="text" id="hpImage" placeholder="https://…" value="<%= hpe.imageUrl || '' %>" oninput="renderHpPreview()">
+          </div>
+          <div>
+            <label for="hpThumb">Thumbnail URL</label>
+            <input type="text" id="hpThumb" placeholder="https://…" value="<%= hpe.thumbnailUrl || '' %>" oninput="renderHpPreview()">
+          </div>
+        </div>
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input type="checkbox" id="hpShowCounts" style="width:auto;" <%= hpe.showCounts === false ? '' : 'checked' %> onchange="renderHpPreview()">
+          Show kick/ban counters (turn off to disguise it better)
+        </label>
+        <label>Preview</label>
+        <div class="discord-embed-preview" id="hpPreview"></div>
+
         <button class="btn" style="margin-top:1rem;" onclick="saveHoneypot()">Save Honeypot Settings</button>
       </div>
     </div>
@@ -153,6 +200,17 @@
             <input type="number" id="levelXpBase" min="1" placeholder="<%= effectiveXp.levelXpBase %>" value="<%= config.levelXpBase ?? '' %>">
           </div>
         </div>
+
+        <h3 style="margin-top:1.5rem;">XP Multipliers</h3>
+        <p class="muted">Channel multiplier × the member's best role multiplier. Use 0 to disable XP in a channel (e.g. bot spam), 2 for double XP (e.g. boosters).</p>
+        <div id="multiplierRows"></div>
+        <button class="btn secondary" type="button" onclick="addMultiplierRow()">+ Add Multiplier</button>
+
+        <h3 style="margin-top:1.5rem;">Rank Cards</h3>
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input type="checkbox" id="cardBoosterOnly" style="width:auto;" <%= config.rankCardBoosterOnly ? 'checked' : '' %>>
+          Only server boosters can customize their <code>/levels card</code>
+        </label>
 
         <h3 style="margin-top:1.5rem;">Level-Up Role Rewards</h3>
         <div id="levelRoleRows">
@@ -204,6 +262,64 @@
       </div>
     </div>
 
+    <!-- GAMBLING -->
+    <div class="tab-panel hidden" id="tab-gambling">
+      <div class="card">
+        <h2>🎰 XP Gambling</h2>
+        <p class="muted">Members bet XP on <code>/gamble coinflip</code>, <code>/gamble mines</code> and <code>/gamble highlow</code>. The house edge is taken off every payout multiplier.</p>
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input type="checkbox" id="gEnabled" style="width:auto;" <%= gambling.enabled ? 'checked' : '' %>>
+          Enable XP gambling
+        </label>
+        <div class="field-row">
+          <div>
+            <label for="gEdge">House edge (%)</label>
+            <input type="number" id="gEdge" min="0" max="50" step="0.5" value="<%= gambling.edgePercent %>" oninput="renderOdds()">
+          </div>
+          <div>
+            <label for="gMin">Min bet (XP)</label>
+            <input type="number" id="gMin" min="1" value="<%= gambling.minBet %>">
+          </div>
+          <div>
+            <label for="gMax">Max bet (XP, blank = no limit)</label>
+            <input type="number" id="gMax" min="1" value="<%= gambling.maxBet || '' %>">
+          </div>
+        </div>
+        <label for="gChannel">Allowed channel</label>
+        <select id="gChannel">
+          <option value="">Any channel</option>
+          <% channels.forEach(c => { %>
+            <option value="<%= c.id %>" <%= gambling.channelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+        <p class="muted" id="gOdds" style="margin-top:0.75rem;"></p>
+        <button class="btn" style="margin-top:1rem;" onclick="saveGambling()">Save Gambling Settings</button>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div class="tab-panel hidden" id="tab-logs">
+      <div class="card">
+        <h2>📋 Server Logs</h2>
+        <p class="muted">Send a record of server activity to a private staff channel.</p>
+        <label for="logChannel">Log channel</label>
+        <select id="logChannel">
+          <option value="">— Logging off —</option>
+          <% channels.forEach(c => { %>
+            <option value="<%= c.id %>" <%= config.logChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+          <% }) %>
+        </select>
+        <label style="margin-top:1rem;">Events to log</label>
+        <% Object.entries(logEvents).forEach(([key, label]) => { %>
+          <label style="display:flex; align-items:center; gap:0.5rem; font-weight:normal;">
+            <input type="checkbox" class="log-event" data-key="<%= key %>" style="width:auto;" <%= (config.logEvents && config.logEvents[key] === false) ? '' : 'checked' %>>
+            <%= label %>
+          </label>
+        <% }) %>
+        <button class="btn" style="margin-top:1rem;" onclick="saveLogs()">Save Log Settings</button>
+      </div>
+    </div>
+
     <!-- COMMANDS -->
     <div class="tab-panel hidden" id="tab-commands">
       <% commandReference.forEach(group => { %>
@@ -237,7 +353,15 @@
 
   <script>
     const guildId = '<%= guild.id %>';
-    const roles = <%- JSON.stringify(roles) %>;
+    const roles = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
+    const channels = <%- JSON.stringify(channels).replace(/</g, '\\u003c') %>;
+    const initialMultipliers = <%- JSON.stringify(config.xpMultipliers || []).replace(/</g, '\\u003c') %>;
+    const trapDefaults = <%- JSON.stringify(defaultTrapEmbed).replace(/</g, '\\u003c') %>;
+    const trapCounts = { kicks: <%= config.honeypotKicks || 0 %>, softbans: <%= config.honeypotSoftbans || 0 %>, bans: <%= config.honeypotBans || 0 %> };
+
+    function esc(str) {
+      return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
 
     // --- Tabs ---
     document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -327,16 +451,124 @@
       container.appendChild(row);
     }
 
-    async function saveHoneypot() {
-      const channelId = document.getElementById('hpChannel').value;
-      const action = document.getElementById('hpAction').value;
-      const res = await fetch(`/api/guilds/${guildId}/honeypot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId, action })
-      });
-      showToast(res.ok ? '✅ Honeypot settings saved.' : '❌ Failed to save.');
+    async function postJson(path, payload, okMsg) {
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(() => ({}));
+        showToast(res.ok ? okMsg : `❌ ${data.error || 'Failed to save.'}`);
+      } catch {
+        showToast('❌ Failed to save.');
+      }
     }
+
+    // --- Honeypot ---
+    function readHpEmbed() {
+      return {
+        title: document.getElementById('hpTitle').value.trim(),
+        description: document.getElementById('hpDesc').value.trim(),
+        color: document.getElementById('hpColor').value,
+        footer: document.getElementById('hpFooter').value.trim(),
+        imageUrl: document.getElementById('hpImage').value.trim(),
+        thumbnailUrl: document.getElementById('hpThumb').value.trim(),
+        showCounts: document.getElementById('hpShowCounts').checked
+      };
+    }
+
+    function renderHpPreview() {
+      const e = readHpEmbed();
+      const el = document.getElementById('hpPreview');
+      el.style.borderLeftColor = e.color || trapDefaults.color;
+      let html = '';
+      if (e.thumbnailUrl) html += `<img src="${esc(e.thumbnailUrl)}" style="float:right; max-width:80px; margin:0 0 0.5rem 0.5rem;">`;
+      html += `<div class="title">${esc(e.title || trapDefaults.title)}</div>`;
+      html += `<div class="desc">${esc(e.description || trapDefaults.description)}</div>`;
+      if (e.showCounts) {
+        html += `<div class="desc" style="margin-top:0.5rem;"><strong>Kicks</strong> ${trapCounts.kicks} · <strong>Soft Bans</strong> ${trapCounts.softbans} · <strong>Bans</strong> ${trapCounts.bans}</div>`;
+      }
+      if (e.imageUrl) html += `<img src="${esc(e.imageUrl)}">`;
+      html += `<div class="muted" style="font-size:0.75rem; margin-top:0.5rem;">${esc(e.footer || trapDefaults.footer)}</div>`;
+      el.innerHTML = html;
+    }
+
+    function saveHoneypot() {
+      postJson(
+        'honeypot',
+        {
+          channelId: document.getElementById('hpChannel').value,
+          action: document.getElementById('hpAction').value,
+          embed: readHpEmbed()
+        },
+        '✅ Honeypot settings saved.'
+      );
+    }
+
+    // --- XP multipliers ---
+    function targetOptionsHtml(type, selectedId) {
+      const list = type === 'channel' ? channels.map((c) => ({ id: c.id, name: '#' + c.name })) : roles.map((r) => ({ id: r.id, name: '@' + r.name }));
+      return list.map((t) => `<option value="${esc(t.id)}" ${t.id === selectedId ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+    }
+
+    function addMultiplierRow(m = { type: 'channel', targetId: null, multiplier: 2 }) {
+      const row = document.createElement('div');
+      row.className = 'field-row multiplier-row';
+      row.innerHTML = `
+        <select class="mul-type" style="flex:0 0 120px;">
+          <option value="channel" ${m.type === 'channel' ? 'selected' : ''}>Channel</option>
+          <option value="role" ${m.type === 'role' ? 'selected' : ''}>Role</option>
+        </select>
+        <select class="mul-target">${targetOptionsHtml(m.type, m.targetId)}</select>
+        <input type="number" class="mul-value" min="0" max="10" step="0.1" value="${esc(m.multiplier)}" style="flex:0 0 110px;" placeholder="×">
+        <button class="btn secondary" type="button" onclick="this.parentElement.remove()">Remove</button>
+      `;
+      row.querySelector('.mul-type').addEventListener('change', (ev) => {
+        row.querySelector('.mul-target').innerHTML = targetOptionsHtml(ev.target.value, null);
+      });
+      document.getElementById('multiplierRows').appendChild(row);
+    }
+    initialMultipliers.forEach((m) => addMultiplierRow(m));
+
+    // --- Gambling ---
+    function renderOdds() {
+      const edge = Math.min(Math.max(Number(document.getElementById('gEdge').value) || 0, 0), 50) / 100;
+      const mines = (k, m) => {
+        let x = 1;
+        for (let i = 0; i < k; i++) x *= (25 - i) / (25 - m - i);
+        return (x * (1 - edge)).toFixed(2);
+      };
+      document.getElementById('gOdds').innerHTML =
+        `Coinflip pays <strong>${(2 * (1 - edge)).toFixed(2)}x</strong> · ` +
+        `Mines (3 mines): 1 gem <strong>${mines(1, 3)}x</strong>, 5 gems <strong>${mines(5, 3)}x</strong> · ` +
+        `Mines (10 mines): 3 gems <strong>${mines(3, 10)}x</strong> · ` +
+        `High-Low: one correct call on a 7 pays <strong>${((1 - edge) / (7 / 13)).toFixed(2)}x</strong>`;
+    }
+
+    function saveGambling() {
+      postJson(
+        'gambling',
+        {
+          enabled: document.getElementById('gEnabled').checked,
+          houseEdge: document.getElementById('gEdge').value,
+          minBet: document.getElementById('gMin').value,
+          maxBet: document.getElementById('gMax').value,
+          channelId: document.getElementById('gChannel').value
+        },
+        '✅ Gambling settings saved.'
+      );
+    }
+
+    // --- Logs ---
+    function saveLogs() {
+      const events = {};
+      document.querySelectorAll('.log-event').forEach((el) => (events[el.dataset.key] = el.checked));
+      postJson('logs', { channelId: document.getElementById('logChannel').value, events }, '✅ Log settings saved.');
+    }
+
+    renderHpPreview();
+    renderOdds();
 
     async function saveLevels() {
       const enabled = document.getElementById('lvlEnabled').checked;
@@ -351,7 +583,13 @@
         xpMax: document.getElementById('xpMax').value,
         xpCooldownSeconds: document.getElementById('xpCooldown').value,
         levelXpBase: document.getElementById('levelXpBase').value,
-        levelUpChannelId: document.getElementById('levelUpChannel').value
+        levelUpChannelId: document.getElementById('levelUpChannel').value,
+        rankCardBoosterOnly: document.getElementById('cardBoosterOnly').checked,
+        xpMultipliers: [...document.querySelectorAll('.multiplier-row')].map((row) => ({
+          type: row.querySelector('.mul-type').value,
+          targetId: row.querySelector('.mul-target').value,
+          multiplier: row.querySelector('.mul-value').value
+        }))
       };
       const res = await fetch(`/api/guilds/${guildId}/levels`, {
         method: 'POST',

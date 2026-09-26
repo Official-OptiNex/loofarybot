@@ -13,7 +13,14 @@ const GiveawaySchema = new mongoose.Schema(
     customDesc: { type: String, default: 'Click the button below to enter!' },
     hostId: { type: String, required: true },
     entries: { type: [String], default: [] },
-    ended: { type: Boolean, default: false }
+    ended: { type: Boolean, default: false },
+    // 'drop' = first-to-click: the first `winnerCount` people to claim win instantly.
+    type: { type: String, enum: ['timed', 'drop'], default: 'timed' },
+    requirements: {
+      roleId: { type: String, default: null },
+      minDaysInServer: { type: Number, default: null },
+      minLevel: { type: Number, default: null }
+    }
   },
   { timestamps: true }
 );
