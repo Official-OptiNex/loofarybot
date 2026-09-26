@@ -400,14 +400,11 @@ router.post('/guilds/:guildId/import', requireAuth, requireGuildAccess, guardApi
 
 router.get('/guilds/:guildId/alerts', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   const subs = await AlertSubscription.find({ guildId: req.guild.id }).sort({ createdAt: 1 }).lean();
-  res.json({ subscriptions: subs, twitchConfigured: socialAlerts.twitchConfigured(), defaults: socialAlerts.DEFAULTS });
+  res.json({ subscriptions: subs, twitchOfficialApi: socialAlerts.twitchUsesOfficialApi(), defaults: socialAlerts.DEFAULTS });
 });
 
 router.post('/guilds/:guildId/alerts', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
-    if (req.body.platform === 'twitch' && !socialAlerts.twitchConfigured()) {
-      return res.status(400).json({ ok: false, error: 'Twitch alerts need TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET set on the bot host.' });
-    }
     const sub = await socialAlerts.upsertSubscription(req.guild, req.body, req.body.id || null);
     res.json({ ok: true, subscription: sub.toObject() });
   } catch (err) {

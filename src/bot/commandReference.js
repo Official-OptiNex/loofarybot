@@ -69,7 +69,7 @@ module.exports = [
     blurb: 'Twitch go-live and YouTube upload alerts with custom embeds and pings.',
     tab: 'alerts',
     commands: [
-      { usage: '/alerts add', perm: 'Manage Server', description: 'Follow a Twitch or YouTube channel and pick where alerts go.' },
+      { usage: '/alerts add', perm: 'Manage Server', description: 'Paste any twitch.tv or YouTube link to follow it and pick where alerts go.' },
       { usage: '/alerts list', perm: 'Manage Server', description: 'Every followed channel and whether it is live.' },
       { usage: '/alerts test', perm: 'Manage Server', description: 'Post a sample alert (no one is pinged).' },
       { usage: '/alerts remove', perm: 'Manage Server', description: 'Stop following a channel.' }

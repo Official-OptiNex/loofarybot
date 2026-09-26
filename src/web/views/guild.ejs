@@ -850,14 +850,16 @@
         </div>
         <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('alerts', config.socialAlertsEnabled !== false, null) %></div>
       </div>
-      <div class="card" id="twitchSetupNote" style="display:none; border-color:var(--c-yellow);">
-        <h3 style="margin-top:0;">🟣 Twitch needs a one-time setup</h3>
-        <p class="muted" style="font-size:0.88rem; margin-bottom:0;">
-          Create a free app at <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console/apps</a>
-          (OAuth redirect: <code>http://localhost</code>, category: Chat Bot), then add <code>TWITCH_CLIENT_ID</code> and
-          <code>TWITCH_CLIENT_SECRET</code> to your Render environment. YouTube alerts work without any setup.
+      <details class="card" id="twitchSetupNote" style="display:none; padding:1rem 1.4rem;">
+        <summary style="cursor:pointer; font-weight:600;">🟣 Optional: use Twitch's official API</summary>
+        <p class="muted" style="font-size:0.86rem; margin:0.6rem 0 0;">
+          Twitch alerts already work for any streamer — just paste their twitch.tv link. Right now the bot uses the same public
+          connection twitch.tv's website uses, which Twitch could change without notice. For the officially supported route, create a
+          free app at <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console/apps</a>
+          (OAuth redirect <code>http://localhost</code>) and add <code>TWITCH_CLIENT_ID</code> and <code>TWITCH_CLIENT_SECRET</code>
+          on Render — the bot switches over automatically.
         </p>
-      </div>
+      </details>
       <div class="split">
         <div>
           <div id="alertList"></div>
@@ -1696,7 +1698,7 @@
         const res = await fetch(`/api/guilds/${guildId}/alerts`);
         const data = await res.json();
         alertState.subs = data.subscriptions || [];
-        alertState.twitch = data.twitchConfigured;
+        alertState.twitchOfficial = data.twitchOfficialApi;
         alertState.defaults = data.defaults || {};
         renderAlertList();
       } catch {
@@ -1706,10 +1708,10 @@
 
     function renderAlertList() {
       const subs = alertState.subs;
-      document.getElementById('twitchSetupNote').style.display = alertState.twitch ? 'none' : '';
+      document.getElementById('twitchSetupNote').style.display = alertState.twitchOfficial ? 'none' : '';
       document.getElementById('alertsStatus').innerHTML =
         `<span class="status-chip"><span class="dot"></span>${subs.length} followed</span>` +
-        `<span class="status-chip ${alertState.twitch ? 'good' : 'warn'}"><span class="dot"></span>Twitch ${alertState.twitch ? 'connected' : 'needs setup'}</span>` +
+        `<span class="status-chip good"><span class="dot"></span>Twitch ready${alertState.twitchOfficial ? ' (official API)' : ''}</span>` +
         '<span class="status-chip good"><span class="dot"></span>YouTube ready</span>';
       const list = document.getElementById('alertList');
       if (!subs.length) {
@@ -1740,7 +1742,7 @@
       document.getElementById('alertEditor').style.display = '';
       document.getElementById('alertEditorTitle').textContent = sub ? `Edit ${sub.displayName}` : 'New alert';
       document.getElementById('aId').value = sub ? sub._id : '';
-      const platform = sub ? sub.platform : alertState.twitch ? 'twitch' : 'youtube';
+      const platform = sub ? sub.platform : 'twitch';
       document.querySelector(`input[name="aPlatform"][value="${platform}"]`).checked = true;
       document.getElementById('aAccount').value = sub ? sub.displayName : '';
       document.getElementById('aChannel').value = sub ? sub.channelId : '';
@@ -1764,8 +1766,8 @@
       document.getElementById('aMessage').placeholder = d.message || '';
       document.getElementById('aTitle').placeholder = `Title (default: ${d.title || ''})`;
       document.getElementById('aDesc').placeholder = `Description (default: ${(d.description || '').replace(/\n/g, ' ')})`;
-      document.getElementById('aAccountHelp').textContent = p === 'twitch' ? 'Twitch username or twitch.tv link' : 'YouTube @handle, channel link, or channel ID';
-      document.getElementById('aAccount').placeholder = p === 'twitch' ? 'e.g. loofary' : 'e.g. @loofary';
+      document.getElementById('aAccountHelp').textContent = p === 'twitch' ? 'Paste any twitch.tv link, or just the username' : 'YouTube @handle, channel link, or channel ID';
+      document.getElementById('aAccount').placeholder = p === 'twitch' ? 'https://twitch.tv/streamer' : 'https://youtube.com/@channel';
       if (resetColor || !color) document.getElementById('aColor').value = (color || d.color || '#5865F2');
       else document.getElementById('aColor').value = color;
       renderAlertPreview();
@@ -1778,7 +1780,9 @@
     function renderAlertPreview() {
       const p = aPlatform();
       const d = alertState.defaults[p] || {};
-      const name = document.getElementById('aAccount').value.replace(/^@/, '').trim() || (p === 'twitch' ? 'loofary' : 'Loofary');
+      const raw = document.getElementById('aAccount').value.trim();
+      // Show the channel name, not the whole pasted link.
+      const name = raw.replace(/^https?:\/\//i, '').replace(/^(www\.|m\.)?(twitch\.tv|youtube\.com)\//i, '').replace(/[/?#].*$/, '').replace(/^@/, '') || (p === 'twitch' ? 'streamer' : 'Channel');
       const vars = p === 'twitch'
         ? { name, title: 'Ranked grind + chill vibes', game: 'Valorant', url: `https://twitch.tv/${name.toLowerCase()}` }
         : { name, title: 'I built a Discord bot', game: '', url: 'https://youtube.com/watch?v=dQw4w9WgXcQ' };

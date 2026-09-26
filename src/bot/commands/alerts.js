@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const AlertSubscription = require('../../database/models/AlertSubscription');
-const { upsertSubscription, sendTest, twitchConfigured } = require('../cogs/modules/socialAlerts');
+const { upsertSubscription, sendTest } = require('../cogs/modules/socialAlerts');
 
 const platformOption = (opt) =>
   opt.setName('platform').setDescription('Twitch or YouTube').setRequired(true).addChoices({ name: 'Twitch', value: 'twitch' }, { name: 'YouTube', value: 'youtube' });
@@ -14,7 +14,7 @@ const data = new SlashCommandBuilder()
       .setName('add')
       .setDescription('Follow a Twitch or YouTube channel')
       .addStringOption(platformOption)
-      .addStringOption((opt) => opt.setName('account').setDescription('Twitch username, or YouTube @handle / channel link').setRequired(true))
+      .addStringOption((opt) => opt.setName('account').setDescription('Any twitch.tv link or username, or a YouTube @handle / channel link').setRequired(true))
       .addChannelOption((opt) =>
         opt.setName('channel').setDescription('Where to post alerts').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true)
       )
@@ -45,9 +45,6 @@ async function execute(interaction, client) {
 
   if (sub === 'add') {
     const platform = interaction.options.getString('platform');
-    if (platform === 'twitch' && !twitchConfigured()) {
-      return interaction.reply({ content: '❌ Twitch alerts need `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` set on the bot host.', ephemeral: true });
-    }
     await interaction.deferReply({ ephemeral: true });
     try {
       const role = interaction.options.getRole('ping_role');

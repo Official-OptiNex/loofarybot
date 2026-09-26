@@ -26,14 +26,17 @@ const DEFAULTS = {
   }
 };
 
-const twitchConfigured = () => !!(TWITCH_CLIENT_ID && TWITCH_CLIENT_SECRET);
+// With TWITCH_CLIENT_ID/SECRET set the bot uses Twitch's official API. Without them it falls back to
+// the public endpoint twitch.tv's own website uses (no account needed) — unofficial, so Twitch could
+// change it, but it means any streamer can be followed with zero setup.
+const twitchUsesOfficialApi = () => !!(TWITCH_CLIENT_ID && TWITCH_CLIENT_SECRET);
+const PUBLIC_GQL_CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko'; // twitch.tv's public web client
 
 // ------------------------------------------------------------------ Twitch
 
 let twitchToken = null; // { value, expiresAt }
 
 async function twitchFetch(path) {
-  if (!twitchConfigured()) throw new Error('Twitch alerts need TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET set on the server.');
   if (!twitchToken || Date.now() > twitchToken.expiresAt - 60_000) {
     const res = await fetch(
       `https://id.twitch.tv/oauth2/token?client_id=${TWITCH_CLIENT_ID}&client_secret=${TWITCH_CLIENT_SECRET}&grant_type=client_credentials`,
@@ -51,13 +54,98 @@ async function twitchFetch(path) {
   return res.json();
 }
 
+// Official API: users (+ live streams) for up to 100 logins per call.
+async function lookupViaHelix(logins) {
+  const out = new Map();
+  for (let i = 0; i < logins.length; i += 100) {
+    const batch = logins.slice(i, i + 100);
+    const q = batch.map((l) => `login=${encodeURIComponent(l)}`).join('&');
+    const sq = batch.map((l) => `user_login=${encodeURIComponent(l)}`).join('&');
+    const [users, streams] = await Promise.all([twitchFetch(`users?${q}`), twitchFetch(`streams?${sq}&first=100`)]);
+    const live = new Map((streams.data || []).map((st) => [st.user_login.toLowerCase(), st]));
+    for (const u of users.data || []) {
+      const st = live.get(u.login.toLowerCase());
+      out.set(u.login.toLowerCase(), {
+        login: u.login.toLowerCase(),
+        displayName: u.display_name,
+        avatarUrl: u.profile_image_url,
+        stream: st
+          ? {
+              id: st.id,
+              title: st.title,
+              game: st.game_name,
+              startedAt: st.started_at,
+              thumbnail: st.thumbnail_url.replace('{width}', '1280').replace('{height}', '720')
+            }
+          : null
+      });
+    }
+  }
+  return out;
+}
+
+// Public endpoint (no keys): one aliased query per 30 logins.
+async function lookupViaPublicGql(logins) {
+  const out = new Map();
+  for (let i = 0; i < logins.length; i += 30) {
+    const batch = logins.slice(i, i + 30);
+    const fields =
+      'login displayName profileImageURL(width: 300) broadcastSettings { title game { displayName } } ' +
+      'stream { id createdAt previewImageURL(width: 1280, height: 720) game { displayName } }';
+    const query = `query { ${batch.map((l, n) => `u${n}: user(login: ${JSON.stringify(l)}) { ${fields} }`).join(' ')} }`;
+    const res = await fetch('https://gql.twitch.tv/gql', {
+      method: 'POST',
+      headers: { 'Client-Id': PUBLIC_GQL_CLIENT_ID, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    if (!res.ok) throw new Error(`Twitch public API error ${res.status}`);
+    const body = await res.json();
+    if (!body.data) throw new Error(`Twitch public API: ${body.errors?.[0]?.message || 'unexpected response'}`);
+    batch.forEach((_, n) => {
+      const u = body.data[`u${n}`];
+      if (!u) return;
+      const st = u.stream;
+      out.set(u.login.toLowerCase(), {
+        login: u.login.toLowerCase(),
+        displayName: u.displayName,
+        avatarUrl: u.profileImageURL,
+        stream: st
+          ? {
+              id: st.id,
+              title: u.broadcastSettings?.title || '',
+              game: st.game?.displayName || u.broadcastSettings?.game?.displayName || '',
+              startedAt: st.createdAt,
+              thumbnail: st.previewImageURL || ''
+            }
+          : null
+      });
+    });
+  }
+  return out;
+}
+
+/** login → { login, displayName, avatarUrl, stream: {id,title,game,startedAt,thumbnail} | null } */
+function twitchLookup(logins) {
+  return twitchUsesOfficialApi() ? lookupViaHelix(logins) : lookupViaPublicGql(logins);
+}
+
+// Accepts a twitch.tv link (any form), @name, or a plain username.
+function parseTwitchLogin(input) {
+  return String(input)
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^(www\.|m\.)?twitch\.tv\//i, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/^@/, '')
+    .toLowerCase();
+}
+
 async function resolveTwitch(input) {
-  const login = String(input).trim().replace(/^https?:\/\/(www\.)?twitch\.tv\//i, '').replace(/[/?#].*$/, '').replace(/^@/, '').toLowerCase();
-  if (!/^[a-z0-9_]{3,25}$/.test(login)) throw new Error('That doesn\'t look like a Twitch username.');
-  const data = await twitchFetch(`users?login=${encodeURIComponent(login)}`);
-  const user = data.data?.[0];
+  const login = parseTwitchLogin(input);
+  if (!/^[a-z0-9_]{3,25}$/.test(login)) throw new Error("That doesn't look like a Twitch channel — paste a twitch.tv link or a username.");
+  const user = (await twitchLookup([login])).get(login);
   if (!user) throw new Error(`No Twitch channel called "${login}".`);
-  return { account: user.login, displayName: user.display_name, avatarUrl: user.profile_image_url };
+  return { account: user.login, displayName: user.displayName, avatarUrl: user.avatarUrl };
 }
 
 // ------------------------------------------------------------------ YouTube
@@ -195,39 +283,38 @@ function formatDuration(ms) {
 
 let twitchRunning = false;
 async function pollTwitch(client) {
-  if (twitchRunning || !twitchConfigured()) return;
+  if (twitchRunning) return;
   twitchRunning = true;
   try {
     const subs = await AlertSubscription.find({ platform: 'twitch', enabled: true });
     if (!subs.length) return;
     const logins = [...new Set(subs.map((s) => s.account))];
-    const live = new Map();
-    for (let i = 0; i < logins.length; i += 100) {
-      const q = logins.slice(i, i + 100).map((l) => `user_login=${encodeURIComponent(l)}`).join('&');
-      const data = await twitchFetch(`streams?${q}&first=100`);
-      for (const s of data.data || []) live.set(s.user_login.toLowerCase(), s);
-    }
+    const info = await twitchLookup(logins);
+    const live = new Map([...info].filter(([, u]) => u.stream).map(([login, u]) => [login, u]));
 
     for (const sub of subs) {
       if (!(await moduleEnabled(sub.guildId))) continue;
-      const stream = live.get(sub.account);
+      const channel = live.get(sub.account);
+      const stream = channel?.stream;
+      if (channel?.avatarUrl && channel.avatarUrl !== sub.avatarUrl) sub.avatarUrl = channel.avatarUrl;
       try {
         if (stream && !sub.state.live) {
           const resumed = sub.state.streamId === stream.id && sub.state.liveStartedAt && Date.now() - sub.updatedAt < STREAM_RESUME_MS;
           sub.state.live = true;
           if (!resumed) {
             const vars = {
-              name: stream.user_name,
-              title: stream.title,
-              game: stream.game_name || 'something',
-              url: `https://twitch.tv/${stream.user_login}`,
-              image: stream.thumbnail_url.replace('{width}', '1280').replace('{height}', '720') + `?t=${Date.now()}`,
-              avatar: sub.avatarUrl
+              name: channel.displayName,
+              title: stream.title || `${channel.displayName} is live`,
+              game: stream.game || 'something',
+              url: `https://twitch.tv/${channel.login}`,
+              // Cache-buster so Discord shows the current frame, not a stale thumbnail.
+              image: stream.thumbnail ? `${stream.thumbnail}${stream.thumbnail.includes('?') ? '&' : '?'}t=${Date.now()}` : '',
+              avatar: channel.avatarUrl || sub.avatarUrl
             };
             const msg = await post(client, sub, vars);
             sub.state.streamId = stream.id;
             sub.state.liveMessageId = msg?.id || null;
-            sub.state.liveStartedAt = new Date(stream.started_at);
+            sub.state.liveStartedAt = stream.startedAt ? new Date(stream.startedAt) : new Date();
           }
           await sub.save();
         } else if (!stream && sub.state.live) {
@@ -385,7 +472,8 @@ async function sendTest(client, sub) {
 
 module.exports = {
   DEFAULTS,
-  twitchConfigured,
+  twitchUsesOfficialApi,
+  parseTwitchLogin,
   parseYouTubeFeed,
   buildAlertMessage,
   upsertSubscription,

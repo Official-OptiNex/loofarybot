@@ -45,8 +45,8 @@ Copy `.env.example` to `.env` for local dev, or set these in Render's dashboard.
 | `CLIENT_SECRET` | for dashboard login | Discord application client secret |
 | `REDIRECT_URI` | for dashboard login | e.g. `https://your-app.onrender.com/auth/discord/callback` |
 | `SESSION_SECRET` | for dashboard login | Any long random string |
-| `TWITCH_CLIENT_ID` | for Twitch alerts | From a free app at dev.twitch.tv/console/apps |
-| `TWITCH_CLIENT_SECRET` | for Twitch alerts | Same app (YouTube alerts need nothing) |
+| `TWITCH_CLIENT_ID` | no | Optional — switches Twitch alerts to the official API (free app at dev.twitch.tv/console/apps) |
+| `TWITCH_CLIENT_SECRET` | no | Same app as above |
 | `ERROR_ALERT_CHANNEL_ID` | no | A channel (in any server the bot is in) that gets every error with details |
 | `PORT` | no | Render sets this automatically |
 
@@ -201,8 +201,11 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 ### Creator Alerts (`/alerts …` or the dashboard's **Alerts** page)
 - Twitch go-live and YouTube upload alerts, each with its own channel, ping role (or @everyone),
   message and embed (placeholders `{name}` `{title}` `{url}` `{game}`), and a pause switch.
-- Twitch is checked every 2 minutes (needs `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET`); when a
-  stream ends, its alert is edited to "Stream ended · streamed for 2h 5m" without a second ping.
+- Follow any streamer by pasting their twitch.tv link (or username) — nothing is hard-coded and no
+  setup is needed. Twitch is checked every 2 minutes; when a stream ends, its alert is edited to
+  "Stream ended · streamed for 2h 5m" without a second ping.
+- Without keys the bot uses the public connection twitch.tv's own site uses (unofficial — Twitch
+  could change it). Set `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET` to use the official API instead.
 - YouTube uses the channel's public RSS feed every 5 minutes — no API key. Following a channel
   never announces its old videos, and at most 3 new videos are posted per check.
 - Alerts in announcement channels are auto-published to followers.
