@@ -35,7 +35,11 @@ function startWebServer(client) {
   app.get('/health', (req, res) => res.status(200).send('OK'));
 
   app.get('/', (req, res) => {
-    res.render('home', { user: req.session?.user || null, botTag: client.user?.tag || 'LoofaryBot' });
+    res.render('home', {
+      user: req.session?.user || null,
+      botTag: client.user?.tag || 'LoofaryBot',
+      guildCount: client.guilds.cache.size
+    });
   });
 
   app.use('/auth', authRoutes);

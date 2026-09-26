@@ -14,11 +14,14 @@
   <div class="container">
     <div class="guild-header">
       <% if (guild.iconURL()) { %>
-        <img src="<%= guild.iconURL({ size: 64 }) %>" width="56" height="56" style="border-radius:50%;">
+        <img src="<%= guild.iconURL({ size: 128 }) %>">
       <% } %>
       <div>
         <h1 style="margin:0;"><%= guild.name %></h1>
-        <p class="muted" style="margin:0.2rem 0 0;"><%= guild.memberCount %> members</p>
+        <p class="muted" style="margin:0.2rem 0 0;">
+          👥 <%= stats.memberCount %> members
+          <% if (stats.boostTier > 0) { %> · <span class="badge boost">⭐ Boost Tier <%= stats.boostTier %></span><% } %>
+        </p>
       </div>
       <a class="btn" href="/dashboard/<%= guild.id %>/embed" style="margin-left:auto;">🖌️ Embed Builder</a>
     </div>
@@ -27,28 +30,53 @@
       <button class="tab-btn active" data-tab="overview">Overview</button>
       <button class="tab-btn" data-tab="honeypot">🍯 Honeypot</button>
       <button class="tab-btn" data-tab="leveling">📈 Leveling</button>
+      <button class="tab-btn" data-tab="autorole">🛡️ Auto-Role</button>
       <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
       <button class="tab-btn" data-tab="commands">📜 Commands</button>
     </div>
 
     <!-- OVERVIEW -->
     <div class="tab-panel" id="tab-overview">
+      <div class="overview-stat-grid">
+        <div class="overview-stat"><div class="icon">👥</div><div class="value"><%= stats.memberCount %></div><div class="label">Members</div></div>
+        <div class="overview-stat"><div class="icon">💬</div><div class="value"><%= stats.channelCount %></div><div class="label">Channels</div></div>
+        <div class="overview-stat"><div class="icon">🎭</div><div class="value"><%= stats.roleCount %></div><div class="label">Roles</div></div>
+        <div class="overview-stat"><div class="icon">😀</div><div class="value"><%= stats.emojiCount %></div><div class="label">Emojis</div></div>
+        <div class="overview-stat"><div class="icon">⭐</div><div class="value"><%= stats.boostCount %></div><div class="label">Boosts</div></div>
+        <div class="overview-stat"><div class="icon">📅</div><div class="value"><%= new Date(stats.createdTimestamp).toLocaleDateString() %></div><div class="label">Created</div></div>
+      </div>
+      <p class="muted" style="margin-bottom:1.5rem;">Owned by <strong><%= stats.ownerTag %></strong> · Server ID <code><%= guild.id %></code></p>
+
       <div class="grid">
         <div class="card">
-          <h3>🍯 Honeypot</h3>
-          <% if (config.honeypotChannelId) { %>
-            <p class="muted">Trap: <#<%= config.honeypotChannelId %>><br>Action: <strong><%= config.honeypotAction %></strong></p>
+          <h3>🍯 Honeypot <span class="badge <%= config.honeypotChannelId ? 'on' : 'off' %>"><%= config.honeypotChannelId ? 'Active' : 'Not set up' %></span></h3>
+          <% if (config.honeypotChannelId) {
+               const hpChannel = channels.find(c => c.id === config.honeypotChannelId);
+          %>
+            <p class="muted">Trap: <strong>#<%= hpChannel ? hpChannel.name : 'unknown-channel' %></strong> · Action: <strong><%= config.honeypotAction %></strong></p>
             <p class="muted">Kicks: <%= config.honeypotKicks || 0 %> · Soft Bans: <%= config.honeypotSoftbans || 0 %> · Bans: <%= config.honeypotBans || 0 %></p>
           <% } else { %>
             <p class="muted">Not set up yet — see the Honeypot tab.</p>
           <% } %>
         </div>
         <div class="card">
-          <h3>📈 Leveling</h3>
-          <p class="muted">Status: <strong><%= config.levelingEnabled === false ? 'Disabled' : 'Enabled' %></strong></p>
+          <h3>📈 Leveling <span class="badge <%= config.levelingEnabled === false ? 'off' : 'on' %>"><%= config.levelingEnabled === false ? 'Disabled' : 'Enabled' %></span></h3>
           <p class="muted">XP per message: <strong><%= effectiveXp.xpMin %>–<%= effectiveXp.xpMax %></strong>,
             cooldown <strong><%= effectiveXp.cooldownMs / 1000 %>s</strong></p>
           <p class="muted"><%= (config.levelRoles || []).length %> role reward(s) configured.</p>
+        </div>
+        <div class="card">
+          <h3>🛡️ Auto-Role <span class="badge <%= (config.autoRoleId && config.autoRoleEnabled !== false) ? 'on' : 'off' %>"><%= (config.autoRoleId && config.autoRoleEnabled !== false) ? 'Active' : 'Not set up' %></span></h3>
+          <% if (stats.autoRoleName) { %>
+            <p class="muted">New members receive <strong><%= stats.autoRoleName %></strong> automatically.</p>
+          <% } else { %>
+            <p class="muted">Not configured yet — see the Auto-Role tab.</p>
+          <% } %>
+        </div>
+        <div class="card">
+          <h3>🖌️ Quick Links</h3>
+          <p class="muted"><a href="/dashboard/<%= guild.id %>/embed">Open the Embed Builder →</a></p>
+          <p class="muted" style="margin-top:0.4rem;">Use the tabs above to configure everything else.</p>
         </div>
       </div>
     </div>
@@ -134,6 +162,31 @@
         <button class="btn secondary" type="button" onclick="addLevelRoleRow()">+ Add Role Reward</button>
         <br>
         <button class="btn" style="margin-top:1rem;" onclick="saveLevels()">Save Leveling Settings</button>
+      </div>
+    </div>
+
+    <!-- AUTO-ROLE -->
+    <div class="tab-panel hidden" id="tab-autorole">
+      <div class="card">
+        <h2>🛡️ Auto-Role</h2>
+        <p class="muted">Automatically grant a role to every member when they join. Use Sync to also grant it to everyone already in the server.</p>
+
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input type="checkbox" id="arEnabled" style="width:auto;" <%= config.autoRoleEnabled === false ? '' : 'checked' %>>
+          Enable auto-role on join
+        </label>
+
+        <label for="arRole">Role to grant</label>
+        <select id="arRole">
+          <option value="">— None —</option>
+          <% roles.forEach(r => { %>
+            <option value="<%= r.id %>" <%= config.autoRoleId === r.id ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
+          <% }) %>
+        </select>
+
+        <button class="btn" style="margin-top:1rem;" onclick="saveAutoRole()">Save Auto-Role Settings</button>
+        <button class="btn secondary" style="margin-top:1rem;" onclick="syncAutoRole()">🔄 Sync to Existing Members</button>
+        <p class="muted" id="arSyncResult" style="margin-top:0.75rem;"></p>
       </div>
     </div>
 
@@ -291,6 +344,31 @@
         body: JSON.stringify(payload)
       });
       showToast(res.ok ? '✅ Leveling settings saved. Reload to see updated hierarchy warnings.' : '❌ Failed to save.');
+    }
+
+    // --- Auto-Role ---
+    async function saveAutoRole() {
+      const roleId = document.getElementById('arRole').value;
+      const enabled = document.getElementById('arEnabled').checked;
+      const res = await fetch(`/api/guilds/${guildId}/autorole`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roleId, enabled })
+      });
+      showToast(res.ok ? '✅ Auto-role settings saved.' : '❌ Failed to save.');
+    }
+
+    async function syncAutoRole() {
+      const resultEl = document.getElementById('arSyncResult');
+      resultEl.textContent = 'Syncing… this can take a moment on larger servers.';
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/autorole/sync`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Sync failed.');
+        resultEl.textContent = `✅ Granted the role to ${data.granted} member(s).${data.failed > 0 ? ` Failed for ${data.failed} (check hierarchy/permissions).` : ''}`;
+      } catch (err) {
+        resultEl.textContent = `❌ ${err.message}`;
+      }
     }
   </script>
 </body>

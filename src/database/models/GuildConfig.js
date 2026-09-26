@@ -31,7 +31,11 @@ const GuildConfigSchema = new mongoose.Schema(
     xpMin: { type: Number, default: null },
     xpMax: { type: Number, default: null },
     xpCooldownSeconds: { type: Number, default: null },
-    levelXpBase: { type: Number, default: null }
+    levelXpBase: { type: Number, default: null },
+
+    // --- Auto-Role ---
+    autoRoleId: { type: String, default: null },
+    autoRoleEnabled: { type: Boolean, default: true }
   },
   { timestamps: true }
 );

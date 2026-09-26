@@ -5,12 +5,26 @@ const { rescheduleActiveGiveaways } = require('../cogs/modules/giveaways');
 const loofCommand = require('../commands/loof');
 const honeypotCommand = require('../commands/honeypot');
 const levelsCommand = require('../commands/levels');
+const autoroleCommand = require('../commands/autorole');
+const serverinfoCommand = require('../commands/serverinfo');
+const userinfoCommand = require('../commands/userinfo');
+const avatarCommand = require('../commands/avatar');
+const purgeCommand = require('../commands/purge');
+
+const ALL_COMMANDS = [
+  loofCommand,
+  honeypotCommand,
+  levelsCommand,
+  autoroleCommand,
+  serverinfoCommand,
+  userinfoCommand,
+  avatarCommand,
+  purgeCommand
+];
 
 module.exports = function registerReadyEvent(client) {
   // Populate the in-memory command collection used by interactionCreate.
-  client.commands.set(loofCommand.data.name, loofCommand);
-  client.commands.set(honeypotCommand.data.name, honeypotCommand);
-  client.commands.set(levelsCommand.data.name, levelsCommand);
+  ALL_COMMANDS.forEach((cmd) => client.commands.set(cmd.data.name, cmd));
 
   client.once('ready', async () => {
     console.log(`LoofaryBot logged in as ${client.user.tag}`);
@@ -18,7 +32,7 @@ module.exports = function registerReadyEvent(client) {
     const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
     try {
       await rest.put(Routes.applicationCommands(CLIENT_ID), {
-        body: [loofCommand.data.toJSON(), honeypotCommand.data.toJSON(), levelsCommand.data.toJSON()]
+        body: ALL_COMMANDS.map((cmd) => cmd.data.toJSON())
       });
       console.log('Successfully registered slash commands.');
     } catch (error) {

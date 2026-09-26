@@ -9,14 +9,21 @@
 <body>
   <nav>
     <div class="brand">🎁 LoofaryBot</div>
-    <div>
-      <span class="muted">Logged in as <%= user.username %></span>
-      <a class="btn secondary" href="/auth/logout" style="margin-left:1rem;">Logout</a>
+    <div class="nav-right">
+      <span class="muted">Logged in as <strong><%= user.username %></strong></span>
+      <a class="btn secondary" href="/auth/logout">Logout</a>
     </div>
   </nav>
   <div class="container">
-    <h1>Your Servers</h1>
+    <div class="page-header">
+      <h1>Your Servers</h1>
+    </div>
     <p class="muted">Only servers where you have Manage Server permission <em>and</em> LoofaryBot is present are shown.</p>
+
+    <div class="stat-strip">
+      <div class="stat-pill"><span class="value"><%= guilds.length %></span><span class="label">Manageable servers</span></div>
+      <div class="stat-pill"><span class="value"><%= totalGuilds %></span><span class="label">Servers using LoofaryBot</span></div>
+    </div>
 
     <% if (guilds.length === 0) { %>
       <div class="card">
@@ -27,10 +34,18 @@
       <div class="grid">
         <% guilds.forEach(g => { %>
           <a class="guild-card" href="/dashboard/<%= g.id %>">
-            <% if (g.icon) { %>
-              <img src="https://cdn.discordapp.com/icons/<%= g.id %>/<%= g.icon %>.png" width="40" height="40" style="border-radius:50%;">
-            <% } %>
-            <span><%= g.name %></span>
+            <div class="guild-card-top">
+              <% if (g.icon) { %>
+                <img src="https://cdn.discordapp.com/icons/<%= g.id %>/<%= g.icon %>.png">
+              <% } else { %>
+                <div class="guild-icon-fallback"><%= g.name.charAt(0).toUpperCase() %></div>
+              <% } %>
+              <div class="guild-card-name"><%= g.name %></div>
+            </div>
+            <div class="guild-card-stats">
+              <span>👥 <%= g.memberCount %></span>
+              <span>💬 <%= g.channelCount %></span>
+            </div>
           </a>
         <% }) %>
       </div>

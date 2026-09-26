@@ -22,7 +22,7 @@ router.get('/:guildId/embed', requireAuth, requireGuildAccess, (req, res) => {
 
 router.post('/:guildId/embed/send', requireAuth, requireGuildAccess, async (req, res) => {
   try {
-    const { channelId, title, description, color, fields, footer, imageUrl, thumbnailUrl } = req.body;
+    const { channelId, content, title, description, color, fields, footer, imageUrl, thumbnailUrl } = req.body;
 
     const me = req.guild.members.me;
     const channel = req.guild.channels.cache.get(channelId);
@@ -31,6 +31,11 @@ router.post('/:guildId/embed/send', requireAuth, requireGuildAccess, async (req,
     }
     if (!me || !channel.permissionsFor(me)?.has(PermissionFlagsBits.SendMessages)) {
       return res.status(403).json({ ok: false, error: "The bot doesn't have permission to send messages there." });
+    }
+
+    const hasEmbedContent = title || description || footer || imageUrl || thumbnailUrl || (Array.isArray(fields) && fields.length);
+    if (!content && !hasEmbedContent) {
+      return res.status(400).json({ ok: false, error: 'Add a message, an embed, or both before sending.' });
     }
 
     const embed = new EmbedBuilder();
@@ -49,11 +54,17 @@ router.post('/:guildId/embed/send', requireAuth, requireGuildAccess, async (req,
       if (cleanFields.length) embed.addFields(cleanFields);
     }
 
-    await channel.send({ embeds: [embed] });
+    // The message content is what actually pings @users/@roles typed as real mentions
+    // (Discord never notifies from text inside an embed) — allowedMentions defaults to
+    // parsing everything, which is exactly the point of this field.
+    const payload = { embeds: hasEmbedContent ? [embed] : [] };
+    if (content) payload.content = String(content).slice(0, 2000);
+
+    await channel.send(payload);
     res.json({ ok: true });
   } catch (err) {
     console.error('Failed to send embed:', err);
-    res.status(500).json({ ok: false, error: 'Failed to send embed. Check that all URLs and the color are valid.' });
+    res.status(500).json({ ok: false, error: 'Failed to send. Check that all URLs and the color are valid.' });
   }
 });
 

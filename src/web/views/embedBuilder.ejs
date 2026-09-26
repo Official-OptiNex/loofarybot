@@ -16,6 +16,18 @@
       <h1>Embed Builder</h1>
       <p class="muted">Type <code>@</code>, <code>#</code>, or <code>:</code> in any text field for live autocomplete of members, channels, and emoji.</p>
 
+      <div class="card" style="padding:1rem;">
+        <label for="templateSelect" style="margin-top:0;">Saved Templates</label>
+        <div class="field-row">
+          <select id="templateSelect">
+            <option value="">— New / unsaved —</option>
+          </select>
+          <button class="btn secondary" type="button" onclick="loadSelectedTemplate()">Load</button>
+          <button class="btn secondary" type="button" onclick="deleteSelectedTemplate()">Delete</button>
+        </div>
+        <button class="btn" type="button" style="margin-top:0.6rem;" onclick="saveAsTemplate()">💾 Save As Template</button>
+      </div>
+
       <label for="channel">Send To Channel</label>
       <select id="channel">
         <option value="">— Select a channel —</option>
@@ -24,13 +36,22 @@
         <% }) %>
       </select>
 
-      <label for="title">Title</label>
+      <label for="content">Message Text (optional — this is the only place @mentions actually notify)</label>
+      <div class="autocomplete-wrapper">
+        <textarea id="content" maxlength="2000" placeholder="e.g. @Announcements new giveaway is live!"></textarea>
+        <div class="autocomplete-dropdown" id="ac-content"></div>
+      </div>
+      <p class="muted" style="font-size:0.8rem; margin-top:0.3rem;">
+        Discord only sends a ping/notification from real mention tokens typed here — text inside the embed below never pings anyone.
+      </p>
+
+      <label for="title" style="margin-top:1.25rem;">Embed Title (optional)</label>
       <div class="autocomplete-wrapper">
         <input id="title" maxlength="256" placeholder="Embed title">
         <div class="autocomplete-dropdown" id="ac-title"></div>
       </div>
 
-      <label for="description">Description</label>
+      <label for="description">Embed Description</label>
       <div class="autocomplete-wrapper">
         <textarea id="description" maxlength="4096" placeholder="Embed description... supports **markdown**"></textarea>
         <div class="autocomplete-dropdown" id="ac-description"></div>
@@ -56,7 +77,7 @@
       <button class="btn secondary" type="button" onclick="addFieldRow()">+ Add Field</button>
 
       <br><br>
-      <button class="btn" onclick="sendEmbed()">🚀 Send Embed</button>
+      <button class="btn" onclick="sendEmbed()">🚀 Send</button>
     </div>
 
     <div>
@@ -69,6 +90,7 @@
             <span class="discord-bot-badge">BOT</span>
             <span class="discord-message-time">Today at 12:00 PM</span>
           </div>
+          <div class="desc" id="pContent" style="margin-bottom:0.4rem;"></div>
           <div class="discord-embed-preview" id="preview">
             <div class="title" id="pTitle"></div>
             <div class="desc" id="pDesc"></div>
@@ -86,6 +108,7 @@
   <script>
     const guildId = '<%= guild.id %>';
     let mentionable = { users: [], channels: [], roles: [], emojis: [] };
+    let templates = [];
     let fieldCounter = 0;
 
     // ---------- Load real guild data for autocomplete ----------
@@ -95,6 +118,94 @@
         if (res.ok) mentionable = await res.json();
       } catch (e) {
         console.error('Failed to load autocomplete data', e);
+      }
+    }
+
+    // ---------- Templates ----------
+    async function loadTemplates() {
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/embed-templates`);
+        const data = await res.json();
+        templates = data.templates || [];
+        const select = document.getElementById('templateSelect');
+        select.innerHTML =
+          '<option value="">— New / unsaved —</option>' +
+          templates.map((t) => `<option value="${t.name}">${t.name}</option>`).join('');
+      } catch (e) {
+        console.error('Failed to load templates', e);
+      }
+    }
+
+    function loadSelectedTemplate() {
+      const name = document.getElementById('templateSelect').value;
+      if (!name) return;
+      const t = templates.find((x) => x.name === name);
+      if (!t) return;
+
+      document.getElementById('content').value = t.content || '';
+      document.getElementById('title').value = t.title || '';
+      document.getElementById('description').value = t.description || '';
+      document.getElementById('color').value = t.color || '#5865f2';
+      document.getElementById('footer').value = t.footer || '';
+      document.getElementById('imageUrl').value = t.imageUrl || '';
+      document.getElementById('thumbnailUrl').value = t.thumbnailUrl || '';
+
+      document.getElementById('fieldRows').innerHTML = '';
+      (t.fields || []).forEach((f) => addFieldRow(f.name, f.value, f.inline));
+
+      updatePreview();
+      showToast(`Loaded template "${name}".`);
+    }
+
+    async function saveAsTemplate() {
+      const existing = document.getElementById('templateSelect').value;
+      const name = prompt('Save as template name:', existing || '');
+      if (!name || !name.trim()) return;
+
+      const fields = [...document.querySelectorAll('.field-entry')].map((row) => ({
+        name: row.querySelector('.f-name').value,
+        value: row.querySelector('.f-value').value,
+        inline: row.querySelector('.f-inline').checked
+      }));
+
+      const payload = {
+        name: name.trim(),
+        content: document.getElementById('content').value,
+        title: document.getElementById('title').value,
+        description: document.getElementById('description').value,
+        color: document.getElementById('color').value,
+        footer: document.getElementById('footer').value,
+        imageUrl: document.getElementById('imageUrl').value,
+        thumbnailUrl: document.getElementById('thumbnailUrl').value,
+        fields
+      };
+
+      const res = await fetch(`/api/guilds/${guildId}/embed-templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(`✅ Saved template "${name.trim()}".`);
+        await loadTemplates();
+        document.getElementById('templateSelect').value = name.trim();
+      } else {
+        showToast(`❌ ${data.error || 'Failed to save template.'}`);
+      }
+    }
+
+    async function deleteSelectedTemplate() {
+      const name = document.getElementById('templateSelect').value;
+      if (!name) return showToast('Select a template to delete first.');
+      if (!confirm(`Delete template "${name}"? This can't be undone.`)) return;
+
+      const res = await fetch(`/api/guilds/${guildId}/embed-templates/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast(`🗑️ Deleted template "${name}".`);
+        await loadTemplates();
+      } else {
+        showToast('❌ Failed to delete template.');
       }
     }
 
@@ -110,10 +221,15 @@
 
     function getMatches(trigger, query) {
       if (trigger === '@') {
-        return mentionable.users
+        const userMatches = mentionable.users
           .filter((u) => u.name.toLowerCase().includes(query) || u.username.toLowerCase().includes(query))
-          .slice(0, 8)
+          .slice(0, 6)
           .map((u) => ({ label: u.name, sublabel: `@${u.username}`, insert: `<@${u.id}>` }));
+        const roleMatches = mentionable.roles
+          .filter((r) => r.name.toLowerCase().includes(query))
+          .slice(0, 4)
+          .map((r) => ({ label: `@${r.name}`, sublabel: 'role', insert: `<@&${r.id}>` }));
+        return [...userMatches, ...roleMatches].slice(0, 8);
       }
       if (trigger === '#') {
         return mentionable.channels
@@ -205,7 +321,7 @@
       inputEl.addEventListener('blur', () => setTimeout(() => { currentMatches = []; render(); }, 150));
     }
 
-    // ---------- Rendering raw embed text the way Discord would show it ----------
+    // ---------- Rendering raw embed/message text the way Discord would show it ----------
     function renderMentionText(raw) {
       if (!raw) return '';
       let html = raw
@@ -213,8 +329,11 @@
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
-      // Restore our own encoded mention/emoji tokens (originally <...>) so we can style them.
       html = html
+        .replace(/&lt;@&(\d+)&gt;/g, (_, id) => {
+          const r = mentionable.roles.find((x) => x.id === id);
+          return `<span class="mention-pill">@${r ? r.name : 'unknown-role'}</span>`;
+        })
         .replace(/&lt;@(\d+)&gt;/g, (_, id) => {
           const u = mentionable.users.find((x) => x.id === id);
           return `<span class="mention-pill">@${u ? u.name : 'unknown-user'}</span>`;
@@ -232,16 +351,22 @@
     }
 
     function updatePreview() {
+      const content = document.getElementById('content').value;
       const title = document.getElementById('title').value;
       const desc = document.getElementById('description').value;
       const color = document.getElementById('color').value;
       const footer = document.getElementById('footer').value;
       const image = document.getElementById('imageUrl').value;
 
+      document.getElementById('pContent').innerHTML = renderMentionText(content);
       document.getElementById('preview').style.borderLeftColor = color;
       document.getElementById('pTitle').innerHTML = renderMentionText(title);
       document.getElementById('pDesc').innerHTML = renderMentionText(desc);
       document.getElementById('pFooter').innerHTML = renderMentionText(footer);
+
+      const hasEmbedContent = title || desc || footer || image || document.getElementById('thumbnailUrl').value ||
+        [...document.querySelectorAll('.field-entry')].some((row) => row.querySelector('.f-name').value || row.querySelector('.f-value').value);
+      document.getElementById('preview').style.display = hasEmbedContent ? 'block' : 'none';
 
       const img = document.getElementById('pImage');
       if (image) { img.src = image; img.style.display = 'block'; } else { img.style.display = 'none'; }
@@ -301,6 +426,7 @@
 
       const payload = {
         channelId,
+        content: document.getElementById('content').value,
         title: document.getElementById('title').value,
         description: document.getElementById('description').value,
         color: document.getElementById('color').value,
@@ -316,18 +442,18 @@
         body: JSON.stringify(payload)
       });
       const data = await res.json().catch(() => ({}));
-      showToast(res.ok ? '✅ Embed sent!' : `❌ ${data.error || 'Failed to send embed.'}`);
+      showToast(res.ok ? '✅ Sent!' : `❌ ${data.error || 'Failed to send.'}`);
     }
 
-    ['title', 'description', 'color', 'footer', 'imageUrl'].forEach((id) => {
+    ['content', 'title', 'description', 'color', 'footer', 'imageUrl', 'thumbnailUrl'].forEach((id) => {
       const el = document.getElementById(id);
       el.addEventListener('input', updatePreview);
-      if (['title', 'description', 'footer'].includes(id)) {
+      if (['content', 'title', 'description', 'footer'].includes(id)) {
         attachAutocomplete(el, document.getElementById(`ac-${id}`));
       }
     });
 
-    loadMentionable().then(updatePreview);
+    Promise.all([loadMentionable(), loadTemplates()]).then(updatePreview);
   </script>
 </body>
 </html>

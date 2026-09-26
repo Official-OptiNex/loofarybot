@@ -16,14 +16,49 @@
     <% } %>
   </nav>
   <div class="container">
-    <h1>LoofaryBot Dashboard</h1>
-    <p class="muted">Bot online as <strong><%= botTag %></strong>. Manage giveaways, the honeypot anti-raid trap,
-      the leveling system, and build embeds — all from the web.</p>
-    <div class="grid" style="margin-top:2rem;">
-      <div class="card"><h3>🎁 Giveaways</h3><p class="muted">Persistent giveaways that survive redeploys.</p></div>
-      <div class="card"><h3>🍯 Honeypot</h3><p class="muted">Instant kick/ban trap channel with a live counter.</p></div>
-      <div class="card"><h3>📈 Leveling</h3><p class="muted">XP, levels, and automatic role rewards.</p></div>
-      <div class="card"><h3>🖌️ Embed Builder</h3><p class="muted">Discohook-style visual embed editor.</p></div>
+    <div class="hero">
+      <div class="hero-badge"><span class="pulse-dot"></span> Online as <%= botTag %> · in <%= guildCount %> server<%= guildCount === 1 ? '' : 's' %></div>
+      <h1>Everything LoofaryBot does, in one place</h1>
+      <p>Persistent giveaways, an anti-raid honeypot, XP leveling with role rewards, auto-role on join,
+        and a visual embed builder with saved templates — configure it all without touching a slash command.</p>
+      <% if (!user) { %>
+        <a class="btn" href="/auth/discord">Login with Discord →</a>
+      <% } else { %>
+        <a class="btn" href="/dashboard">Go to Dashboard →</a>
+      <% } %>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🎁</div>
+        <h3>Giveaways</h3>
+        <p class="muted">Persistent giveaways that survive redeploys, with a form-based or slash-command flow.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🍯</div>
+        <h3>Honeypot</h3>
+        <p class="muted">Instant kick/ban/soft-ban trap channel with a live, self-updating counter.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <h3>Leveling</h3>
+        <p class="muted">Tunable XP curve, cooldowns, and automatic role rewards at any milestone.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛡️</div>
+        <h3>Auto-Role</h3>
+        <p class="muted">Grant a role to every new member automatically, and sync it onto existing members too.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🖌️</div>
+        <h3>Embed Builder</h3>
+        <p class="muted">Live @/#/emoji autocomplete, a real message-style preview, and saved templates.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏆</div>
+        <h3>Leaderboard</h3>
+        <p class="muted">A paginated, avatar-rich XP leaderboard for every server, right in the browser.</p>
+      </div>
     </div>
   </div>
 </body>

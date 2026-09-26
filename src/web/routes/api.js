@@ -3,6 +3,7 @@ const { PermissionFlagsBits } = require('discord.js');
 const { requireAuth, requireGuildAccess } = require('../utils/authMiddleware');
 const { setupHoneypotChannel } = require('../../bot/cogs/modules/honeypot');
 const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
+const EmbedTemplate = require('../../database/models/EmbedTemplate');
 
 const router = express.Router();
 
@@ -122,6 +123,130 @@ router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, async (r
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Embed Templates: save/load/delete named embed drafts per guild ---
+
+router.get('/guilds/:guildId/embed-templates', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const templates = await EmbedTemplate.find({ guildId: req.guild.id }).sort({ name: 1 });
+    res.json({ templates });
+  } catch (err) {
+    console.error('Failed to load embed templates:', err);
+    res.status(500).json({ error: 'Failed to load templates.' });
+  }
+});
+
+router.post('/guilds/:guildId/embed-templates', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { name, title, description, color, footer, imageUrl, thumbnailUrl, fields, content } = req.body;
+    const cleanName = String(name || '').trim().slice(0, 100);
+    if (!cleanName) {
+      return res.status(400).json({ ok: false, error: 'A template name is required.' });
+    }
+
+    const cleanFields = Array.isArray(fields)
+      ? fields
+          .filter((f) => f && f.name && f.value)
+          .slice(0, 25)
+          .map((f) => ({ name: String(f.name).slice(0, 256), value: String(f.value).slice(0, 1024), inline: !!f.inline }))
+      : [];
+
+    const data = {
+      guildId: req.guild.id,
+      name: cleanName,
+      createdBy: req.session.user.id,
+      title: title || '',
+      description: description || '',
+      content: content || '',
+      color: color || '#5865f2',
+      footer: footer || '',
+      imageUrl: imageUrl || '',
+      thumbnailUrl: thumbnailUrl || '',
+      fields: cleanFields
+    };
+
+    // Upsert: saving under an existing name in this guild overwrites it rather than erroring,
+    // so "Save" behaves the way people expect for an already-loaded template.
+    const template = await EmbedTemplate.findOneAndUpdate({ guildId: req.guild.id, name: cleanName }, data, {
+      upsert: true,
+      new: true,
+      setDefaultsOnInsert: true
+    });
+
+    res.json({ ok: true, template });
+  } catch (err) {
+    console.error('Failed to save embed template:', err);
+    res.status(500).json({ ok: false, error: 'Failed to save template.' });
+  }
+});
+
+router.delete('/guilds/:guildId/embed-templates/:name', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const result = await EmbedTemplate.deleteOne({ guildId: req.guild.id, name: req.params.name });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Template not found.' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to delete embed template:', err);
+    res.status(500).json({ ok: false, error: 'Failed to delete template.' });
+  }
+});
+
+// --- Auto-Role ---
+
+router.post('/guilds/:guildId/autorole', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const { roleId, enabled } = req.body;
+    const config = await getOrCreateConfig(req.guild.id);
+    if (roleId !== undefined) config.autoRoleId = roleId || null;
+    if (typeof enabled === 'boolean') config.autoRoleEnabled = enabled;
+    await config.save();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to save auto-role config:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/guilds/:guildId/autorole/sync', requireAuth, requireGuildAccess, async (req, res) => {
+  try {
+    const config = await getOrCreateConfig(req.guild.id);
+    if (!config.autoRoleId) {
+      return res.status(400).json({ ok: false, error: 'No auto-role is configured yet.' });
+    }
+    const role = req.guild.roles.cache.get(config.autoRoleId);
+    if (!role) {
+      return res.status(404).json({ ok: false, error: 'The configured role no longer exists.' });
+    }
+    const botMember = req.guild.members.me;
+    if (!botMember || botMember.roles.highest.position <= role.position) {
+      return res.status(400).json({
+        ok: false,
+        error: `LoofaryBot's role is below ${role.name} in the hierarchy — move it above before syncing.`
+      });
+    }
+
+    const members = await req.guild.members.fetch();
+    const needsRole = members.filter((m) => !m.user.bot && !m.roles.cache.has(role.id));
+
+    let granted = 0;
+    let failed = 0;
+    for (const member of needsRole.values()) {
+      try {
+        await member.roles.add(role, 'Auto-role sync (dashboard)');
+        granted++;
+      } catch {
+        failed++;
+      }
+    }
+
+    res.json({ ok: true, granted, failed });
+  } catch (err) {
+    console.error('Auto-role sync failed:', err);
+    res.status(500).json({ ok: false, error: 'Sync failed. Check the server logs.' });
   }
 });
 

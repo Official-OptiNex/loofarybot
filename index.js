@@ -6,6 +6,7 @@ const { startWebServer } = require('./src/web/server');
 const registerReadyEvent = require('./src/bot/events/ready');
 const registerInteractionCreateEvent = require('./src/bot/events/interactionCreate');
 const registerMessageCreateEvent = require('./src/bot/events/messageCreate');
+const registerGuildMemberAddEvent = require('./src/bot/events/guildMemberAdd');
 
 async function main() {
   await connectDB();
@@ -13,6 +14,7 @@ async function main() {
   registerReadyEvent(client);
   registerInteractionCreateEvent(client);
   registerMessageCreateEvent(client);
+  registerGuildMemberAddEvent(client);
 
   await client.login(BOT_TOKEN);
 
