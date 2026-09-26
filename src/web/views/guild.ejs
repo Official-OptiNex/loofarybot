@@ -29,6 +29,10 @@
     star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
     target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
     curve: '<path d="M3 3v18h18"/><path d="M6.5 15c3-7 5.5-7 8 0 1.5 4 3 3.5 5-2"/>',
+    gift: '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8.5h14V12M12 8v12.5"/><path d="M12 8C10.5 4.5 7 4 7 6.2 7 8 12 8 12 8zM12 8c1.5-3.5 5-4 5-1.8C17 8 12 8 12 8z"/>',
+    tag: '<path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.4 1.4 0 0 1 0 2l-6.7 6.7a1.4 1.4 0 0 1-2 0z"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/>',
+    chat: '<path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
   };
@@ -37,11 +41,15 @@
 
   const NAV = [
     ['overview', 'home', 'Overview'],
+    ['giveaways', 'gift', 'Giveaways'],
     ['welcome', 'welcome', 'Welcome'],
     ['honeypot', 'shield', 'Honeypot'],
     ['leveling', 'trending', 'Leveling'],
     ['autorole', 'userplus', 'Auto-Role'],
+    ['reactionroles', 'tag', 'Reaction Roles'],
     ['gambling', 'dice', 'Gambling'],
+    ['community', 'chat', 'Polls & Reminders'],
+    ['moderation', 'lock', 'Moderation'],
     ['logs', 'file', 'Logs'],
     ['alerts', 'radio', 'Alerts'],
     ['leaderboard', 'trophy', 'Leaderboard'],
@@ -949,6 +957,12 @@
       </div>
     </div>
 
+    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot }; %>
+    <% if (can('giveaways')) { %><%- include('partials/tab-giveaways', partialLocals) %><% } %>
+    <% if (can('reactionroles')) { %><%- include('partials/tab-reactionroles', partialLocals) %><% } %>
+    <% if (can('community')) { %><%- include('partials/tab-community', partialLocals) %><% } %>
+    <% if (can('moderation')) { %><%- include('partials/tab-moderation', partialLocals) %><% } %>
+
     <% if (isAdmin) { %>
     <!-- SETTINGS -->
     <% const dAccess = Object.assign({ modRoleIds: [], modPages: ['leaderboard', 'commands', 'logviewer'] }, (config.dashboardAccess && (config.dashboardAccess.toObject ? config.dashboardAccess.toObject() : config.dashboardAccess)) || {}); %>
@@ -1073,7 +1087,7 @@
             <div class="cmd-card-head">
               <div class="hero-icon"><%= g.icon %></div>
               <div><h3><%= g.group %></h3><p><%= g.blurb %></p></div>
-              <% if (g.tab) { %><a href="#<%= g.tab %>" data-tab="<%= g.tab %>">Settings →</a><% } %>
+              <% if (g.tab && can(g.tab)) { %><a href="#<%= g.tab %>" data-tab="<%= g.tab %>">Open page →</a><% } %>
             </div>
             <div class="cmd-list">
               <% g.commands.forEach(c => { %>
@@ -1106,6 +1120,23 @@
           <button class="btn secondary small" id="lbNext" onclick="changeLeaderboardPage(1)">Next →</button>
         </div>
       </div>
+      <% if (can('leveling')) { %>
+      <div class="card settings-card" id="memberXpCard">
+        <div class="setting-row">
+          <div><div class="setting-title">✏️ Adjust a member's XP</div><div class="setting-help">Same as <code>/levels givexp · takexp · resetxp</code>. Giving XP also hands out any role rewards they reach; resetting keeps roles they already earned.</div></div>
+          <div class="setting-control member-picker">
+            <input id="mxUser" placeholder="Member name" autocomplete="off" aria-label="Member">
+            <select id="mxAction" style="flex:0 0 120px; min-width:120px;" aria-label="Action">
+              <option value="give">Give XP</option>
+              <option value="take">Take XP</option>
+              <option value="reset">Reset to 0</option>
+            </select>
+            <input type="number" id="mxAmount" min="1" placeholder="Amount" style="flex:0 0 110px; min-width:110px;" aria-label="Amount">
+            <button class="btn" id="mxBtn" onclick="applyMemberXp()">Apply</button>
+          </div>
+        </div>
+      </div>
+      <% } %>
     </div>
     </main>
   </div>
@@ -1115,6 +1146,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
   <script src="/js/mentions.js"></script>
+  <script src="/js/dash-manage.js"></script>
   <script>
     const guildId = '<%= guild.id %>';
     const roles = <%- JSON.stringify(roles).replace(/</g, '\\u003c') %>;
@@ -1143,6 +1175,7 @@
       document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
       if (tab === 'leaderboard') loadLeaderboard();
       if (tab === 'alerts' && !alertState.loaded) loadAlerts();
+      if (typeof onManageTabShown === 'function') onManageTabShown(tab); // giveaways, role panels, polls, moderation
       if (tab === 'settings' && !auditState.loaded) { auditState.loaded = true; loadAudit(1); loadBackups(); }
       if (tab === 'logs' && !logState.loaded) {
         logState.loaded = true;

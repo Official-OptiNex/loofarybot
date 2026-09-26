@@ -66,7 +66,8 @@ function auditTrail(req, res, next) {
   if (req.method === 'GET') return next();
   res.on('finish', () => {
     if (res.statusCode >= 400 || !req.guild || !req.session?.user) return;
-    const entry = describe(req);
+    // Routes can describe themselves (res.locals.audit) when the URL alone isn't enough.
+    const entry = res.locals.audit || describe(req);
     if (!entry) return;
     const u = req.session.user;
     AuditEntry.create({

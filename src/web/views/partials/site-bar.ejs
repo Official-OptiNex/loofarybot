@@ -1,0 +1,38 @@
+  <header class="site-bar">
+    <a class="sidebar-brand site-brand" href="/"><span class="brand-mark">🎁</span><%= typeof botName !== 'undefined' ? botName : 'LoofaryBot' %></a>
+    <div class="site-links" role="navigation" aria-label="Site">
+      <a href="/#features">Features</a>
+      <a href="/#commands">Commands</a>
+      <% if (user) { %><a href="/dashboard">Servers</a><% } %>
+    </div>
+    <div class="site-actions">
+      <label class="switch sm theme-switch" title="Light / dark theme">
+        <input type="checkbox" id="themeToggle" aria-label="Dark theme">
+        <span class="track"></span>
+      </label>
+      <% if (user) { %>
+        <div class="appbar-user site-user">
+          <div class="avatar-wrap"><img src="<%= user.avatarUrl %>" alt=""><span class="online"></span></div>
+          <div class="user-meta">
+            <div><%= user.name %></div>
+            <a href="/auth/logout">Log out</a>
+          </div>
+        </div>
+      <% } else { %>
+        <a class="btn" href="/auth/discord">Log in with Discord</a>
+      <% } %>
+    </div>
+  </header>
+  <script>
+    // Sun / Moon switch shared by the public pages (the dashboard has its own in the sidebar).
+    (function () {
+      const t = document.getElementById('themeToggle');
+      t.checked = document.documentElement.getAttribute('data-theme') !== 'light';
+      t.addEventListener('change', () => {
+        const theme = t.checked ? 'dark' : 'light';
+        if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        else document.documentElement.removeAttribute('data-theme');
+        try { localStorage.setItem('loofary-theme', theme); } catch (e) { /* storage blocked */ }
+      });
+    })();
+  </script>

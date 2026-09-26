@@ -16,6 +16,10 @@ const MOD_PAGES = {
   gambling: 'Gambling',
   logs: 'Logs settings',
   alerts: 'Alerts',
+  giveaways: 'Giveaways',
+  reactionroles: 'Reaction Roles',
+  community: 'Polls & Reminders',
+  moderation: 'Moderation (lockdown, purge)',
   embed: 'Embed Builder'
 };
 const DEFAULT_MOD_PAGES = ['leaderboard', 'commands', 'logviewer'];

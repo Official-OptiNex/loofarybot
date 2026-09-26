@@ -3,55 +3,99 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Select a Server | LoofaryBot</title>
+  <title>Choose a server | <%= botName %></title>
   <link rel="stylesheet" href="/css/style.css">
   <script src="/js/theme.js"></script>
 </head>
-<body>
-  <nav>
-    <div class="brand">🎁 LoofaryBot</div>
-    <div class="nav-right">
-      <span class="muted">Logged in as <strong><%= user.username %></strong></span>
-      <a class="btn secondary" href="/auth/logout">Logout</a>
-    </div>
-  </nav>
-  <div class="container">
-    <div class="page-header">
-      <h1>Your Servers</h1>
-    </div>
-    <p class="muted">Servers where LoofaryBot is present and you have Manage Server permission — or a dashboard moderator role — are shown.</p>
+<body class="site">
+  <%- include('partials/site-bar') %>
 
-    <div class="stat-strip">
-      <div class="stat-pill"><span class="value"><%= guilds.length %></span><span class="label">Manageable servers</span></div>
-      <div class="stat-pill"><span class="value"><%= totalGuilds %></span><span class="label">Servers using LoofaryBot</span></div>
+  <main class="site-main">
+    <div class="page-heading picker-heading">
+      <div>
+        <h1>Choose a server</h1>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.88rem;">Servers where you have Manage Server — or a dashboard moderator role — and <%= botName %> is installed.</p>
+      </div>
+      <div class="picker-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input type="search" id="guildSearch" placeholder="Search servers…" autocomplete="off" aria-label="Search servers">
+      </div>
     </div>
+
+    <section class="stat-cards picker-stats">
+      <div class="stat-card tone-blue"><div class="stat-body"><div class="stat-label">You can manage</div><div class="stat-value"><%= guilds.length %></div></div><div class="stat-footer"><span>Server<%= guilds.length === 1 ? '' : 's' %> with <%= botName %></span><strong><%= guilds.filter(g => g.accessLevel === 'admin').length %> admin</strong></div></div>
+      <div class="stat-card tone-green"><div class="stat-body"><div class="stat-label">Members across them</div><div class="stat-value"><%= guilds.reduce((n, g) => n + g.memberCount, 0).toLocaleString() %></div></div><div class="stat-footer"><span>In your servers</span></div></div>
+      <div class="stat-card tone-yellow"><div class="stat-body"><div class="stat-label">Ready to add</div><div class="stat-value"><%= addable.length %></div></div><div class="stat-footer"><span>Your servers without the bot</span></div></div>
+      <div class="stat-card tone-red"><div class="stat-body"><div class="stat-label">Servers using <%= botName %></div><div class="stat-value"><%= totalGuilds.toLocaleString() %></div></div><div class="stat-footer"><span>Everywhere</span></div></div>
+    </section>
 
     <% if (guilds.length === 0) { %>
-      <div class="card">
-        <p>No manageable servers found. Make sure LoofaryBot has been invited to your server and that you have
-          Administrator or Manage Server permission there.</p>
+      <div class="card empty-state">
+        <div class="big">🧭</div>
+        <p style="margin:0 0 1rem;">No servers to manage yet. Add <%= botName %> to a server where you have <strong>Manage Server</strong>, or ask an admin to give your role dashboard access.</p>
+        <a class="btn" href="<%= inviteUrl %>" target="_blank" rel="noopener">➕ Add to a server</a>
       </div>
     <% } else { %>
-      <div class="grid">
+      <div class="guild-grid" id="guildGrid">
         <% guilds.forEach(g => { %>
-          <a class="guild-card" href="/dashboard/<%= g.id %>">
-            <div class="guild-card-top">
-              <% if (g.icon) { %>
-                <img src="https://cdn.discordapp.com/icons/<%= g.id %>/<%= g.icon %>.png">
+          <a class="guild-tile" href="/dashboard/<%= g.id %>" data-name="<%= g.name.toLowerCase() %>">
+            <div class="guild-tile-banner" style="<%= g.iconUrl ? `background-image:url('${g.iconUrl}')` : '' %>"></div>
+            <div class="guild-tile-body">
+              <% if (g.iconUrl) { %>
+                <img class="guild-tile-icon" src="<%= g.iconUrl %>" alt="">
               <% } else { %>
-                <div class="guild-icon-fallback"><%= g.name.charAt(0).toUpperCase() %></div>
+                <div class="guild-tile-icon guild-icon-fallback"><%= g.name.charAt(0).toUpperCase() %></div>
               <% } %>
-              <div class="guild-card-name"><%= g.name %></div>
+              <div class="guild-tile-name"><%= g.name %></div>
+              <div class="guild-tile-stats">
+                <span>👥 <%= g.memberCount.toLocaleString() %></span>
+                <span>💬 <%= g.channelCount %></span>
+                <span class="status-chip <%= g.accessLevel === 'admin' ? 'good' : 'warn' %>"><span class="dot"></span><%= g.accessLevel === 'admin' ? 'Admin' : 'Moderator' %></span>
+              </div>
+              <span class="guild-tile-cta">Open dashboard →</span>
             </div>
-            <div class="guild-card-stats">
-              <span>👥 <%= g.memberCount %></span>
-              <span>💬 <%= g.channelCount %></span>
-              <% if (g.accessLevel === 'mod') { %><span class="badge boost">Moderator</span><% } %>
+          </a>
+        <% }) %>
+      </div>
+      <p class="muted" id="guildEmpty" style="display:none;">No servers match that search.</p>
+    <% } %>
+
+    <% if (addable.length) { %>
+      <div class="section-head" style="margin-top:2.5rem;">
+        <h2>Add <%= botName %> to another server</h2>
+        <p class="muted">You manage these, but the bot isn't in them yet.</p>
+      </div>
+      <div class="guild-grid compact" id="addGrid">
+        <% addable.forEach(g => { %>
+          <a class="guild-tile add" href="<%= g.inviteUrl %>" target="_blank" rel="noopener" data-name="<%= g.name.toLowerCase() %>">
+            <div class="guild-tile-body">
+              <% if (g.iconUrl) { %>
+                <img class="guild-tile-icon" src="<%= g.iconUrl %>" alt="">
+              <% } else { %>
+                <div class="guild-tile-icon guild-icon-fallback"><%= g.name.charAt(0).toUpperCase() %></div>
+              <% } %>
+              <div class="guild-tile-name"><%= g.name %></div>
+              <span class="guild-tile-cta">➕ Add bot</span>
             </div>
           </a>
         <% }) %>
       </div>
     <% } %>
-  </div>
+  </main>
+
+  <script>
+    const guildSearch = document.getElementById('guildSearch');
+    guildSearch.addEventListener('input', () => {
+      const q = guildSearch.value.trim().toLowerCase();
+      let shown = 0;
+      document.querySelectorAll('.guild-tile').forEach((tile) => {
+        const hit = !q || tile.dataset.name.includes(q);
+        tile.style.display = hit ? '' : 'none';
+        if (hit && !tile.classList.contains('add')) shown++;
+      });
+      const empty = document.getElementById('guildEmpty');
+      if (empty) empty.style.display = shown ? 'none' : '';
+    });
+  </script>
 </body>
 </html>

@@ -8,7 +8,9 @@ const { SESSION_SECRET, PORT } = require('../config');
 const authRoutes = require('./routes/auth');
 const dashboardRoutes = require('./routes/dashboard');
 const apiRoutes = require('./routes/api');
+const manageRoutes = require('./routes/manage');
 const embedBuilderRoutes = require('./routes/embedBuilder');
+const { siteLocals, botStats, publicCommands } = require('./utils/site');
 
 function startWebServer(client) {
   const app = express();
@@ -39,21 +41,24 @@ function startWebServer(client) {
     })
   );
 
+  // Public pages (and the error page) share the site header, so every view gets its data.
+  app.use((req, res, next) => {
+    Object.assign(res.locals, siteLocals(req));
+    next();
+  });
+
   // UptimeRobot pings this to keep the free Render instance awake 24/7.
   app.get('/health', (req, res) => res.status(200).send('OK'));
 
   app.get('/', (req, res) => {
-    res.render('home', {
-      user: req.session?.user || null,
-      botTag: client.user?.tag || 'LoofaryBot',
-      guildCount: client.guilds.cache.size
-    });
+    res.render('home', { stats: botStats(client), publicCommands: publicCommands() });
   });
 
   app.use('/auth', authRoutes);
   app.use('/dashboard', dashboardRoutes);
   app.use('/dashboard', embedBuilderRoutes);
   app.use('/api', apiRoutes);
+  app.use('/api', manageRoutes);
 
   app.use((req, res) => res.status(404).render('error', { message: 'Page not found.' }));
 

@@ -1,0 +1,115 @@
+    <!-- GIVEAWAYS (same options as /loof start · drop · edit · requirements · end · reroll · delete) -->
+    <div class="tab-panel hidden" id="tab-giveaways">
+      <div class="module-hero">
+        <div class="hero-icon">🎁</div>
+        <div>
+          <h1>Giveaways</h1>
+          <p>Start timed giveaways or first-to-click drops, then edit, end, reroll or delete them — the same as <code>/loof</code>.</p>
+          <div class="hero-status" id="gwStatus"></div>
+        </div>
+        <div class="hero-toggle"><button class="btn" id="gwNewBtn" onclick="openGiveawayEditor()">+ New giveaway</button></div>
+      </div>
+
+      <div class="split">
+        <div>
+          <div class="list-toolbar">
+            <div class="segmented" id="gwFilter" role="group" aria-label="Show">
+              <button data-filter="running" class="active">Running</button>
+              <button data-filter="ended">Ended</button>
+            </div>
+            <button class="btn secondary small" onclick="loadGiveaways()">↻ Refresh</button>
+          </div>
+          <div id="gwList"><div class="card empty-state">Loading…</div></div>
+
+          <div class="card" id="gwEditor" style="display:none; margin-top:1.25rem;">
+            <h3 style="margin-top:0;" id="gwEditorTitle">New giveaway</h3>
+            <input type="hidden" id="gwId">
+            <div class="radio-cards" id="gwTypeCards" style="margin-bottom:0.5rem;">
+              <label class="radio-card"><input type="radio" name="gwType" value="timed" checked><span class="rc-body"><span class="rc-title">🎁 Timed giveaway</span><span class="rc-desc" style="display:block;">Members enter, winners are drawn at the end</span></span></label>
+              <label class="radio-card"><input type="radio" name="gwType" value="drop"><span class="rc-body"><span class="rc-title">⚡ Drop</span><span class="rc-desc" style="display:block;">The first people to click win instantly</span></span></label>
+            </div>
+            <div class="setting-row" id="gwChannelRow">
+              <div class="setting-title">Post in</div>
+              <div class="setting-control"><select id="gwChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Prize</div>
+              <div class="setting-control"><input id="gwPrize" maxlength="256" placeholder="e.g. Discord Nitro (1 month)"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title" id="gwDurationTitle">Duration</div><div class="setting-help" id="gwDurationHelp">e.g. 30m, 2h, 1d12h</div></div>
+              <div class="setting-control">
+                <input id="gwDuration" placeholder="1d" autocomplete="off">
+                <div class="chip-row" style="margin:0; flex-basis:100%; justify-content:flex-end;">
+                  <% ['10m', '1h', '12h', '1d', '3d', '7d'].forEach(d => { %><button type="button" class="chip" data-duration="<%= d %>"><%= d %></button><% }) %>
+                </div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title" id="gwWinnersTitle">Winners</div><div class="setting-help" id="gwWinnersHelp">How many people win.</div></div>
+              <div class="setting-control"><input type="number" id="gwWinners" min="1" max="100" value="1"></div>
+            </div>
+            <div class="setting-row" id="gwPingRow">
+              <div><div class="setting-title">Ping</div><div class="setting-help">Sent above the giveaway when it's posted.</div></div>
+              <div class="setting-control">
+                <select id="gwPing">
+                  <option value="">No ping</option>
+                  <option value="everyone">@everyone</option>
+                  <option value="here">@here</option>
+                  <% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Look</div><div class="setting-help" id="gwLookHelp">Embed color and the entry button's emoji.</div></div>
+              <div class="setting-control">
+                <input type="color" id="gwColor" value="#5865F2" style="flex:0 0 64px; min-width:64px;" aria-label="Embed color">
+                <input id="gwEmoji" maxlength="64" placeholder="🎉" style="flex:0 0 110px; min-width:110px;" aria-label="Button emoji">
+              </div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Description</div><div class="setting-help">Shown at the top of the giveaway embed.</div></div>
+              <textarea id="gwDesc" rows="2" maxlength="1000" placeholder="Click the button below to enter!"></textarea>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Entry requirements</div><div class="setting-help">Optional. Entrants who stop qualifying are skipped at the draw.</div></div>
+              <div class="setting-control">
+                <select id="gwReqRole" aria-label="Required role">
+                  <option value="">Any role</option>
+                  <% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %>
+                </select>
+                <input type="number" id="gwReqDays" min="0" placeholder="Min days" style="flex:0 0 100px; min-width:100px;" aria-label="Minimum days in server">
+                <input type="number" id="gwReqLevel" min="0" placeholder="Min level" style="flex:0 0 100px; min-width:100px;" aria-label="Minimum level">
+              </div>
+            </div>
+            <div style="display:flex; gap:0.6rem; justify-content:flex-end; flex-wrap:wrap; margin-top:0.9rem;">
+              <button class="btn secondary" onclick="closeGiveawayEditor()">Cancel</button>
+              <button class="btn" id="gwSaveBtn" onclick="saveGiveaway()">Start giveaway</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sticky-preview">
+          <div class="card" style="margin-bottom:0;">
+            <h3 style="margin-top:0;">Preview</h3>
+            <div class="discord-chat">
+              <div class="channel-name" id="gwpChannel"># giveaways</div>
+              <div class="discord-message-preview">
+                <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                <div class="discord-message-body">
+                  <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
+                  <div class="desc" id="gwpPing"></div>
+                  <div class="discord-embed-preview" id="gwpEmbed" style="margin-top:0.4rem;">
+                    <div class="title" id="gwpTitle"></div>
+                    <div class="desc" id="gwpDesc"></div>
+                    <div class="embed-footer" id="gwpFooter"></div>
+                  </div>
+                  <div class="mock-buttons"><span class="mock-button" id="gwpButton"></span></div>
+                </div>
+              </div>
+            </div>
+            <p class="muted" style="font-size:0.78rem; margin:0.75rem 0 0;">When it ends, the embed switches to the winners and the bot congratulates them in the channel.</p>
+          </div>
+        </div>
+      </div>
+    </div>

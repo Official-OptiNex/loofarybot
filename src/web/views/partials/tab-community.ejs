@@ -1,0 +1,102 @@
+    <!-- POLLS & REMINDERS (same as /poll create · end and /remind channel · list · cancel) -->
+    <div class="tab-panel hidden" id="tab-community">
+      <div class="module-hero">
+        <div class="hero-icon yellow">💬</div>
+        <div>
+          <h1>Polls & Reminders</h1>
+          <p>Post button polls and schedule channel reminders — the same as <code>/poll</code> and <code>/remind channel</code>.</p>
+          <div class="hero-status" id="cmStatus"></div>
+        </div>
+      </div>
+
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="cm-polls">📊 Polls</button>
+        <button data-sub="cm-reminders">⏰ Channel reminders</button>
+      </div>
+
+      <div class="subpage" data-page="cm-polls">
+        <div class="split">
+          <div>
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div class="setting-title">Post in</div>
+                <div class="setting-control"><select id="plChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row stack">
+                <div class="setting-title">Question</div>
+                <input id="plQuestion" maxlength="250" placeholder="What should we play this weekend?">
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Options</div><div class="setting-help">2 to 10 different choices.</div></div>
+                <div id="plOptionRows"></div>
+                <div><button class="btn secondary small" type="button" id="plAddOption" onclick="addPollOption()">+ Add option</button></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Auto-close after</div><div class="setting-help">e.g. 1h, 2d (max 30 days). Blank = stays open until you close it.</div></div>
+                <div class="setting-control"><input id="plDuration" placeholder="Never" autocomplete="off"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Anonymous</div><div class="setting-help">Hide who voted for what.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="plAnon"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Multiple choice</div><div class="setting-help">Let members vote for more than one option.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="plMulti"><span class="track"></span></label></div>
+              </div>
+            </div>
+            <div class="savebar"><button class="btn" id="plPostBtn" onclick="postPoll()">Post poll</button></div>
+
+            <h3 class="section-label">Open polls</h3>
+            <div id="plOpenList"><div class="card empty-state">Loading…</div></div>
+            <h3 class="section-label">Recently closed</h3>
+            <div id="plClosedList"></div>
+          </div>
+          <div class="sticky-preview">
+            <div class="card" style="margin-bottom:0;">
+              <h3 style="margin-top:0;">Preview</h3>
+              <div class="discord-chat">
+                <div class="channel-name" id="plpChannel"># general</div>
+                <div class="discord-message-preview">
+                  <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                  <div class="discord-message-body">
+                    <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
+                    <div class="discord-embed-preview" style="border-left-color:#5865F2;">
+                      <div class="title" id="plpTitle"></div>
+                      <div class="desc" id="plpDesc"></div>
+                      <div class="embed-footer" id="plpFooter"></div>
+                    </div>
+                    <div class="mock-buttons" id="plpButtons"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="cm-reminders">
+        <div class="two-col">
+          <div>
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div class="setting-title">Post in</div>
+                <div class="setting-control"><select id="rmChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">When</div><div class="setting-help">From now — e.g. 30m, 2h, 1d12h.</div></div>
+                <div class="setting-control"><input id="rmIn" placeholder="1h" autocomplete="off"></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Reminder</div><div class="setting-help">Posted as an embed and pings you (the person who scheduled it) — nobody else.</div></div>
+                <textarea id="rmMessage" rows="3" maxlength="1000" placeholder="Event starts in 15 minutes — join the stage!"></textarea>
+              </div>
+            </div>
+            <div class="savebar"><button class="btn" id="rmSaveBtn" onclick="scheduleReminder()">Schedule reminder</button></div>
+          </div>
+          <div>
+            <h3 class="section-label" style="margin-top:0;">Scheduled in this server</h3>
+            <div id="rmList"><div class="card empty-state">Loading…</div></div>
+          </div>
+        </div>
+      </div>
+    </div>

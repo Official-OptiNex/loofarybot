@@ -1,5 +1,6 @@
 const express = require('express');
-const { requireAuth, requireGuildAccess, resolveAccess, canUse, MOD_PAGES } = require('../utils/authMiddleware');
+const { requireAuth, requireGuildAccess, resolveAccess, canUse, sessionHasManage, MOD_PAGES } = require('../utils/authMiddleware');
+const { inviteUrl } = require('../utils/site');
 const GuildConfig = require('../../database/models/GuildConfig');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const UserLevel = require('../../database/models/UserLevel');
@@ -23,15 +24,33 @@ router.get('/', requireAuth, async (req, res) => {
       const liveGuild = client.guilds.cache.get(g.id);
       const access = await resolveAccess(liveGuild, req.session.user.id, g).catch(() => null);
       return access
-        ? { ...g, memberCount: liveGuild.memberCount, channelCount: liveGuild.channels.cache.size, accessLevel: access.level }
+        ? {
+            id: g.id,
+            name: liveGuild.name,
+            iconUrl: liveGuild.iconURL({ size: 128 }),
+            memberCount: liveGuild.memberCount,
+            channelCount: liveGuild.channels.cache.size,
+            accessLevel: access.level
+          }
         : null;
     })
   );
+  const guilds = withAccess.filter(Boolean).sort((a, b) => (a.accessLevel === b.accessLevel ? a.name.localeCompare(b.name) : a.accessLevel === 'admin' ? -1 : 1));
+
+  // Servers the user manages that don't have the bot yet — offered as one-click invites.
+  const addable = (req.session.guilds || [])
+    .filter((g) => !client.guilds.cache.has(g.id) && (g.owner || sessionHasManage(g)))
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      iconUrl: g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=128` : null,
+      inviteUrl: inviteUrl(g.id)
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   res.render('dashboard', {
-    user: req.session.user,
-    guilds: withAccess.filter(Boolean),
-    botTag: client.user?.tag || 'LoofaryBot',
+    guilds,
+    addable,
     totalGuilds: client.guilds.cache.size
   });
 });

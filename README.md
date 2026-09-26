@@ -27,7 +27,7 @@ LoofaryBot/
 │   │                              #   MemberJoin, WelcomeConfig
 │   └── web/
 │       ├── server.js               # Express app, sessions, route mounting, /health
-│       ├── routes/                 # auth.js (OAuth2), dashboard.js, api.js, embedBuilder.js
+│       ├── routes/                 # auth.js (OAuth2), dashboard.js, api.js, manage.js, embedBuilder.js
 │       ├── views/                  # EJS templates
 │       └── static/                 # CSS
 ```
@@ -236,6 +236,24 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   offline is cleaned up on the next startup. Anonymous join/leave counts are kept for the charts.
 
 ### Web Dashboard
+- **Everything works from both places.** Anything a slash command manages can also be done on the
+  dashboard, using the same code:
+  - **Giveaways:** start timed giveaways or first-to-click drops with every `/loof` option (channel,
+    duration, winners, ping, color, button emoji, description, role/days/level requirements) and a
+    live preview. Running ones can be edited (including a new end time), ended early, rerolled or deleted.
+  - **Reaction Roles:** build role panels (buttons, multi-pick or single-pick dropdown) with a live
+    preview, then edit or delete them.
+  - **Polls & Reminders:** post polls (anonymous, multiple choice, auto-close) and see live results,
+    then close them. Schedule or cancel channel reminders.
+  - **Moderation:** lock or unlock a channel or the whole server, and purge messages (optionally from
+    one member).
+  - **Leaderboard → Adjust a member's XP:** give, take or reset XP (`/levels givexp · takexp · resetxp`).
+  - Each of these can be given to dashboard moderators under Server Settings, and every action is
+    recorded in the change history.
+- **Home page:** open to everyone without logging in. It lists the features, live bot stats, an
+  **Add to Discord** button and every command members can use (searchable, click to copy).
+- **Server picker:** a searchable card grid of your servers with admin/moderator badges. It also
+  lists servers you manage that don't have the bot yet, each with a one-click invite.
 - Every module has an on/off switch — in the sidebar, on its Overview card and in its page header.
 - Module pages are split into sub-tabs (e.g. Leveling: XP & speed · Role rewards · Multipliers ·
   Level-up messages · Rank cards) with a sticky **Save changes** bar.
