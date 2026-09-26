@@ -1,5 +1,6 @@
 const { handleMessageXp } = require('../cogs/modules/leveling');
 const { handleHoneypotMessage } = require('../cogs/modules/honeypot');
+const { handleMediaOnly } = require('../cogs/modules/mediaOnly');
 const GuildConfig = require('../../database/models/GuildConfig');
 const { reportError } = require('../utils/errorReporter');
 
@@ -13,6 +14,8 @@ module.exports = function registerMessageCreateEvent(client) {
         if (guildConfig && guildConfig.honeypotEnabled !== false && guildConfig.honeypotChannelId === message.channel.id) {
           return handleHoneypotMessage(message);
         }
+        // Text-only posts in a media-only channel are removed and don't earn XP.
+        if (await handleMediaOnly(message, guildConfig)) return;
       }
       await handleMessageXp(message);
     } catch (err) {

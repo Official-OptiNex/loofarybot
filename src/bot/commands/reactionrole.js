@@ -3,7 +3,7 @@ const ReactionRolePanel = require('../../database/models/ReactionRolePanel');
 const { MAX_ROLES, buildPanelMessage, withRoleNames, refreshPanel, canManageRole } = require('../cogs/modules/reactionRoles');
 const { resolveColor } = require('../cogs/modules/giveaways');
 
-const messageIdOption = (opt) => opt.setName('message_id').setDescription('Message ID of the role panel').setRequired(true);
+const messageIdOption = (opt) => opt.setName('message_id').setDescription('Role panel — start typing its title').setRequired(true).setAutocomplete(true);
 
 const data = new SlashCommandBuilder()
   .setName('reactionrole')
@@ -149,4 +149,18 @@ async function execute(interaction) {
   }
 }
 
-module.exports = { data, execute };
+async function autocomplete(interaction) {
+  const query = String(interaction.options.getFocused() || '').toLowerCase();
+  const panels = await ReactionRolePanel.find({ guildId: interaction.guildId }).sort({ createdAt: -1 }).limit(100).lean();
+  return interaction.respond(
+    panels
+      .filter((p) => !query || p.title.toLowerCase().includes(query) || p.messageId.includes(query))
+      .slice(0, 25)
+      .map((p) => ({
+        name: `🎭 ${p.title.slice(0, 60)} — #${interaction.guild.channels.cache.get(p.channelId)?.name || 'deleted-channel'} · ${p.roles.length} role(s)`.slice(0, 100),
+        value: p.messageId
+      }))
+  );
+}
+
+module.exports = { data, execute, autocomplete };

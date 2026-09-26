@@ -12,15 +12,15 @@ module.exports = [
     blurb: 'Timed giveaways and first-to-click drops, with optional entry requirements.',
     tab: 'giveaways',
     commands: [
-      { usage: '/loof start', perm: 'Admin', description: 'Start a giveaway right away with inline options (requirements included).' },
-      { usage: '/loof create', perm: 'Admin', description: 'Set up a giveaway step by step in a popup form.' },
+      { usage: '/loof create', perm: 'Admin', description: 'Set up a giveaway or drop in a form — type, channel, look, requirements, ping — with a live preview.' },
+      { usage: '/loof start', perm: 'Admin', description: 'Start a timed giveaway or a drop right away with inline options.' },
       { usage: '/loof drop', perm: 'Admin', description: 'First-to-click drop — the first N people to press Claim win instantly.' },
+      { usage: '/loof edit', perm: 'Admin', description: 'Change the prize, winners, end time, description, color or emoji of a running giveaway.' },
       { usage: '/loof requirements', perm: 'Admin', description: 'Require a role, days in the server, or an XP level to enter.' },
-      { usage: '/loof edit', perm: 'Admin', description: 'Change the prize or winner count of a running giveaway.' },
       { usage: '/loof end', perm: 'Admin', description: 'End a giveaway early and draw winners now.' },
       { usage: '/loof reroll', perm: 'Admin', description: 'Draw a new winner for an ended giveaway.' },
       { usage: '/loof delete', perm: 'Admin', description: 'Delete a giveaway and its message.' },
-      { usage: '/loof list', perm: 'Admin', description: 'List every giveaway running in this server.' }
+      { usage: '/loof list', perm: 'Admin', description: 'Running giveaways (with entries and jump links) and recently ended ones.' }
     ]
   },
   {
@@ -105,7 +105,8 @@ module.exports = [
       { usage: '/logs status', perm: 'Manage Server', description: 'Show the logging setup.' },
       { usage: '/lockdown', perm: 'Manage Channels', description: 'Stop non-staff from talking in a channel or the whole server.' },
       { usage: '/unlockdown', perm: 'Manage Channels', description: 'Lift a lockdown and restore the original permissions.' },
-      { usage: '/purge', perm: 'Manage Messages', description: 'Bulk-delete recent messages, optionally from one user.' }
+      { usage: '/purge', perm: 'Manage Messages', description: 'Bulk-delete recent messages, optionally from one user.' },
+      { usage: '/mediaonly add · remove · list', perm: 'Manage Channels', description: 'Make channels media-only — text-only posts are removed; optional comment threads.' }
     ]
   },
   {

@@ -160,8 +160,19 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   if nothing was revealed yet). A bot restart mid-game loses that game's bet.
 
 ### Giveaways: requirements & drops
-- `/loof start` accepts `required_role`, `min_days` and `min_level`; `/loof requirements` adds,
-  changes or clears them on a running giveaway. Entrants who no longer qualify are skipped at the draw.
+- Every way of starting one offers the same options: **type** (timed giveaway or first-to-click
+  drop), channel, duration, winners, ping (@everyone, @here and/or a role), color, button emoji,
+  description, and entry requirements (role, days in the server, XP level).
+  - `/loof start` takes them all inline (`type:` picks timed or drop).
+  - `/loof create` opens a form (type, channel, prize, duration, winners), then a private setup
+    panel with a live preview and buttons for **Description & look**, **Requirements** and **Ping**.
+    **Start** stays disabled until everything is valid.
+  - The dashboard's **Giveaways** page has the same form, plus **Duplicate** to reuse a past one.
+- `/loof edit` changes the prize, winners, end time (`ends_in`), description, color or emoji.
+  `/loof requirements` adds, changes or clears requirements. Entrants who no longer qualify are
+  skipped at the draw.
+- Every `message_id` option autocompletes — start typing the prize. Duration options suggest
+  common values and show what you typed (e.g. `90m (1h 30m)`).
 - `/loof drop` posts a **Claim!** button; the first N members to click win instantly.
 
 ### Moderation & Security
@@ -175,6 +186,11 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   @everyone and any non-staff role that explicitly allowed it. Roles with Administrator or
   Manage Messages keep talking. `/unlockdown` restores every permission exactly as it was.
   The honeypot channel is left alone.
+- `/mediaonly add #channel` (or dashboard → Moderation → Media-only channels) — posts without an
+  attachment are removed with a short notice that deletes itself (one per member every 20
+  seconds). Options: links count as media (default on), a comment thread on every post, and
+  whether staff (Manage Messages) can post anything. Chat inside threads is always allowed.
+  `/mediaonly remove` and `/mediaonly list` manage them. Removed posts don't earn XP.
 
 ### Community Tools
 - `/reactionrole create` posts a role panel (buttons, multi-pick dropdown, or pick-one dropdown);
@@ -265,9 +281,22 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   Manage Server/Administrator permission and the bot is present.
 - Configure the honeypot (including its disguise), leveling (role rewards, multipliers, level-up
   channel, rank card access), XP gambling and server logs without slash commands.
-- **Embed Builder**: a Discohook-style visual editor (title, description, color, fields,
-  footer, image/thumbnail) with a live preview and a channel dropdown limited to channels
-  the bot can actually post in — click **Send Embed** to publish it live via the bot.
+- **Embed Builder**: a Discohook-style editor for messages with up to 10 embeds, each with
+  author, title and link, description, color, up to 25 fields, image, thumbnail, footer and
+  timestamp. The live preview matches Discord's layout, including inline fields (3 per row, or
+  2 next to a thumbnail) and headings, quotes, lists, spoilers and links. Fields and embeds can
+  be reordered and duplicated; each embed shows a live 6,000-character counter.
+  - **Templates are saved in Discord's own JSON format** (`{ content, embeds }`), so they move
+    freely between LoofaryBot, Discohook and webhooks. Older templates are converted when loaded.
+  - **Import:** paste JSON or pick a file. Accepted: Discohook's JSON editor, a Discohook backup
+    file (every message becomes a template), a webhook payload, a single embed, an old Discohook
+    `?data=` share link, or a LoofaryBot export. Imported messages can be opened in the editor or
+    saved as templates. Name clashes are renamed unless **Overwrite** is on.
+  - **Export:** download or copy the current message's JSON, or download every template at once.
+  - **Clear all** starts a new message from scratch. Drafts autosave in your browser and come
+    back after a refresh. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.
+  - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,
+    or copy any message in the server into the editor.
 
 ## 7. Notes & Limitations
 
