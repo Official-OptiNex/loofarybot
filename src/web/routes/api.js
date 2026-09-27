@@ -443,6 +443,50 @@ router.post('/guilds/:guildId/alerts/:id/test', requireAuth, requireGuildAccess,
 
 // --- XP Gambling ---
 
+// Chat drops (Leveling → Chat drops). Same settings as /xpdrop.
+router.get('/guilds/:guildId/levels/chatdrops', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const chatDrops = require('../../bot/cogs/modules/chatDrops');
+  const config = await getOrCreateConfig(req.guild.id);
+  const recent = await chatDrops.recentDrops(req.guild.id, 10);
+  const name = (id) => req.guild.members.cache.get(id)?.displayName || null;
+  res.json({
+    settings: chatDrops.dropSettings(config),
+    levelingEnabled: config.levelingEnabled !== false,
+    activity: Object.fromEntries((config.chatDrops?.channelIds || []).map((id) => [id, chatDrops.recentMessages(id)])),
+    recent: recent.map((d) => ({
+      id: String(d._id),
+      channelId: d.channelId,
+      amount: d.amount,
+      winners: d.winners,
+      claimedBy: d.claimedBy.map((id) => ({ id, name: name(id) })),
+      status: d.status,
+      manual: !!d.manual,
+      createdAt: d.createdAt
+    }))
+  });
+});
+
+router.post('/guilds/:guildId/levels/chatdrops', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const chatDrops = require('../../bot/cogs/modules/chatDrops');
+  const b = req.body || {};
+  const input = {};
+  for (const k of ['enabled', 'channelIds', 'minXp', 'maxXp', 'minMinutes', 'maxMinutes', 'minActivity', 'claimSeconds']) if (b[k] !== undefined) input[k] = b[k];
+  if (input.enabled && !(input.channelIds || []).length) return res.status(400).json({ ok: false, error: 'Pick at least one channel for drops.' });
+  const saved = await chatDrops.saveSettings(req.guild, input);
+  if (saved.error) return res.status(400).json({ ok: false, error: saved.error });
+  res.json({ ok: true, settings: saved.settings });
+});
+
+router.post('/guilds/:guildId/levels/chatdrops/now', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const chatDrops = require('../../bot/cogs/modules/chatDrops');
+  const channel = req.guild.channels.cache.get(String(req.body?.channelId || ''));
+  if (!channel || !channel.isTextBased() || channel.isThread()) return res.status(400).json({ ok: false, error: 'Pick a text channel.' });
+  const config = await getOrCreateConfig(req.guild.id);
+  const posted = await chatDrops.postDrop(channel, chatDrops.dropSettings(config), { manual: true });
+  if (posted.error) return res.status(400).json({ ok: false, error: posted.error });
+  res.json({ ok: true, amount: posted.amount, winners: posted.winners });
+});
+
 // POST booster perks (Leveling → Booster perks). Same settings as /perks config.
 router.post('/guilds/:guildId/levels/boosterperks', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
@@ -472,6 +516,30 @@ router.post('/guilds/:guildId/levels/boosterperks', requireAuth, requireGuildAcc
     console.error('Failed to save booster perks:', err);
     res.status(500).json({ ok: false, error: 'Failed to save booster perks.' });
   }
+});
+
+// GET gambling stats for the Gambling page: server totals and top players (same data as /gamble stats).
+router.get('/guilds/:guildId/gambling/stats', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const GambleStats = require('../../database/models/GambleStats');
+  const guildId = req.guild.id;
+  const [totals] = await GambleStats.aggregate([
+    { $match: { guildId } },
+    { $group: { _id: null, players: { $sum: 1 }, games: { $sum: '$games' }, wagered: { $sum: '$wagered' }, net: { $sum: '$net' } } }
+  ]);
+  const top = await GambleStats.find({ guildId, games: { $gt: 0 } }).sort({ net: -1 }).limit(10).lean();
+  const name = (id) => req.guild.members.cache.get(id)?.displayName || `User ${id.slice(-4)}`;
+  res.json({
+    totals: totals || { players: 0, games: 0, wagered: 0, net: 0 },
+    top: top.map((t) => ({
+      userId: t.userId,
+      name: name(t.userId),
+      games: t.games,
+      wins: t.wins,
+      net: t.net,
+      biggestWin: t.biggestWin,
+      biggestWinGame: t.biggestWinGame
+    }))
+  });
 });
 
 router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {

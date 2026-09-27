@@ -34,6 +34,8 @@ function describe(req) {
     levelcolors: ['Leveling', 'Updated level colors', `Every ${b.interval} levels up to ${b.maxLevel} · ${b.enabled ? 'on' : 'off'}`],
     'levelcolors/sync': ['Leveling', 'Synced level colors to all members', ''],
     'levelcolors/remove-auto': ['Leveling', 'Deleted auto level color roles', ''],
+    'levels/chatdrops': ['Leveling', 'Updated chat drops', `${b.enabled ? 'On' : 'Off'} · ${b.minXp}–${b.maxXp} XP every ${b.minMinutes}–${b.maxMinutes} min`],
+    'levels/chatdrops/now': ['Leveling', 'Dropped XP in chat now', b.channelId ? `Channel: <#${b.channelId}>` : ''],
     'levels/boosterperks': ['Leveling', 'Updated booster perks', `${b.enabled ? 'On' : 'Off'} · +${b.extraGambles} gambles · +${b.giveawayEntries} entries · ${b.dailyXp} XP/day · ${b.boostXp} XP on boost`],
     gambling: ['Gambling', 'Updated gambling settings', `Edge ${b.houseEdge}% · bets ${b.minBet}–${b.maxBet || '∞'} · win cap ${b.dailyWinCap || 'none'}`],
     logs: ['Logs', 'Updated log settings', fieldSummary(b)],

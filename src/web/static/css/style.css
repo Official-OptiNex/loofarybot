@@ -115,7 +115,9 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.88em
 .discord-embed-preview .desc { white-space: pre-wrap; color: #DCDDDE; }
 .discord-embed-preview img { max-width: 100%; border-radius: 4px; margin-top: 0.5rem; }
 .toast {
-  position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--bg-elevated); border: 1px solid var(--border-color);
+  /* Sits above the sticky Save bar so it never covers the button you just pressed. */
+  position: fixed; bottom: 5.5rem; right: 1.5rem; z-index: 60; max-width: min(440px, calc(100vw - 2rem));
+  background: var(--bg-elevated); border: 1px solid var(--border-color);
   padding: 0.8rem 1.2rem; border-radius: 10px; display: none; box-shadow: var(--shadow-lift); font-size: 0.9rem;
 }
 

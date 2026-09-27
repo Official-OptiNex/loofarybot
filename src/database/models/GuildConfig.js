@@ -119,6 +119,19 @@ const GuildConfigSchema = new mongoose.Schema(
       channelId: { type: String, default: null } // where drops and thank-yous are announced (optional)
     },
     boosterDropDay: { type: String, default: null }, // UTC day the last daily booster drop went out
+    // Random XP drops in chat (/xpdrop or dashboard Leveling → Chat drops).
+    chatDrops: {
+      enabled: { type: Boolean, default: false },
+      channelIds: { type: [String], default: [] },
+      minXp: { type: Number, default: 50 },
+      maxXp: { type: Number, default: 250 },
+      minMinutes: { type: Number, default: 30 }, // time between drops is random in this range
+      maxMinutes: { type: Number, default: 90 },
+      minActivity: { type: Number, default: 3 }, // messages in the last 10 minutes before a channel gets a drop
+      claimSeconds: { type: Number, default: 120 }, // how long a drop stays claimable
+      nextDropAt: { type: Date, default: null },
+      lastDropAt: { type: Date, default: null }
+    },
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
     gamblingFreePlayEnabled: { type: Boolean, default: true },

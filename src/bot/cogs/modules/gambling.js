@@ -11,6 +11,7 @@ const {
 const { getOrCreateConfig, getEffectiveXpSettings, adjustXp, debitXp } = require('./leveling');
 const UserLevel = require('../../../database/models/UserLevel');
 const ActiveBet = require('../../../database/models/ActiveBet');
+const GambleStats = require('../../../database/models/GambleStats');
 const { boosterSettings } = require('./boosterPerks');
 
 const GRID_SIZE = 25; // 5x5 mines board
@@ -129,6 +130,58 @@ async function recordNet(guildId, userId, net) {
   ]).catch((err) => console.error('Failed to record gambling result:', err.message));
 }
 
+// ---------------------------------------------------------------- Lifetime stats (/gamble stats)
+
+/**
+ * Adds one finished game to the player's stats in a single atomic update. `bet` is the nominal bet
+ * (a free play's size), `staked` what they actually paid, `returned` what came back.
+ */
+async function recordStats({ guildId, userId, kind, bet, staked, returned }) {
+  const profit = returned - staked;
+  const outcome = returned > bet ? 1 : returned < bet ? -1 : 0; // a free play that pays nothing is a loss
+  const multiplier = bet > 0 ? returned / bet : 0;
+  const n = (path) => ({ $ifNull: [`$${path}`, 0] });
+  const now = new Date();
+  await GambleStats.updateOne(
+    { guildId, userId },
+    [
+      {
+        $set: {
+          guildId,
+          userId,
+          games: { $add: [n('games'), 1] },
+          wins: { $add: [n('wins'), outcome > 0 ? 1 : 0] },
+          losses: { $add: [n('losses'), outcome < 0 ? 1 : 0] },
+          pushes: { $add: [n('pushes'), outcome === 0 ? 1 : 0] },
+          freePlays: { $add: [n('freePlays'), staked === 0 ? 1 : 0] },
+          wagered: { $add: [n('wagered'), staked] },
+          returned: { $add: [n('returned'), returned] },
+          net: { $add: [n('net'), profit] },
+          [`byGame.${kind}.games`]: { $add: [n(`byGame.${kind}.games`), 1] },
+          [`byGame.${kind}.wins`]: { $add: [n(`byGame.${kind}.wins`), outcome > 0 ? 1 : 0] },
+          [`byGame.${kind}.net`]: { $add: [n(`byGame.${kind}.net`), profit] },
+          streak:
+            outcome > 0
+              ? { $cond: [{ $gt: [n('streak'), 0] }, { $add: [n('streak'), 1] }, 1] }
+              : outcome < 0
+                ? { $cond: [{ $lt: [n('streak'), 0] }, { $subtract: [n('streak'), 1] }, -1] }
+                : n('streak'),
+          biggestWinGame: { $cond: [{ $gt: [profit, n('biggestWin')] }, kind, '$biggestWinGame'] },
+          biggestWinMultiplier: { $cond: [{ $gt: [profit, n('biggestWin')] }, multiplier, n('biggestWinMultiplier')] },
+          biggestWinAt: { $cond: [{ $gt: [profit, n('biggestWin')] }, now, '$biggestWinAt'] },
+          biggestWin: { $max: [n('biggestWin'), profit] },
+          lastPlayedAt: now,
+          createdAt: { $ifNull: ['$createdAt', now] },
+          updatedAt: now
+        }
+      },
+      // Streak records read the streak just computed above.
+      { $set: { bestStreak: { $max: [n('bestStreak'), '$streak'] }, worstStreak: { $max: [n('worstStreak'), { $multiply: ['$streak', -1] }] } } }
+    ],
+    { upsert: true }
+  ).catch((err) => console.error('Failed to record gambling stats:', err.message));
+}
+
 const netToday = (record) => (record?.gambleWinDay === utcDay() ? record.gambleNetToday || 0 : 0);
 
 function winCapText(settings, net) {
@@ -195,9 +248,11 @@ function freePlayText(outcome, settings) {
 
 // Settles a finished interactive game: records the net result (against what the player actually
 // staked — free plays cost nothing), their fresh balance, and a free play if they went broke.
-async function settle(game, returned) {
+async function settle(game, returned, { refund = false } = {}) {
   game.net = returned - (game.paidStake ?? game.bet);
   await recordNet(game.guildId, game.userId, game.net);
+  // Stats are saved in the background so they never slow down the game's reply.
+  if (!refund) recordStats({ guildId: game.guildId, userId: game.userId, kind: game.kind, bet: game.bet, staked: game.paidStake ?? game.bet, returned });
   if (game.startNet !== null && game.startNet !== undefined) game.netToday = game.startNet + game.net;
   game.balance = await fetchBalance(game.guildId, game.userId);
   if (game.net < 0 || (game.freePlay && returned === 0)) {
@@ -337,6 +392,7 @@ async function playInstant(interaction, bet, round) {
   const balance = await fetchBalance(interaction.guildId, interaction.user.id);
   const net = winnings - ctx.paidStake;
   await recordNet(interaction.guildId, interaction.user.id, net);
+  recordStats({ guildId: interaction.guildId, userId: interaction.user.id, kind: r.kind, bet, staked: ctx.paidStake, returned: winnings }); // background
   const capText = winCapText(ctx.settings, ctx.startNet !== null ? ctx.startNet + net : null);
   const freeNote = net < 0 || (ctx.freePlay && !r.won)
     ? freePlayText(await maybeGrantFreePlay(interaction.guildId, interaction.user.id, ctx.settings, balance), ctx.settings)
@@ -364,6 +420,7 @@ function playCoinflip(interaction, bet, side) {
   return playInstant(interaction, bet, (ctx) => {
     const result = randInt(2) === 0 ? 'heads' : 'tails';
     return {
+      kind: 'coinflip',
       title: `🪙 Coinflip — ${result === 'heads' ? 'Heads' : 'Tails'}!`,
       won: result === side,
       multiplier: 2 * (1 - ctx.settings.edge),
@@ -399,6 +456,7 @@ function playDice(interaction, bet, target = 50, direction = 'under') {
     const chance = diceChance(target, direction);
     const bar = diceBar(roll, target, direction);
     return {
+      kind: 'dice',
       title: `🎲 Dice — rolled ${roll.toFixed(2)}`,
       won,
       multiplier: diceMultiplier(chance, ctx.settings.edge),
@@ -438,6 +496,7 @@ function playLimbo(interaction, bet, target = 2) {
     const won = result >= target;
     const shown = result >= 1e6 ? `${fmtNum(Math.floor(result))}x` : `${result.toFixed(2)}x`;
     return {
+      kind: 'limbo',
       title: `🚀 Limbo — ${shown}`,
       won,
       multiplier: target,
@@ -680,7 +739,7 @@ async function expireGame(game, reason = 'idle') {
     // Nothing won yet — refund the bet instead of eating it.
     endGame(game);
     await refundStake(game);
-    await settle(game, game.paidStake);
+    await settle(game, game.paidStake, { refund: true });
     game.status = 'refunded';
     rendered = game.render(`⏰ ${notes.refund} — ${refundWord(game)}.`);
   }
@@ -1185,7 +1244,7 @@ async function settleAllForShutdown() {
         // Mid-hand blackjack can't be fairly finished for the player — give the stake back.
         endGame(game);
         await refundStake(game);
-        await settle(game, game.paidStake);
+        await settle(game, game.paidStake, { refund: true });
         game.status = 'refunded';
         game.note = `🔧 The bot restarted mid-hand — ${refundWord(game)}.`;
         rendered = game.render();
@@ -1194,7 +1253,7 @@ async function settleAllForShutdown() {
       } else {
         endGame(game);
         await refundStake(game);
-        await settle(game, game.paidStake);
+        await settle(game, game.paidStake, { refund: true });
         game.status = 'refunded';
         rendered = game.render(`🔧 The bot restarted — ${refundWord(game)}.`);
       }
@@ -1346,6 +1405,7 @@ async function handleGambleButton(interaction) {
 
 module.exports = {
   getGamblingSettings,
+  recordStats,
   dailyLimitFor,
   winCapText,
   minesMultiplier,
