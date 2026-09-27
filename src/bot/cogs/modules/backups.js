@@ -4,6 +4,7 @@ const AlertSubscription = require('../../../database/models/AlertSubscription');
 const EmbedTemplate = require('../../../database/models/EmbedTemplate');
 const UserLevel = require('../../../database/models/UserLevel');
 const ConfigBackup = require('../../../database/models/ConfigBackup');
+const TicketConfig = require('../../../database/models/TicketConfig');
 
 const FORMAT = 'loofarybot-backup';
 const VERSION = 1;
@@ -19,12 +20,13 @@ const strip = (doc, extra = []) => {
 
 /** Everything that makes up a server's LoofaryBot setup, as plain JSON. */
 async function exportGuild(guild, { includeXp = false } = {}) {
-  const [config, welcome, alerts, templates, levels] = await Promise.all([
+  const [config, welcome, alerts, templates, levels, tickets] = await Promise.all([
     GuildConfig.findOne({ guildId: guild.id }).lean(),
     WelcomeConfig.findOne({ guildId: guild.id }).lean(),
     AlertSubscription.find({ guildId: guild.id }).lean(),
     EmbedTemplate.find({ guildId: guild.id }).lean(),
-    includeXp ? UserLevel.find({ guildId: guild.id }).lean() : Promise.resolve([])
+    includeXp ? UserLevel.find({ guildId: guild.id }).lean() : Promise.resolve([]),
+    TicketConfig.findOne({ guildId: guild.id }).lean()
   ]);
   return {
     format: FORMAT,
@@ -37,6 +39,7 @@ async function exportGuild(guild, { includeXp = false } = {}) {
       welcome: strip(welcome),
       alerts: alerts.map((a) => strip(a, ['state'])),
       embedTemplates: templates.map((t) => strip(t)),
+      tickets: strip(tickets, ['counter']),
       ...(includeXp ? { members: levels.map((l) => strip(l)) } : {})
     }
   };
@@ -51,6 +54,7 @@ function summarize(payload) {
     exportedAt: payload?.exportedAt || null,
     hasSettings: !!d.guildConfig,
     hasWelcome: !!d.welcome,
+    hasTickets: !!d.tickets,
     alerts: (d.alerts || []).length,
     embedTemplates: (d.embedTemplates || []).length,
     members: Array.isArray(d.members) ? d.members.length : 0
@@ -100,7 +104,21 @@ async function importGuild(guild, payload, { includeXp = false, createdBy = null
   const d = payload.data;
 
   if (d.guildConfig) {
-    await GuildConfig.replaceOne({ guildId: guild.id }, { ...d.guildConfig, guildId: guild.id }, { upsert: true });
+    // Keep this server's running counters and schedules: rewinding the case counter would make the
+    // next /warn reuse an existing case number, and old "last sent" days could re-send today's drops.
+    const current = (await GuildConfig.findOne({ guildId: guild.id }).lean()) || {};
+    const next = { ...d.guildConfig, guildId: guild.id };
+    next.caseCounter = Math.max(current.caseCounter || 0, next.caseCounter || 0);
+    next.boosterDropDay = current.boosterDropDay ?? null;
+    if (next.chatDrops || current.chatDrops) {
+      next.chatDrops = { ...(next.chatDrops || {}), nextDropAt: current.chatDrops?.nextDropAt ?? null, lastDropAt: current.chatDrops?.lastDropAt ?? null };
+    }
+    await GuildConfig.replaceOne({ guildId: guild.id }, next, { upsert: true });
+  }
+  if (d.tickets) {
+    // Ticket numbers keep counting up from where this server is.
+    const current = await TicketConfig.findOne({ guildId: guild.id }, { counter: 1 }).lean();
+    await TicketConfig.replaceOne({ guildId: guild.id }, { ...d.tickets, guildId: guild.id, counter: current?.counter || 0 }, { upsert: true });
   }
   if (d.welcome) {
     await WelcomeConfig.replaceOne({ guildId: guild.id }, { ...d.welcome, guildId: guild.id }, { upsert: true });

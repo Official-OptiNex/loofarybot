@@ -411,7 +411,21 @@ amount, the announcement channel, or turns them off.
   - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,
     or copy any message in the server into the editor.
 
-## 7. Notes & Limitations
+## 7. Tests
+
+```bash
+npm install
+npm test                # every test file (about 40 seconds)
+npm test -- tickets     # only files whose name contains "tickets"
+```
+
+The tests in `test/` run each feature's real code against stubbed Discord objects and an in-memory
+stand-in for MongoDB, so they need no bot token, database or network. MongoDB update pipelines are
+evaluated with [mingo](https://github.com/kofrasa/mingo) (a dev dependency), so the actual `$cond`,
+`$ifNull`, `$max`… operators are exercised. Each file runs in its own process; any database call a
+test didn't stub fails immediately instead of hanging.
+
+## 8. Notes & Limitations
 
 - Dashboard logins are stored in MongoDB (`web_sessions`), so they survive redeploys. Keep
   `SESSION_SECRET` set to the same long random value — changing it logs everyone out.

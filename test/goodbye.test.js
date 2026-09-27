@@ -1,0 +1,23 @@
+process.env.TOKEN='x';process.env.CLIENT_ID='1';process.env.MONGODB_URI='m';
+const root=require('path').join(__dirname,'..')+'/'; const assert=require('assert');
+const { PermissionsBitField } = require(root+'node_modules/discord.js');
+const WelcomeConfig=require(root+'src/database/models/WelcomeConfig');
+let stored=null; WelcomeConfig.findOne=(q)=>{const p=Promise.resolve(stored); p.lean=async()=>stored?stored.toObject():null; return p;};
+WelcomeConfig.prototype.save=async function(){stored=this;return this;};
+const W=require(root+'src/bot/cogs/modules/welcome');
+const sent=[]; const ch={id:'c1',name:'bye',isTextBased:()=>true,permissionsFor:()=>new PermissionsBitField(PermissionsBitField.All),send:async(p)=>{sent.push(p);}};
+const guild={id:'g',name:'Loof',memberCount:41,channels:{cache:new Map([['c1',ch]])},members:{me:{}}};
+const member={id:'u',guild,user:{username:'nova',displayAvatarURL:()=>'https://a/b.png'}};
+(async()=>{
+  assert.match(await W.sendGoodbye(member),/disabled/);
+  const cmd=require(root+'src/bot/commands/greetings').commands.find(c=>c.data.name==='goodbye');
+  let out=null; const i=(sub,opts={})=>({guildId:'g',member,options:{getSubcommand:()=>sub,getChannel:()=>ch,getString:(n)=>opts[n]??null,getBoolean:(n)=>opts[n]??null},reply:async(o)=>{out=o;},deferReply:async()=>{},editReply:async(o)=>{out=o;}});
+  await cmd.execute(i('set',{message:'Bye {username} from {server} ({membercount})'})); assert.match(out.content,/on\*\* in/);
+  await W.sendGoodbye(member); assert.equal(sent.at(-1).content,'Bye nova from Loof (41)'); assert.deepEqual(sent.at(-1).allowedMentions,{parse:[]});
+  console.log('✓ /goodbye set turns it on; leaving posts the message with placeholders and pings nobody');
+  await cmd.execute(i('toggle',{enabled:false})); assert.match(await W.sendGoodbye(member),/disabled/);
+  await cmd.execute(i('test')); assert.match(out,/Test posted/); 
+  await cmd.execute(i('show')); assert.match(out.content,/Goodbye messages\*\* — off/);
+  console.log('✓ /goodbye toggle, test (works while off), show');
+  process.exit(0);
+})().catch(e=>{console.error(e);process.exit(1);});

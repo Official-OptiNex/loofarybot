@@ -1315,6 +1315,8 @@
     const guildName = <%- JSON.stringify(guild.name).replace(/</g, '\\u003c') %>;
     const memberCount = <%= stats.memberCount %>;
     const viewer = <%- JSON.stringify(viewer).replace(/</g, '\\u003c') %>;
+    // Extra giveaway tickets for server boosters (Leveling → Booster perks) — shown in the giveaway preview.
+    const boosterGiveawayEntries = <%= gambling.booster.enabled ? gambling.booster.giveawayEntries : 0 %>;
 
     function esc(str) {
       return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1504,6 +1506,28 @@
       container.appendChild(row);
     }
 
+    // --- Unsaved changes: warn before leaving the page with edits that weren't saved ---
+    let unsaved = false;
+    const IGNORE_DIRTY = 'input[type="search"], dialog *, .case-form *, .case-filters *, .list-toolbar *, .member-picker *, #cdNowChannel, #themeToggle, .module-toggle';
+    function setUnsaved(on) {
+      unsaved = on;
+      document.body.classList.toggle('has-unsaved', on);
+    }
+    const markSaved = () => setUnsaved(false);
+    document.querySelectorAll('.tab-panel').forEach((panel) =>
+      ['input', 'change'].forEach((type) =>
+        panel.addEventListener(type, (e) => {
+          if (!e.isTrusted || !e.target.matches('input, textarea, select') || e.target.matches(IGNORE_DIRTY)) return;
+          setUnsaved(true);
+        })
+      )
+    );
+    window.addEventListener('beforeunload', (e) => {
+      if (!unsaved) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+
     async function postJson(path, payload, okMsg) {
       try {
         const res = await fetch(`/api/guilds/${guildId}/${path}`, {
@@ -1512,6 +1536,7 @@
           body: JSON.stringify(payload)
         });
         const data = await res.json().catch(() => ({}));
+        if (res.ok) markSaved();
         showToast(res.ok ? okMsg : `❌ ${data.error || 'Failed to save.'}`);
       } catch {
         showToast('❌ Failed to save.');
@@ -1903,6 +1928,7 @@
         await saveBoosterPerks();
         await saveChatDrops();
       } catch (err) {
+        setUnsaved(true); // part of the Leveling page didn't save
         showToast(`❌ ${err.message}`);
       }
     }
@@ -2030,6 +2056,7 @@
     }
     function closeAlertEditor() {
       document.getElementById('alertEditor').style.display = 'none';
+      markSaved(); // closing the editor discards its edits
     }
     // Placeholders show the platform's default text; the color picker starts at the platform color.
     function applyPlatformDefaults(resetColor = true, color = '') {
@@ -2102,6 +2129,7 @@
         const res = await fetch(`/api/guilds/${guildId}/alerts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Failed to save.');
+        markSaved();
         showToast(`✅ Following ${data.subscription.displayName}.`);
         closeAlertEditor();
         await loadAlerts();
@@ -2232,7 +2260,7 @@
         const s = data.summary;
         box.innerHTML = `<div class="log-content">
           <strong>${esc(s.guildName)}</strong> · exported ${s.exportedAt ? esc(new Date(s.exportedAt).toLocaleString()) : 'unknown date'}<br>
-          <span class="muted">${[s.hasSettings && 'module settings', s.hasWelcome && 'welcome', s.alerts && `${s.alerts} alert(s)`, s.embedTemplates && `${s.embedTemplates} embed template(s)`, s.members && `${fmt(s.members)} members' XP`].filter(Boolean).join(' · ')}</span>
+          <span class="muted">${[s.hasSettings && 'module settings', s.hasWelcome && 'welcome', s.hasTickets && 'tickets', s.alerts && `${s.alerts} alert(s)`, s.embedTemplates && `${s.embedTemplates} embed template(s)`, s.members && `${fmt(s.members)} members' XP`].filter(Boolean).join(' · ')}</span>
           ${s.crossServer ? '<br><span style="color:var(--c-yellow);">⚠️ This file is from a different server — channel and role picks won\'t match here and will need re-selecting.</span>' : ''}
         </div>
         ${s.members ? '<label style="display:flex; align-items:center; gap:0.5rem; font-weight:500; color:var(--text-main);"><input type="checkbox" id="importXp" style="width:auto;"> Also import members\' XP (overwrites current XP)</label>' : ''}

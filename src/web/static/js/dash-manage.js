@@ -13,6 +13,7 @@ async function manageApi(method, path, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status}).`);
+  if (method !== 'GET' && typeof markSaved === 'function') markSaved();
   return data;
 }
 
@@ -284,6 +285,7 @@ function openGiveawayEditor(messageId = null, { copy = false } = {}) {
 function closeGiveawayEditor() {
   document.getElementById('gwEditor').style.display = 'none';
   document.getElementById('gwId').value = '';
+  if (typeof markSaved === 'function') markSaved(); // closing an editor discards its edits
 }
 
 function readGiveawayForm() {
@@ -338,9 +340,10 @@ function renderGiveawayPreview() {
   const endTs = ms ? Date.now() + ms : editing ? editing.endTimestamp : Date.now() + 86400000;
   const prize = f.prize || 'Your prize';
   const reqs = requirementLines({ roleId: f.requirements.roleId, minDaysInServer: Number(f.requirements.minDaysInServer) || 0, minLevel: Number(f.requirements.minLevel) || 0 });
-  const reqText =
-    (reqs.length ? `\n\n**Requirements:**\n${reqs.join('\n')}` : '') +
-    (!isDrop && f.bonusEntries.length ? `\n\n**Bonus entries:** ${f.bonusEntries.map((b) => `<@&${b.roleId}> +${Number(b.extra)}`).join(' · ')}` : '');
+  // Same as the real embed: role bonuses, plus the booster perk saved on the giveaway (or the server's current one for new giveaways).
+  const boosterExtra = isDrop ? 0 : editing && typeof editing.boosterEntries === 'number' ? editing.boosterEntries : typeof boosterGiveawayEntries === 'number' ? boosterGiveawayEntries : 0;
+  const bonusParts = [...(!isDrop ? f.bonusEntries.map((b) => `<@&${b.roleId}> +${Number(b.extra)}`) : []), ...(boosterExtra > 0 ? [`💎 Server boosters +${boosterExtra}`] : [])];
+  const reqText = (reqs.length ? `\n\n**Requirements:**\n${reqs.join('\n')}` : '') + (bonusParts.length ? `\n\n**Bonus entries:** ${bonusParts.join(' · ')}` : '');
   const desc = f.description || GW_DEFAULT_DESC[f.type];
   const host = '\u0001HOST\u0001'; // swapped for a pill below so it never depends on the member cache
   const hostName = editing ? editing.hostName || 'host' : viewer.username;
@@ -600,6 +603,7 @@ function openPanelEditor(messageId = null) {
 function closePanelEditor() {
   document.getElementById('rrEditor').style.display = 'none';
   document.getElementById('rrId').value = '';
+  if (typeof markSaved === 'function') markSaved(); // closing an editor discards its edits
 }
 
 // Mirrors buildPanelMessage() in the bot.

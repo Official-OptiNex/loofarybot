@@ -1073,3 +1073,16 @@ kbd { font-family: inherit; font-size: 0.75rem; padding: 1px 6px; border-radius:
 .transcript-line .when { color: var(--text-label); font-size: 0.72rem; }
 .transcript-line .text { grid-column: 1 / -1; white-space: pre-wrap; word-break: break-word; }
 .transcript-line .files a { font-size: 0.78rem; margin-right: 0.5rem; }
+
+/* Unsaved changes: the Save bar says so and its main button glows. */
+.has-unsaved .savebar::before { content: '● Unsaved changes'; margin-right: auto; color: var(--accent-gold); font-size: 0.82rem; font-weight: 600; }
+.has-unsaved .savebar .btn:not(.secondary) { box-shadow: 0 0 0 3px var(--accent-gold-soft), var(--shadow-lift); }
+
+/* Phone widths: the command list and log filters wrap instead of pushing past the screen edge. */
+.log-toolbar select { max-width: 100%; min-width: 0; }
+@media (max-width: 600px) {
+  .log-toolbar > * { flex: 1 1 100%; }
+  .cmd-item { flex-wrap: wrap; row-gap: 0.35rem; }
+  .cmd-item code { white-space: normal; overflow-wrap: anywhere; flex-shrink: 1; }
+  .cmd-item .desc { flex-basis: 100%; order: 3; }
+}
