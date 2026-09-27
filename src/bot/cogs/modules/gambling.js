@@ -318,36 +318,39 @@ async function payout(guild, userId, amount, config) {
   return adjustXp(guild, userId, amount, config);
 }
 
-// ---------------------------------------------------------------- Coinflip
+// ---------------------------------------------------------------- Instant games (coinflip, dice, limbo)
 
-async function playCoinflip(interaction, bet, side) {
+/**
+ * One-shot games: take the bet, run `round(ctx)` → { title, won, multiplier, betLine, resultLine },
+ * pay out (respecting the max-win and daily win caps) and post the result with the balance.
+ */
+async function playInstant(interaction, bet, round) {
   await acknowledge(interaction);
   const ctx = await placeBet(interaction, bet);
   if (!ctx) return;
   bet = ctx.bet;
 
-  const result = randInt(2) === 0 ? 'heads' : 'tails';
-  const won = result === side;
-  const multiplier = 2 * (1 - ctx.settings.edge);
-  const uncapped = won ? Math.floor(bet * multiplier) : 0;
+  const r = round(ctx);
+  const uncapped = r.won ? Math.floor(bet * r.multiplier) : 0;
   const winnings = capReturn(ctx, uncapped);
   const levelResult = await payout(interaction.guild, interaction.user.id, winnings, ctx.config);
   const balance = await fetchBalance(interaction.guildId, interaction.user.id);
   const net = winnings - ctx.paidStake;
   await recordNet(interaction.guildId, interaction.user.id, net);
   const capText = winCapText(ctx.settings, ctx.startNet !== null ? ctx.startNet + net : null);
-  const freeNote = net < 0 || (ctx.freePlay && !won)
+  const freeNote = net < 0 || (ctx.freePlay && !r.won)
     ? freePlayText(await maybeGrantFreePlay(interaction.guildId, interaction.user.id, ctx.settings, balance), ctx.settings)
     : '';
 
   const embed = new EmbedBuilder()
-    .setTitle(`🪙 Coinflip — ${result === 'heads' ? 'Heads' : 'Tails'}!`)
-    .setColor(won ? '#57F287' : '#ED4245')
+    .setTitle(r.title)
+    .setColor(r.won ? '#57F287' : '#ED4245')
     .setDescription(
       (ctx.freePlay ? `${freePlayBanner(ctx)}\n` : '') +
-        `${interaction.user} bet **${fmtNum(bet)} XP** on **${side}**.\n` +
-        (won
-          ? `✅ You won **${fmtNum(winnings)} XP** (${fmtMult(multiplier)}).${winnings < uncapped ? `\n🏁 Capped by ${capLabel(ctx)}.` : ''}`
+        `${interaction.user} bet **${fmtNum(bet)} XP** ${r.betLine}.\n` +
+        (r.resultLine ? `${r.resultLine}\n` : '') +
+        (r.won
+          ? `✅ You won **${fmtNum(winnings)} XP** (${fmtMult(r.multiplier)}).${winnings < uncapped ? `\n🏁 Capped by ${capLabel(ctx)}.` : ''}`
           : ctx.freePlay
             ? '❌ No luck this time — it was a free play, so you lost nothing.'
             : `❌ You lost **${fmtNum(bet)} XP**.`) +
@@ -355,6 +358,93 @@ async function playCoinflip(interaction, bet, side) {
         `\n\n${balanceText(balance, net)}${freeNote ? `\n${freeNote}` : ''}${ctx.playsLeft !== null && ctx.playsLeft !== undefined ? `\n${playsLeftText(ctx.playsLeft)}` : ''}${capText ? `\n${capText}` : ''}`
     );
   return respond(interaction, { embeds: [embed], allowedMentions: { parse: [] } });
+}
+
+function playCoinflip(interaction, bet, side) {
+  return playInstant(interaction, bet, (ctx) => {
+    const result = randInt(2) === 0 ? 'heads' : 'tails';
+    return {
+      title: `🪙 Coinflip — ${result === 'heads' ? 'Heads' : 'Tails'}!`,
+      won: result === side,
+      multiplier: 2 * (1 - ctx.settings.edge),
+      betLine: `on **${side}**`
+    };
+  });
+}
+
+// Dice: roll 0.00–99.99. "under T" wins below T (T% chance); "over T" wins at T or higher ((100 − T)%).
+// Pays (1 − edge) × 100 ÷ chance, so every target returns the same on average.
+const DICE_MIN_CHANCE = 1;
+const DICE_MAX_CHANCE = 95;
+const diceChance = (target, direction) => (direction === 'over' ? 100 - target : target);
+const diceMultiplier = (chance, edge) => ((1 - edge) * 100) / chance;
+
+function diceProblem(target, direction) {
+  const chance = diceChance(target, direction);
+  if (!Number.isFinite(target) || chance < DICE_MIN_CHANCE || chance > DICE_MAX_CHANCE) {
+    return direction === 'over'
+      ? `❌ For **over**, pick a target from **${100 - DICE_MAX_CHANCE}** to **${100 - DICE_MIN_CHANCE}** (a ${DICE_MIN_CHANCE}–${DICE_MAX_CHANCE}% chance).`
+      : `❌ For **under**, pick a target from **${DICE_MIN_CHANCE}** to **${DICE_MAX_CHANCE}** (a ${DICE_MIN_CHANCE}–${DICE_MAX_CHANCE}% chance).`;
+  }
+  return null;
+}
+
+function playDice(interaction, bet, target = 50, direction = 'under') {
+  target = Math.round(target * 100) / 100;
+  const problem = diceProblem(target, direction);
+  if (problem) return interaction.reply({ content: problem, ephemeral: true });
+  return playInstant(interaction, bet, (ctx) => {
+    const roll = randInt(10000) / 100;
+    const won = direction === 'over' ? roll >= target : roll < target;
+    const chance = diceChance(target, direction);
+    const bar = diceBar(roll, target, direction);
+    return {
+      title: `🎲 Dice — rolled ${roll.toFixed(2)}`,
+      won,
+      multiplier: diceMultiplier(chance, ctx.settings.edge),
+      betLine: `on **${direction} ${target.toFixed(2)}** (${chance.toFixed(2).replace(/\.00$/, '')}% chance)`,
+      resultLine: bar
+    };
+  });
+}
+
+// A 20-segment track: 🟩 winning range, 🟥 losing range, ⚪ where the roll landed.
+function diceBar(roll, target, direction) {
+  const cells = [];
+  for (let i = 0; i < 20; i++) {
+    const mid = i * 5 + 2.5;
+    const win = direction === 'over' ? mid >= target : mid < target;
+    cells.push(win ? '🟩' : '🟥');
+  }
+  cells[Math.min(19, Math.floor(roll / 5))] = '⚪';
+  return `\`0\` ${cells.join('')} \`100\``;
+}
+
+// Limbo: pick a target multiplier. The result is (1 − edge) ÷ U for a uniform U, so it reaches any
+// target t with probability (1 − edge) ÷ t — hit it (or beat it) and you're paid t × your bet.
+const LIMBO_MIN = 1.01;
+const LIMBO_MAX = 1000;
+const limboChance = (target, edge) => (1 - edge) / target;
+
+function playLimbo(interaction, bet, target = 2) {
+  target = Math.round(target * 100) / 100;
+  if (!Number.isFinite(target) || target < LIMBO_MIN || target > LIMBO_MAX) {
+    return interaction.reply({ content: `❌ Pick a target from **${LIMBO_MIN}x** to **${fmtNum(LIMBO_MAX)}x**.`, ephemeral: true });
+  }
+  return playInstant(interaction, bet, (ctx) => {
+    const u = (randInt(100000000) + 1) / 100000000; // (0, 1]
+    const raw = (1 - ctx.settings.edge) / u;
+    const result = Math.max(1, Math.floor(raw * 100) / 100);
+    const won = result >= target;
+    const shown = result >= 1e6 ? `${fmtNum(Math.floor(result))}x` : `${result.toFixed(2)}x`;
+    return {
+      title: `🚀 Limbo — ${shown}`,
+      won,
+      multiplier: target,
+      betLine: `on **${target.toFixed(2)}x** (${(limboChance(target, ctx.settings.edge) * 100).toFixed(2)}% chance)`,
+      resultLine: won ? `🚀 Flew to **${shown}** — past your **${target.toFixed(2)}x**!` : `💥 Stopped at **${shown}** — short of your **${target.toFixed(2)}x**.`
+    };
+  });
 }
 
 // ---------------------------------------------------------------- Shared game lifecycle
@@ -1263,6 +1353,15 @@ module.exports = {
   pHigherOrSame,
   pLowerOrSame,
   playCoinflip,
+  playDice,
+  playLimbo,
+  diceChance,
+  diceMultiplier,
+  limboChance,
+  DICE_MIN_CHANCE,
+  DICE_MAX_CHANCE,
+  LIMBO_MIN,
+  LIMBO_MAX,
   startMines,
   startHighLow,
   startBlackjack,

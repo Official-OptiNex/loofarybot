@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
-const { resendControls, getGamblingSettings, minesMultiplier, minesLadder, playCoinflip, startMines, startHighLow, startBlackjack, syncGames, dailyLimitFor } = require('../cogs/modules/gambling');
+const { resendControls, getGamblingSettings, minesMultiplier, minesLadder, playCoinflip, playDice, playLimbo, diceChance, diceMultiplier, limboChance, DICE_MIN_CHANCE, DICE_MAX_CHANCE, LIMBO_MIN, LIMBO_MAX, startMines, startHighLow, startBlackjack, syncGames, dailyLimitFor } = require('../cogs/modules/gambling');
 const UserLevel = require('../../database/models/UserLevel');
 
 const betOption = (opt) => opt.setName('bet').setDescription('How much XP to bet').setMinValue(1).setRequired(true);
@@ -19,6 +19,30 @@ const data = new SlashCommandBuilder()
           .setDescription('Heads or tails')
           .setRequired(true)
           .addChoices({ name: 'Heads', value: 'heads' }, { name: 'Tails', value: 'tails' })
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('dice')
+      .setDescription('Roll 0–100 — pick your odds: lower chance, bigger payout')
+      .addIntegerOption(betOption)
+      .addNumberOption((opt) =>
+        opt.setName('target').setDescription('The number to roll under/over (default 50)').setMinValue(1).setMaxValue(99).setAutocomplete(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('direction')
+          .setDescription('Win by rolling under or over the target (default under)')
+          .addChoices({ name: 'Under', value: 'under' }, { name: 'Over', value: 'over' })
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('limbo')
+      .setDescription('Pick a multiplier — if the rocket flies that high, you win it')
+      .addIntegerOption(betOption)
+      .addNumberOption((opt) =>
+        opt.setName('target').setDescription('Target multiplier, 1.01–1000 (default 2)').setMinValue(1.01).setMaxValue(1000).setAutocomplete(true)
       )
   )
   .addSubcommand((sub) =>
@@ -79,6 +103,17 @@ async function execute(interaction) {
 
   if (sub === 'coinflip') {
     return playCoinflip(interaction, interaction.options.getInteger('bet'), interaction.options.getString('side'));
+  }
+  if (sub === 'dice') {
+    return playDice(
+      interaction,
+      interaction.options.getInteger('bet'),
+      interaction.options.getNumber('target') ?? 50,
+      interaction.options.getString('direction') ?? 'under'
+    );
+  }
+  if (sub === 'limbo') {
+    return playLimbo(interaction, interaction.options.getInteger('bet'), interaction.options.getNumber('target') ?? 2);
   }
   if (sub === 'mines') {
     return startMines(interaction, interaction.options.getInteger('bet'), interaction.options.getInteger('mines') ?? 3);
@@ -155,6 +190,14 @@ async function execute(interaction) {
             : 'Off'
         },
         { name: '🪙 Coinflip', value: `50/50, pays **${(2 * (1 - s.edge)).toFixed(2)}x**` },
+        {
+          name: '🎲 Dice — pick your odds',
+          value: [50, 25, 10, 5].map((c) => `**${c}%** chance → **${diceMultiplier(c, s.edge).toFixed(2)}x**`).join(' · ') + '\nRoll 0.00–99.99, betting under or over your target.'
+        },
+        {
+          name: '🚀 Limbo — pick a multiplier',
+          value: [2, 5, 10, 100].map((t) => `**${t}x** → ${(limboChance(t, s.edge) * 100).toFixed(2)}% chance`).join(' · ') + '\nIf the result reaches your target, you win target × bet.'
+        },
         { name: '💣 Mines — more mines, bigger payouts', value: mineExamples },
         {
           name: '🃏 High-Low',
@@ -232,10 +275,40 @@ async function execute(interaction) {
 }
 
 // Mine count suggestions preview the payouts, so it's obvious more mines pay more.
+const trim = (n) => String(Math.round(n * 100) / 100);
+
 async function autocomplete(interaction) {
   const typed = interaction.options.getFocused();
   const config = await getOrCreateConfig(interaction.guildId);
   const { edge } = getGamblingSettings(config);
+  const sub = interaction.options.getSubcommand();
+  const typedNum = typed === '' ? null : Number(typed);
+
+  if (sub === 'dice') {
+    const direction = interaction.options.getString('direction') ?? 'under';
+    const valid = (t) => {
+      const c = diceChance(t, direction);
+      return Number.isFinite(t) && c >= DICE_MIN_CHANCE && c <= DICE_MAX_CHANCE;
+    };
+    const presets = direction === 'over' ? [50, 25, 75, 10, 90, 5, 95] : [50, 75, 25, 90, 10, 95, 5];
+    const targets = [...new Set([...(typedNum !== null && valid(typedNum) ? [Math.round(typedNum * 100) / 100] : []), ...presets])].filter(valid);
+    return interaction.respond(
+      targets.slice(0, 25).map((t) => {
+        const c = diceChance(t, direction);
+        return { name: `${direction} ${trim(t)} — ${trim(c)}% chance · pays ${diceMultiplier(c, edge).toFixed(2)}x`, value: t };
+      })
+    );
+  }
+
+  if (sub === 'limbo') {
+    const valid = (t) => Number.isFinite(t) && t >= LIMBO_MIN && t <= LIMBO_MAX;
+    const presets = [2, 1.5, 3, 5, 10, 25, 100, 1000];
+    const targets = [...new Set([...(typedNum !== null && valid(typedNum) ? [Math.round(typedNum * 100) / 100] : []), ...presets])].filter(valid);
+    return interaction.respond(
+      targets.slice(0, 25).map((t) => ({ name: `${trim(t)}x — ${(limboChance(t, edge) * 100).toFixed(2)}% chance`, value: t }))
+    );
+  }
+
   const counts = typed ? [Number(typed)].filter((n) => n >= 1 && n <= 24) : [1, 3, 5, 7, 10, 15, 20, 24];
   return interaction.respond(
     counts.map((m) => ({ name: `${m} mine${m === 1 ? '' : 's'} — ${minesLadder(m, edge)}`.slice(0, 100), value: m }))

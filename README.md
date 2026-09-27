@@ -142,6 +142,11 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.
 - `coinflip` — 50/50, pays `2 × (1 − edge)`.
+- `dice` — rolls 0.00–99.99. Bet **under** or **over** a target you pick (1–95% chance); pays
+  `(1 − edge) × 100 ÷ chance`, e.g. 50% → 1.92x, 10% → 9.60x. The `target` option previews the odds
+  and payout as you type.
+- `limbo` — pick a target multiplier from 1.01x to 1,000x. The result multiplier reaches your target
+  with a `(1 − edge) ÷ target` chance (2x ≈ 48%, 100x ≈ 0.96%); if it does, you win `target × bet`.
 - `blackjack` — 6-deck shoe, dealer stands on 17, blackjack pays 3:2, double down on the first
   two cards (no splits). The house edge is taken from winnings.
 - `mines` — a 5×5 board with 1–24 mines. **More mines pay more:** every gem multiplies your

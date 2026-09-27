@@ -59,6 +59,8 @@ module.exports = [
     tab: 'gambling',
     commands: [
       { usage: '/gamble coinflip', perm: null, description: 'Heads or tails — win about double your bet.' },
+      { usage: '/gamble dice', perm: null, description: 'Roll 0–100 under or over a target you pick — lower chance, bigger payout.' },
+      { usage: '/gamble limbo', perm: null, description: 'Pick a target multiplier (1.01x–1000x); win it if the result reaches it.' },
       { usage: '/gamble blackjack', perm: null, description: 'Beat the dealer to 21 — hit, stand or double down.' },
       { usage: '/gamble mines', perm: null, description: '5×5 minefield: reveal gems, avoid mines, cash out any time.' },
       { usage: '/gamble highlow', perm: null, description: 'Call higher or lower to build a multiplier, then cash out.' },
