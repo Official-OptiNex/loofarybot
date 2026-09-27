@@ -42,6 +42,7 @@ const casesCommand = require('../commands/cases');
 const { commands: modActionCommands } = require('../commands/modActions');
 const { commands: greetingCommands } = require('../commands/greetings');
 const perksCommand = require('../commands/perks');
+const ticketCommand = require('../commands/ticket');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -65,7 +66,8 @@ const ALL_COMMANDS = [
   casesCommand,
   ...modActionCommands,
   ...greetingCommands,
-  perksCommand
+  perksCommand,
+  ticketCommand
 ];
 
 module.exports = function registerReadyEvent(client) {

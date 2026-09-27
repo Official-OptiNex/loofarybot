@@ -6,6 +6,7 @@ const { handleHelpSelect } = require('../cogs/modules/help');
 const { reportError } = require('../utils/errorReporter');
 const honeypotCommand = require('../commands/honeypot');
 const giveawayForm = require('../cogs/modules/giveawayForm');
+const { handleTicketButton, handleTicketModal } = require('../cogs/modules/tickets');
 
 // Routes a component's customId to its feature by prefix.
 function routeButton(interaction) {
@@ -14,6 +15,7 @@ function routeButton(interaction) {
   if (id.startsWith('gctl:')) return handleControlsButton(interaction); // re-send dismissed game controls
   if (id.startsWith('rr:')) return handleRoleButton(interaction);
   if (id.startsWith('poll:')) return handleVote(interaction);
+  if (id.startsWith('tk:')) return handleTicketButton(interaction); // support tickets
   if (id.startsWith('gwd:')) return giveawayForm.handleDraftButton(interaction, interaction.client); // /loof create form
   return handleButtonInteraction(interaction); // giveaways & drops
 }
@@ -34,6 +36,7 @@ module.exports = function registerInteractionCreateEvent(client) {
       if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('hpembed_modal:')) return await honeypotCommand.handleModalSubmit(interaction, client);
         if (interaction.customId.startsWith('gwd:')) return await giveawayForm.handleDraftModal(interaction);
+        if (interaction.customId.startsWith('tkm:')) return await handleTicketModal(interaction);
         return;
       }
 

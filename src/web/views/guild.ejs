@@ -32,6 +32,7 @@
     gift: '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8.5h14V12M12 8v12.5"/><path d="M12 8C10.5 4.5 7 4 7 6.2 7 8 12 8 12 8zM12 8c1.5-3.5 5-4 5-1.8C17 8 12 8 12 8z"/>',
     tag: '<path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.4 1.4 0 0 1 0 2l-6.7 6.7a1.4 1.4 0 0 1-2 0z"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/>',
     chat: '<path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+    ticket: '<path d="M3.5 8.5V6a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1v2.5a2.5 2.5 0 0 0 0 5V18a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-2.5a2.5 2.5 0 0 0 0-5z"/><path d="M14 5v14" stroke-dasharray="2 2"/>',
     lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
     radio: '<circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
@@ -50,6 +51,7 @@
     ['gambling', 'dice', 'Gambling'],
     ['community', 'chat', 'Polls & Reminders'],
     ['moderation', 'lock', 'Moderation'],
+    ['tickets', 'ticket', 'Tickets'],
     ['logs', 'file', 'Logs'],
     ['alerts', 'radio', 'Alerts'],
     ['leaderboard', 'trophy', 'Leaderboard'],
@@ -66,7 +68,8 @@
     ['autorole', 'Auto-Role', config.autoRoleEnabled !== false],
     ['gambling', 'Gambling', gambling.enabled],
     ['logs', 'Logs', config.logsEnabled !== false],
-    ['alerts', 'Alerts', config.socialAlertsEnabled !== false]
+    ['alerts', 'Alerts', config.socialAlertsEnabled !== false],
+    ['tickets', 'Tickets', locals.ticketsEnabled !== false]
   ].filter(([tab]) => can(tab) || (tab === 'logs' && can('logviewer')));
   // Moderators see module switches only for pages they're allowed to edit.
   const sideToggle = (key, on) =>
@@ -1044,11 +1047,12 @@
       </div>
     </div>
 
-    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot }; %>
+    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot, moduleToggle, ticketsEnabled: locals.ticketsEnabled !== false }; %>
     <% if (can('giveaways')) { %><%- include('partials/tab-giveaways', partialLocals) %><% } %>
     <% if (can('reactionroles')) { %><%- include('partials/tab-reactionroles', partialLocals) %><% } %>
     <% if (can('community')) { %><%- include('partials/tab-community', partialLocals) %><% } %>
     <% if (can('moderation')) { %><%- include('partials/tab-moderation', partialLocals) %><% } %>
+    <% if (can('tickets')) { %><%- include('partials/tab-tickets', partialLocals) %><% } %>
 
     <% if (isAdmin) { %>
     <!-- SETTINGS -->

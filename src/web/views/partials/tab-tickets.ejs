@@ -1,0 +1,199 @@
+    <!-- TICKETS (same as /ticket setup · panel · close · list · toggle) -->
+    <div class="tab-panel hidden" id="tab-tickets">
+      <div class="module-hero">
+        <div class="hero-icon">🎫</div>
+        <div>
+          <h1>Tickets</h1>
+          <p>A panel with an “Open a ticket” button gives each member a private channel with your support team. Same as <code>/ticket</code>.</p>
+          <div class="hero-status" id="tkStatus"></div>
+        </div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('tickets', ticketsEnabled, 'tkEnabled') %></div>
+      </div>
+
+      <div class="card warn-card" id="tkPermWarn" style="display:none;"></div>
+
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="tk-open">🎫 Open tickets</button>
+        <button data-sub="tk-setup">⚙️ Setup & panel</button>
+        <button data-sub="tk-history">🗂️ History</button>
+      </div>
+
+      <div class="subpage" data-page="tk-open">
+        <div class="list-toolbar">
+          <span class="muted" id="tkOpenSummary" style="font-size:0.85rem;"></span>
+          <button class="btn secondary small" onclick="loadTickets()">↻ Refresh</button>
+        </div>
+        <div id="tkOpenList"><div class="card empty-state">Loading…</div></div>
+      </div>
+
+      <div class="subpage hidden" data-page="tk-setup">
+        <div class="split">
+          <div>
+            <div class="card settings-card">
+              <h3 style="margin-top:0;">Where & who</h3>
+              <div class="setting-row">
+                <div><div class="setting-title">Panel channel</div><div class="setting-help">Where the “Open a ticket” message is posted.</div></div>
+                <div class="setting-control"><select id="tkPanelChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Ticket category</div><div class="setting-help">New ticket channels are created here (a category holds up to 50 channels).</div></div>
+                <div class="setting-control"><select id="tkCategory"><option value="">No category (top of the list)</option></select></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Support roles</div><div class="setting-help">Can see every ticket and use Claim, Ping and Close. Admins and members with Manage Server always can.</div></div>
+                <input type="search" id="tkRoleSearch" placeholder="Filter roles…" aria-label="Filter roles">
+                <div class="check-grid" id="tkRoles">
+                  <% roles.forEach(r => { %><label class="check-pill" data-name="<%= r.name.toLowerCase() %>"><input type="checkbox" value="<%= r.id %>" class="tk-role"><span>@<%= r.name %></span></label><% }) %>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Channel names</div><div class="setting-help">Use <code>{number}</code> and/or <code>{username}</code>. Example: <code id="tkNameExample">ticket-0001</code></div></div>
+                <div class="setting-control">
+                  <input id="tkNameFormat" maxlength="60" placeholder="ticket-{number}">
+                  <div class="chip-row" style="margin:0; flex-basis:100%; justify-content:flex-end;">
+                    <button type="button" class="chip" data-tk-format="ticket-{number}">ticket-0001</button>
+                    <button type="button" class="chip" data-tk-format="ticket-{username}">ticket-name</button>
+                    <button type="button" class="chip" data-tk-format="{username}-{number}">name-0001</button>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Open tickets per member</div><div class="setting-help">0 = no limit.</div></div>
+                <div class="setting-control"><input type="number" id="tkMaxOpen" min="0" max="10"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Ask what they need</div><div class="setting-help">Members fill in a short form before the ticket opens; the answer is shown in the ticket.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="tkAskReason"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Ping support roles</div><div class="setting-help">Mention the support roles when a ticket opens.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="tkPingSupport"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Message inside new tickets</div><div class="setting-help">Placeholders: <code>{user}</code> <code>{username}</code> <code>{support}</code> <code>{number}</code> <code>{server}</code></div></div>
+                <textarea id="tkWelcome" rows="3" maxlength="1500"></textarea>
+              </div>
+            </div>
+
+            <div class="card settings-card">
+              <h3 style="margin-top:0;">Panel look</h3>
+              <div class="setting-row">
+                <div class="setting-title">Title</div>
+                <div class="setting-control"><input id="tkTitle" maxlength="256"></div>
+              </div>
+              <div class="setting-row stack">
+                <div class="setting-title">Description</div>
+                <textarea id="tkDesc" rows="4" maxlength="4000"></textarea>
+              </div>
+              <div class="setting-row">
+                <div class="setting-title">Color</div>
+                <div class="setting-control"><input type="color" id="tkColor" value="#5865F2" style="flex:0 0 64px; min-width:64px;" aria-label="Panel color"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Thumbnail</div><div class="setting-help">Small image, top right (image link).</div></div>
+                <div class="setting-control"><input id="tkThumb" maxlength="500" placeholder="https://…"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Banner</div><div class="setting-help">Large image under the text (image link).</div></div>
+                <div class="setting-control"><input id="tkImage" maxlength="500" placeholder="https://…"></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-title">Footer</div>
+                <div class="setting-control"><input id="tkFooter" maxlength="2048"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Button</div><div class="setting-help">Text, color and emoji.</div></div>
+                <div class="setting-control">
+                  <input id="tkBtnLabel" maxlength="80" placeholder="Open a ticket">
+                  <select id="tkBtnStyle" style="flex:0 0 150px; min-width:150px;" aria-label="Button color">
+                    <option value="Primary">Blurple</option>
+                    <option value="Success">Green</option>
+                    <option value="Secondary">Grey</option>
+                    <option value="Danger">Red</option>
+                  </select>
+                  <input id="tkBtnEmoji" maxlength="64" placeholder="🎫" style="flex:0 0 80px; min-width:80px;" aria-label="Button emoji">
+                </div>
+              </div>
+            </div>
+
+            <div class="card settings-card">
+              <h3 style="margin-top:0;">Closing</h3>
+              <div class="setting-row">
+                <div><div class="setting-title">DM the member</div><div class="setting-help">“Your ticket in <%= guild.name %> has been closed by … Reason: …”</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="tkDm"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Countdown</div><div class="setting-help">Seconds before the channel is deleted (0 = straight away).</div></div>
+                <div class="setting-control"><input type="number" id="tkDelay" min="0" max="60"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Save transcripts</div><div class="setting-help">Keep the conversation — readable in History below.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="tkTranscripts"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Transcript log channel</div><div class="setting-help">Optional: a summary and a .txt transcript are posted here when a ticket closes.</div></div>
+                <div class="setting-control"><select id="tkLogChannel"><%- channelOptions(null, "Don't post") %></select></div>
+              </div>
+            </div>
+
+            <div class="savebar" style="position:static;">
+              <a class="btn secondary" id="tkPanelLink" href="#" target="_blank" rel="noopener" style="display:none;">View panel ↗</a>
+              <button class="btn secondary" onclick="saveTicketSettings(false)">Save</button>
+              <button class="btn" id="tkPublishBtn" onclick="saveTicketSettings(true)">Save & post panel</button>
+            </div>
+          </div>
+
+          <div class="sticky-preview">
+            <div class="card" style="margin-bottom:0;">
+              <h3 style="margin-top:0;">Preview</h3>
+              <div class="discord-chat">
+                <div class="channel-name" id="tkpChannel"># support</div>
+                <div class="discord-message-preview">
+                  <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                  <div class="discord-message-body">
+                    <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
+                    <div class="discord-embed-preview tk-embed" id="tkpEmbed" style="margin-top:0.4rem;">
+                      <div class="tk-embed-body">
+                        <div><div class="title" id="tkpTitle"></div><div class="desc" id="tkpDesc"></div></div>
+                        <img id="tkpThumb" class="tk-thumb" alt="" style="display:none;">
+                      </div>
+                      <img id="tkpImage" alt="" style="display:none;">
+                      <div class="embed-footer" id="tkpFooter"></div>
+                    </div>
+                    <div class="mock-buttons"><span class="mock-button" id="tkpButton"></span></div>
+                  </div>
+                </div>
+              </div>
+              <p class="muted" style="font-size:0.78rem; margin:0.75rem 0 0;">Inside each ticket: a welcome message with 🔒 Close · 📌 Claim · 🔔 Ping user buttons.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="tk-history">
+        <div class="list-toolbar">
+          <input type="search" id="tkSearch" placeholder="Search by #number, member, reason…" aria-label="Search closed tickets" style="max-width:360px;">
+          <span class="muted" id="tkHistSummary" style="font-size:0.85rem;"></span>
+        </div>
+        <div id="tkHistList"><div class="card empty-state">Loading…</div></div>
+        <div class="list-toolbar" style="justify-content:center;">
+          <button class="btn secondary small" id="tkPrev" onclick="loadTicketHistory(tkState.page - 1)">← Newer</button>
+          <span class="muted" id="tkPage" style="font-size:0.85rem;"></span>
+          <button class="btn secondary small" id="tkNext" onclick="loadTicketHistory(tkState.page + 1)">Older →</button>
+        </div>
+      </div>
+
+      <dialog id="tkTranscriptDialog" class="eb-dialog">
+        <div class="eb-dialog-inner">
+          <div class="list-toolbar" style="margin-bottom:0.6rem;">
+            <h3 style="margin:0;" id="tkTranscriptTitle">Transcript</h3>
+            <span style="display:flex; gap:0.4rem;">
+              <button class="btn secondary small" id="tkTranscriptDownload">⬇ .txt</button>
+              <button class="btn secondary small" onclick="document.getElementById('tkTranscriptDialog').close()">Close</button>
+            </span>
+          </div>
+          <div class="muted" id="tkTranscriptMeta" style="font-size:0.82rem; margin-bottom:0.6rem;"></div>
+          <div id="tkTranscriptBody" class="transcript"></div>
+        </div>
+      </dialog>
+    </div>

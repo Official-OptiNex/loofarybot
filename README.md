@@ -245,6 +245,25 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   whether staff (Manage Messages) can post anything. Chat inside threads is always allowed.
   `/mediaonly remove` and `/mediaonly list` manage them. Removed posts don't earn XP.
 
+### Tickets (`/ticket …` or the dashboard's **Tickets** page)
+- `/ticket setup channel:#support` posts a panel with an **Open a ticket** button. Options (all also on
+  the dashboard, with a live preview): the category tickets are created in, up to 3 support roles (10
+  on the dashboard), channel names (`ticket-0001`, `ticket-username`, `username-0001` or your own with
+  `{number}`/`{username}`), open tickets per member (default 1), asking members what they need first,
+  the welcome message inside tickets, and the panel's title, text, color, thumbnail, banner, footer and
+  button label / color / emoji. Saving again updates the panel in place.
+- Each ticket is a private channel: `@everyone` can't see it; the member, the support roles, admins
+  and LoofaryBot can. It starts with a welcome message and **🔒 Close · 📌 Claim · 🔔 Ping user**
+  buttons. Claiming shows who's handling it; `/ticket add · remove · rename` manage it.
+- **Closing** (button, `/ticket close`, or the dashboard) asks for an optional reason, then: DMs the
+  member *"Your ticket #12 in Server has been closed by Staff. Reason: …"*, saves a transcript, posts
+  a summary + `.txt` transcript to an optional log channel, and deletes the channel after a countdown
+  (5 seconds by default). Only the member who opened it or support can close a ticket.
+- The dashboard page has **Open tickets** (claimed by, jump to channel, close), **Setup & panel**
+  and a searchable **History** of closed tickets with their transcripts (view or download).
+- Turn the whole system on/off with its sidebar switch or `/ticket toggle`. Ticket channels deleted
+  by hand are marked closed automatically.
+
 ### Community Tools
 - `/reactionrole create` posts a role panel (buttons, multi-pick dropdown, or pick-one dropdown);
   `add`/`remove` roles by the panel's message ID (up to 25 roles).
