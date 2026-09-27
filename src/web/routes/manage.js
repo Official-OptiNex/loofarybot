@@ -15,6 +15,8 @@ const reactionRoles = require('../../bot/cogs/modules/reactionRoles');
 const polls = require('../../bot/cogs/modules/polls');
 const lockdownModule = require('../../bot/cogs/modules/lockdown');
 const mediaOnly = require('../../bot/cogs/modules/mediaOnly');
+const modCases = require('../../bot/cogs/modules/modCases');
+const ModCase = require('../../database/models/ModCase');
 const levelColors = require('../../bot/cogs/modules/levelColors');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const { parseDuration } = require('../../bot/utils/duration');
@@ -59,6 +61,11 @@ function readRequirements(guild, raw = {}) {
   };
 }
 
+// Bonus entry roles that still exist (max 5, +1 to +10 each).
+function readBonus(guild, raw) {
+  return giveaways.cleanBonus(raw).filter((x) => guild.roles.cache.has(x.roleId));
+}
+
 // Ping text for a giveaway: '' | 'everyone' | 'here' | a role ID.
 function pingText(guild, ping) {
   if (!ping) return null;
@@ -67,24 +74,29 @@ function pingText(guild, ping) {
   return guild.roles.cache.has(String(ping)) ? `<@&${ping}>` : null;
 }
 
+// Giveaways made before drops/requirements existed are stored without those fields, and .lean()
+// skips schema defaults — fill them here so the dashboard never receives `undefined`.
 function serializeGiveaway(g, guild) {
   const host = guild.members.cache.get(g.hostId);
+  const type = g.type === 'drop' ? 'drop' : 'timed';
+  const req = g.requirements || {};
   return {
     messageId: g.messageId,
     channelId: g.channelId,
-    type: g.type,
+    type,
     prize: g.prize,
-    winnerCount: g.winnerCount,
-    entryCount: g.entries.length,
+    winnerCount: g.winnerCount || 1,
+    entryCount: (g.entries || []).length,
     endTimestamp: g.endTimestamp,
-    colorHex: g.colorHex,
-    emoji: g.emoji,
-    customDesc: g.customDesc,
+    colorHex: /^#[0-9a-f]{6}$/i.test(g.colorHex || '') ? g.colorHex : '#5865F2',
+    emoji: g.emoji || (type === 'drop' ? '⚡' : '🎉'),
+    customDesc: g.customDesc || (type === 'drop' ? 'Be quick — first come, first served!' : 'Click the button below to enter!'),
     hostId: g.hostId,
     hostName: host ? host.displayName : null,
-    requirements: g.requirements || {},
+    requirements: { roleId: req.roleId || null, minDaysInServer: req.minDaysInServer || null, minLevel: req.minLevel || null },
+    bonusEntries: (g.bonusEntries || []).map((b) => ({ roleId: b.roleId, extra: b.extra })),
     winners: (g.winners || []).map((id) => ({ id, name: guild.members.cache.get(id)?.displayName || null })),
-    ended: g.ended,
+    ended: !!g.ended,
     url: messageUrl(g.guildId, g.channelId, g.messageId)
   };
 }
@@ -121,7 +133,8 @@ router.post('/guilds/:guildId/giveaways', ...guard('giveaways'), async (req, res
       emoji: type === 'drop' ? '⚡' : str(b.emoji, 64) || '🎉',
       customDesc: str(b.description, 1000) || (type === 'drop' ? 'Be quick — first come, first served!' : 'Click the button below to enter!'),
       type,
-      requirements: readRequirements(req.guild, b.requirements)
+      requirements: readRequirements(req.guild, b.requirements),
+      bonusEntries: readBonus(req.guild, b.bonusEntries)
     });
     res.locals.audit = { section: 'Giveaways', action: `Started ${type === 'drop' ? 'drop' : 'giveaway'} “${prize.slice(0, 60)}”`, detail: `#${channel.name}` };
     res.json({ ok: true, giveaway: serializeGiveaway(giveaway.toObject(), req.guild), url: message.url });
@@ -161,6 +174,7 @@ router.post('/guilds/:guildId/giveaways/:messageId', ...guard('giveaways'), asyn
   g.colorHex = giveaways.resolveColor(b.color || g.colorHex);
   if (g.type !== 'drop' && b.emoji) g.emoji = str(b.emoji, 64);
   g.requirements = readRequirements(req.guild, b.requirements);
+  if (g.type !== 'drop') g.bonusEntries = readBonus(req.guild, b.bonusEntries);
   await g.save();
 
   const client = req.app.locals.discordClient;
@@ -169,6 +183,31 @@ router.post('/guilds/:guildId/giveaways/:messageId', ...guard('giveaways'), asyn
   if (g.type === 'drop' && g.entries.length >= g.winnerCount) await giveaways.finishGiveaway(client, g);
   res.locals.audit = { section: 'Giveaways', action: `Edited giveaway “${prize.slice(0, 60)}”`, detail: '' };
   res.json({ ok: true, messageMissing: !found });
+});
+
+// Who entered (with their tickets), for the dashboard's entrant list.
+router.get('/guilds/:guildId/giveaways/:messageId/entrants', ...guard('giveaways'), async (req, res) => {
+  const g = await findGiveaway(req, res);
+  if (!g) return;
+  const weights = await giveaways.entryWeights(req.guild, g, g.entries);
+  const entrants = g.entries.map((id) => {
+    const m = req.guild.members.cache.get(id);
+    return { id, name: m?.displayName || null, username: m?.user.username || null, avatarUrl: m?.displayAvatarURL?.({ size: 64 }) || null, tickets: weights.get(id) || 1, won: (g.winners || []).includes(id) };
+  });
+  res.json({ entrants, total: entrants.length, tickets: entrants.reduce((n, e) => n + e.tickets, 0) });
+});
+
+router.delete('/guilds/:guildId/giveaways/:messageId/entrants/:userId', ...guard('giveaways'), async (req, res) => {
+  const g = await findGiveaway(req, res);
+  if (!g) return;
+  if (g.ended) return bad(res, "That giveaway has ended — entrants can't be changed.");
+  const userId = String(req.params.userId);
+  if (!g.entries.includes(userId)) return bad(res, 'That member has not entered.', 404);
+  const updated = await Giveaway.findOneAndUpdate({ _id: g._id }, { $pull: { entries: userId } }, { new: true });
+  await giveaways.refreshGiveaway(req.app.locals.discordClient, updated);
+  const name = req.guild.members.cache.get(userId)?.displayName || userId;
+  res.locals.audit = { section: 'Giveaways', action: `Removed ${name} from “${g.prize.slice(0, 60)}”`, detail: '' };
+  res.json({ ok: true, entryCount: updated.entries.length });
 });
 
 router.post('/guilds/:guildId/giveaways/:messageId/end', ...guard('giveaways'), async (req, res) => {
@@ -518,6 +557,125 @@ router.delete('/guilds/:guildId/mediaonly/:channelId', ...guard('moderation'), a
   const name = req.guild.channels.cache.get(req.params.channelId)?.name || 'deleted-channel';
   res.locals.audit = { section: 'Moderation', action: `Turned off media-only in #${name}`, detail: '' };
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------- Moderation cases (/warn /timeout /kick /ban /unban /cases)
+
+const serializeCase = (c, guild) => ({
+  caseId: c.caseId,
+  type: c.type,
+  userId: c.userId,
+  userTag: c.userTag,
+  userName: guild.members.cache.get(c.userId)?.displayName || null,
+  moderatorId: c.moderatorId,
+  moderatorTag: c.moderatorTag,
+  reason: c.reason,
+  durationMs: c.durationMs,
+  expiresAt: c.expiresAt,
+  active: c.active,
+  auto: c.auto,
+  dmSent: c.dmSent,
+  createdAt: c.createdAt
+});
+
+// The dashboard user acts as themselves, so Discord's own permissions and role order still apply.
+async function sessionMember(req) {
+  return req.guild.members.fetch(req.session.user.id).catch(() => null);
+}
+
+router.get('/guilds/:guildId/cases', ...guard('moderation'), async (req, res) => {
+  const page = Math.max(1, int(req.query.page) || 1);
+  const userId = /^\d{5,25}$/.test(String(req.query.user || '')) ? String(req.query.user) : null;
+  const data = await modCases.listCases(req.guild.id, { userId, type: req.query.type || null, page, pageSize: 15 });
+  const config = await getOrCreateConfig(req.guild.id);
+  let activeWarnings = null;
+  if (userId) activeWarnings = await ModCase.countDocuments({ guildId: req.guild.id, userId, type: 'warn', active: true });
+  res.json({
+    ...data,
+    cases: data.cases.map((c) => serializeCase(c, req.guild)),
+    activeWarnings,
+    settings: {
+      dmEnabled: config.modDmEnabled !== false,
+      escalation: (config.warnEscalation || []).map((r) => ({ count: r.count, action: r.action, durationMs: r.durationMs }))
+    }
+  });
+});
+
+router.post('/guilds/:guildId/cases/action', ...guard('moderation'), async (req, res) => {
+  const b = req.body || {};
+  const type = String(b.type || '');
+  if (!modCases.TYPES[type]) return bad(res, 'Pick an action.');
+  const userId = String(b.userId || '').trim();
+  if (!/^\d{5,25}$/.test(userId)) return bad(res, 'Pick a member (or paste a user ID).');
+  let durationMs = null;
+  if (b.duration) {
+    durationMs = parseDuration(b.duration);
+    if (!durationMs) return bad(res, 'Invalid duration — use e.g. 10m, 2h, 1d.');
+  }
+  const moderatorMember = await sessionMember(req);
+  if (!moderatorMember) return bad(res, "Couldn't find you in this server.");
+  const result = await modCases.performAction(req.guild, {
+    type,
+    userId,
+    moderator: moderatorMember.user,
+    moderatorMember,
+    reason: str(b.reason, 500),
+    durationMs,
+    deleteMessageSeconds: int(b.deleteMessageSeconds) || 0
+  });
+  if (result.error) return bad(res, result.error);
+  res.locals.audit = { section: 'Moderation', action: `${modCases.TYPES[type].label}: ${result.case.userTag} (case #${result.case.caseId})`, detail: result.case.reason || '' };
+  res.json({
+    ok: true,
+    case: serializeCase(result.case, req.guild),
+    dmSent: result.dmSent,
+    escalated: result.escalated ? (result.escalated.error ? { error: result.escalated.error } : { case: serializeCase(result.escalated.case, req.guild) }) : null
+  });
+});
+
+router.post('/guilds/:guildId/cases/:caseId/reason', ...guard('moderation'), async (req, res) => {
+  const result = await modCases.updateReason(req.guild.id, int(req.params.caseId), str(req.body?.reason, 500));
+  if (result.error) return bad(res, result.error, 404);
+  res.locals.audit = { section: 'Moderation', action: `Edited the reason on case #${req.params.caseId}`, detail: '' };
+  res.json({ ok: true, case: serializeCase(result.case, req.guild) });
+});
+
+router.post('/guilds/:guildId/cases/:caseId/revoke', ...guard('moderation'), async (req, res) => {
+  const result = await modCases.revokeCase(req.guild.id, int(req.params.caseId), req.session.user.id);
+  if (result.error) return bad(res, result.error);
+  res.locals.audit = { section: 'Moderation', action: `Revoked warning #${req.params.caseId}`, detail: '' };
+  res.json({ ok: true });
+});
+
+router.delete('/guilds/:guildId/cases/:caseId', ...guard('moderation'), async (req, res) => {
+  const result = await modCases.deleteCase(req.guild.id, int(req.params.caseId));
+  if (result.error) return bad(res, result.error, 404);
+  res.locals.audit = { section: 'Moderation', action: `Deleted case #${req.params.caseId}`, detail: '' };
+  res.json({ ok: true });
+});
+
+router.post('/guilds/:guildId/cases/settings', ...guard('moderation'), async (req, res) => {
+  const b = req.body || {};
+  const seen = new Set();
+  const rules = [];
+  for (const r of Array.isArray(b.escalation) ? b.escalation.slice(0, 10) : []) {
+    const count = int(r.count);
+    if (!count || count < 1 || count > 50 || seen.has(count)) continue;
+    if (!['timeout', 'kick', 'ban'].includes(r.action)) continue;
+    let durationMs = r.duration ? parseDuration(r.duration) : null;
+    if (r.duration && !durationMs) return bad(res, `Invalid duration “${str(r.duration, 20)}” — use e.g. 1h, 1d.`);
+    if (r.action === 'timeout' && !durationMs) return bad(res, `The ${count}-warning timeout rule needs a duration.`);
+    if (r.action === 'timeout') durationMs = Math.min(durationMs, modCases.MAX_TIMEOUT_MS);
+    if (r.action === 'kick') durationMs = null;
+    seen.add(count);
+    rules.push({ count, action: r.action, durationMs });
+  }
+  const config = await getOrCreateConfig(req.guild.id);
+  config.warnEscalation = rules.sort((a, c) => a.count - c.count);
+  config.modDmEnabled = b.dmEnabled !== false;
+  await config.save();
+  res.locals.audit = { section: 'Moderation', action: 'Updated warning escalation', detail: `${rules.length} rule(s) · DMs ${config.modDmEnabled ? 'on' : 'off'}` };
+  res.json({ ok: true, escalation: rules });
 });
 
 // ---------------------------------------------------------------- Member XP (/levels givexp · takexp · resetxp)

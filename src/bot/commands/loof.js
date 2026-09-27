@@ -15,7 +15,9 @@ const {
   refreshGiveaway,
   rerollGiveaway,
   deleteGiveaway,
-  replyOrEdit
+  replyOrEdit,
+  entryWeights,
+  cleanBonus
 } = require('../cogs/modules/giveaways');
 
 const MAX_GIVEAWAY_MS = 365 * 86400000;
@@ -61,6 +63,8 @@ const data = new SlashCommandBuilder()
             .addChoices({ name: '🎁 Timed giveaway — winners drawn at the end', value: 'timed' }, { name: '⚡ Drop — first to click win', value: 'drop' })
         )
     )
+      .addRoleOption((opt) => opt.setName('bonus_role').setDescription('Members with this role get extra entries'))
+      .addIntegerOption((opt) => opt.setName('bonus_entries').setDescription('How many extra entries bonus_role gets (default 1)').setMinValue(1).setMaxValue(10))
   )
   .addSubcommand((sub) =>
     addLookOptions(
@@ -95,6 +99,14 @@ const data = new SlashCommandBuilder()
       .addStringOption((opt) => opt.setName('new_description').setDescription('New description').setMaxLength(1000))
       .addStringOption((opt) => opt.setName('new_color').setDescription('New color (hex or name)'))
       .addStringOption((opt) => opt.setName('new_emoji').setDescription('New Enter button emoji (timed giveaways)'))
+      .addRoleOption((opt) => opt.setName('bonus_role').setDescription('Give this role extra entries (timed giveaways)'))
+      .addIntegerOption((opt) => opt.setName('bonus_entries').setDescription('Extra entries for bonus_role (0 removes its bonus)').setMinValue(0).setMaxValue(10))
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('entries')
+      .setDescription('See who entered a giveaway (and their bonus entries)')
+      .addStringOption((opt) => messageIdOption(opt))
   )
   .addSubcommand((sub) =>
     sub
@@ -117,7 +129,7 @@ const data = new SlashCommandBuilder()
 
 // Subcommands that do a Discord API call plus a database round trip before replying — defer so
 // Discord's 3-second window is never missed. `create` opens a form, which must be the first response.
-const DEFER_SUBCOMMANDS = ['start', 'drop', 'requirements', 'end', 'reroll', 'delete', 'edit', 'list'];
+const DEFER_SUBCOMMANDS = ['start', 'drop', 'requirements', 'end', 'reroll', 'delete', 'edit', 'list', 'entries'];
 
 function readRequirementOptions(interaction) {
   return {
@@ -178,7 +190,10 @@ async function execute(interaction, client) {
       emoji: type === 'drop' ? '⚡' : interaction.options.getString('button_emoji') || '🎉',
       customDesc: interaction.options.getString('description') || (type === 'drop' ? 'Be quick — first come, first served!' : 'Click the button below to enter!'),
       type,
-      requirements: readRequirementOptions(interaction)
+      requirements: readRequirementOptions(interaction),
+      bonusEntries: interaction.options.getRole('bonus_role')
+        ? [{ roleId: interaction.options.getRole('bonus_role').id, extra: interaction.options.getInteger('bonus_entries') || 1 }]
+        : []
     });
   }
 
@@ -204,6 +219,20 @@ async function execute(interaction, client) {
 
   const msgId = interaction.options.getString('message_id');
   const g = await findGiveaway(interaction, msgId);
+
+  if (sub === 'entries') {
+    if (!g) return replyOrEdit(interaction, { content: '❌ Giveaway not found.' });
+    if (!g.entries.length) return replyOrEdit(interaction, { content: `Nobody has entered **${g.prize}** yet.` });
+    const weights = await entryWeights(interaction.guild, g, g.entries);
+    const tickets = [...weights.values()].reduce((a, b) => a + b, 0);
+    const shown = g.entries.slice(0, 60).map((id) => `<@${id}>${weights.get(id) > 1 ? ` ×${weights.get(id)}` : ''}${(g.winners || []).includes(id) ? ' 🏆' : ''}`);
+    return replyOrEdit(interaction, {
+      content:
+        `👥 **${g.prize}** — ${g.entries.length} ${g.type === 'drop' ? 'claim' : 'entr'}${g.entries.length === 1 ? (g.type === 'drop' ? '' : 'y') : g.type === 'drop' ? 's' : 'ies'}` +
+        `${tickets !== g.entries.length ? ` · ${tickets} tickets with bonuses` : ''}\n${shown.join(', ')}${g.entries.length > 60 ? `\n…and ${g.entries.length - 60} more (see the dashboard for everyone)` : ''}`.slice(0, 1990),
+      allowedMentions: { parse: [] }
+    });
+  }
 
   if (sub === 'requirements') {
     if (!g || g.ended) return replyOrEdit(interaction, { content: '❌ Giveaway not found or already ended.' });
@@ -274,6 +303,13 @@ async function execute(interaction, client) {
     if (newDesc) (g.customDesc = newDesc), changes.push('description');
     if (newColor) (g.colorHex = resolveColor(newColor)), changes.push(`color ${g.colorHex}`);
     if (newEmoji && g.type !== 'drop') (g.emoji = newEmoji), changes.push(`emoji ${newEmoji}`);
+    const bonusRole = interaction.options.getRole('bonus_role');
+    if (bonusRole && g.type !== 'drop') {
+      const extra = interaction.options.getInteger('bonus_entries') ?? 1;
+      const others = (g.bonusEntries || []).filter((b) => b.roleId !== bonusRole.id).map((b) => ({ roleId: b.roleId, extra: b.extra }));
+      g.bonusEntries = cleanBonus(extra > 0 ? [...others, { roleId: bonusRole.id, extra }] : others);
+      changes.push(extra > 0 ? `${bonusRole.name} +${extra} entries` : `removed ${bonusRole.name} bonus`);
+    }
     if (!changes.length) return replyOrEdit(interaction, { content: 'ℹ️ Nothing to change — fill in at least one option.' });
 
     await g.save();
@@ -299,7 +335,8 @@ async function autocomplete(interaction) {
   const sub = interaction.options.getSubcommand();
   const filter = { guildId: interaction.guildId };
   if (['end', 'edit', 'requirements'].includes(sub)) filter.ended = false;
-  if (sub === 'reroll') Object.assign(filter, { ended: true, type: 'timed' });
+  // entries / delete: any giveaway
+  if (sub === 'reroll') Object.assign(filter, { ended: true, type: { $ne: 'drop' } }); // older giveaways have no type field
   const list = await Giveaway.find(filter).sort({ ended: 1, endTimestamp: -1 }).limit(100).lean();
   const now = Date.now();
   const when = (g) => {

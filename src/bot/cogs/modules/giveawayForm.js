@@ -55,6 +55,8 @@ function newDraft(interaction, { channelId, pingRoleId, type } = {}) {
     reqRoleId: null,
     minDays: null,
     minLevel: null,
+    bonusRoleId: null,
+    bonusExtra: null,
     expiresAt: Date.now() + DRAFT_TTL_MS
   };
   drafts.set(id, draft);
@@ -130,13 +132,17 @@ function lookModal(d) {
 function requirementsModal(d) {
   return new ModalBuilder()
     .setCustomId(`gwd:${d.id}:req`)
-    .setTitle('Entry requirements')
+    .setTitle('Requirements & bonus entries')
     .addLabelComponents(
       label('Required role', 'Leave empty for none.').setRoleSelectMenuComponent(
         new RoleSelectMenuBuilder().setCustomId('role').setRequired(false).setMinValues(0).setMaxValues(1).setDefaultRoles(d.reqRoleId ? [d.reqRoleId] : [])
       ),
       label('Minimum days in the server', 'Leave empty for none.').setTextInputComponent(text('days', TextInputStyle.Short, d.minDays, { max: 4, placeholder: 'e.g. 7' })),
-      label('Minimum XP level', 'Leave empty for none.').setTextInputComponent(text('level', TextInputStyle.Short, d.minLevel, { max: 4, placeholder: 'e.g. 5' }))
+      label('Minimum XP level', 'Leave empty for none.').setTextInputComponent(text('level', TextInputStyle.Short, d.minLevel, { max: 4, placeholder: 'e.g. 5' })),
+      label('Bonus entries role', 'Members with it get extra chances (timed giveaways).').setRoleSelectMenuComponent(
+        new RoleSelectMenuBuilder().setCustomId('bonusrole').setRequired(false).setMinValues(0).setMaxValues(1).setDefaultRoles(d.bonusRoleId ? [d.bonusRoleId] : [])
+      ),
+      label('Extra entries for that role', '1–10 (default 1).').setTextInputComponent(text('bonusextra', TextInputStyle.Short, d.bonusExtra, { max: 2, placeholder: '1' }))
     );
 }
 
@@ -178,7 +184,8 @@ function draftToGiveaway(d) {
     hostId: d.userId,
     entries: [],
     type: d.type,
-    requirements: { roleId: d.reqRoleId, minDaysInServer: d.minDays, minLevel: d.minLevel }
+    requirements: { roleId: d.reqRoleId, minDaysInServer: d.minDays, minLevel: d.minLevel },
+    bonusEntries: d.type !== 'drop' && d.bonusRoleId ? [{ roleId: d.bonusRoleId, extra: d.bonusExtra || 1 }] : []
   };
 }
 
@@ -202,7 +209,9 @@ function problems(d, guild) {
 function panel(d, guild, note = '') {
   const g = draftToGiveaway(d);
   const ms = parseDuration(d.duration);
-  const req = giveaways.describeRequirements(g.requirements).replace(/^\n\n\*\*Requirements:\*\*\n/, '') || 'None — anyone can enter';
+  const req =
+    (giveaways.describeRequirements(g.requirements).replace(/^\n\n\*\*Requirements:\*\*\n/, '') || 'None — anyone can enter') +
+    (g.bonusEntries.length ? `\n**Bonus:** <@&${g.bonusEntries[0].roleId}> +${g.bonusEntries[0].extra} entries` : '');
   const issues = problems(d, guild);
   const summary = new EmbedBuilder()
     .setColor(issues.length ? '#FEE75C' : '#57F287')
@@ -273,7 +282,8 @@ async function handleDraftButton(interaction, client) {
         emoji: g.emoji,
         customDesc: g.customDesc,
         type: d.type,
-        requirements: g.requirements
+        requirements: g.requirements,
+        bonusEntries: g.bonusEntries
       });
       drafts.delete(id);
       return interaction.editReply({
@@ -317,6 +327,9 @@ async function handleDraftModal(interaction) {
     const level = parseInt(readText(f, 'level'), 10);
     d.minDays = days > 0 ? Math.min(days, 3650) : null;
     d.minLevel = level > 0 ? Math.min(level, 1000) : null;
+    d.bonusRoleId = f.getSelectedRoles('bonusrole')?.first()?.id || null;
+    const extra = parseInt(readText(f, 'bonusextra'), 10);
+    d.bonusExtra = extra > 0 ? Math.min(extra, 10) : null;
   } else if (step === 'ping') {
     const choice = f.getStringSelectValues('ping')[0];
     d.ping = choice === 'everyone' || choice === 'here' ? choice : '';

@@ -1,5 +1,5 @@
 const { handleButtonInteraction } = require('../cogs/modules/giveaways');
-const { handleGambleButton } = require('../cogs/modules/gambling');
+const { handleGambleButton, handleControlsButton } = require('../cogs/modules/gambling');
 const { handleRoleButton, handleRoleSelect } = require('../cogs/modules/reactionRoles');
 const { handleVote } = require('../cogs/modules/polls');
 const { handleHelpSelect } = require('../cogs/modules/help');
@@ -11,6 +11,7 @@ const giveawayForm = require('../cogs/modules/giveawayForm');
 function routeButton(interaction) {
   const id = interaction.customId;
   if (id.startsWith('gm:') || id.startsWith('hl:') || id.startsWith('bj:')) return handleGambleButton(interaction);
+  if (id.startsWith('gctl:')) return handleControlsButton(interaction); // re-send dismissed game controls
   if (id.startsWith('rr:')) return handleRoleButton(interaction);
   if (id.startsWith('poll:')) return handleVote(interaction);
   if (id.startsWith('gwd:')) return giveawayForm.handleDraftButton(interaction, interaction.client); // /loof create form

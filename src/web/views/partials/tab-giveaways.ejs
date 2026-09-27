@@ -82,6 +82,11 @@
                 <input type="number" id="gwReqLevel" min="0" placeholder="Min level" style="flex:0 0 100px; min-width:100px;" aria-label="Minimum level">
               </div>
             </div>
+            <div class="setting-row stack" id="gwBonusRow">
+              <div><div class="setting-title">Bonus entries</div><div class="setting-help">Extra chances to win for members with these roles (their best bonus counts) — e.g. Boosters +2 means 3 tickets instead of 1. Timed giveaways only.</div></div>
+              <div id="gwBonusRows"></div>
+              <div><button class="btn secondary small" type="button" onclick="addBonusRow()">+ Add bonus role</button></div>
+            </div>
             <div style="display:flex; gap:0.6rem; justify-content:flex-end; flex-wrap:wrap; margin-top:0.9rem;">
               <button class="btn secondary" onclick="closeGiveawayEditor()">Cancel</button>
               <button class="btn" id="gwSaveBtn" onclick="saveGiveaway()">Start giveaway</button>
@@ -112,4 +117,15 @@
           </div>
         </div>
       </div>
+    <dialog id="gwEntrantsDialog" class="eb-dialog">
+        <div class="eb-dialog-inner">
+          <div class="list-toolbar" style="margin-bottom:0.6rem;">
+            <h3 style="margin:0;" id="gwEntrantsTitle">Entrants</h3>
+            <button class="btn secondary small" onclick="document.getElementById('gwEntrantsDialog').close()">Close</button>
+          </div>
+          <input type="search" id="gwEntrantsSearch" placeholder="Search entrants…" aria-label="Search entrants">
+          <div class="muted" id="gwEntrantsSummary" style="font-size:0.82rem; margin:0.6rem 0;"></div>
+          <div id="gwEntrantsList" class="entrant-list"></div>
+        </div>
+      </dialog>
     </div>

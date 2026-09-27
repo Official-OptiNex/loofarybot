@@ -5,7 +5,7 @@ const { auditTrail } = require('../utils/audit');
 const { setupHoneypotChannel, refreshCounterEmbed, isHttpUrl } = require('../../bot/cogs/modules/honeypot');
 const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
 const { syncJoins, getJoinStats } = require('../../bot/cogs/modules/joinTracking');
-const { sendWelcome } = require('../../bot/cogs/modules/welcome');
+const { sendWelcome, sendGoodbye } = require('../../bot/cogs/modules/welcome');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const LogEntry = require('../../database/models/LogEntry');
 const levelColors = require('../../bot/cogs/modules/levelColors');
@@ -17,6 +17,7 @@ const backups = require('../../bot/cogs/modules/backups');
 const { MOD_PAGES } = require('../utils/authMiddleware');
 const { getOrCreateConfig, getLeaderboard } = require('../../bot/cogs/modules/leveling');
 const EmbedTemplate = require('../../database/models/EmbedTemplate');
+const UserLevel = require('../../database/models/UserLevel');
 const EmbedJson = require('../static/js/embed-json');
 
 const router = express.Router();
@@ -91,27 +92,37 @@ router.get('/guilds/:guildId/mentionable', requireAuth, requireGuildAccess, guar
 // GET a paginated, member-info-enriched XP leaderboard — powers the dashboard's Leaderboard tab.
 router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const { entries, total, totalPages } = await getLeaderboard(req.guild.id, page, 10);
-
-    // Members may not all be cached — fetch (bounded) so names/avatars resolve even for
-    // users who haven't been active recently.
-    await req.guild.members.fetch({ limit: 1000 }).catch(() => null);
-
-    const startRank = (page - 1) * 10;
-    const enriched = entries.map((r, i) => {
+    const q = String(req.query.q || '').trim().slice(0, 32);
+    const describe = (r, rank) => {
       const member = req.guild.members.cache.get(r.userId);
       return {
-        rank: startRank + i + 1,
+        rank,
         userId: r.userId,
         name: member ? member.displayName : `Unknown User (${r.userId})`,
         avatarUrl: member ? member.displayAvatarURL({ size: 64 }) : null,
         level: r.level,
         xp: r.xp
       };
-    });
+    };
 
-    res.json({ entries: enriched, page, totalPages, total });
+    // Search: find members by name (Discord's member search), then show each one's real rank.
+    if (q) {
+      const found = await req.guild.members.search({ query: q, limit: 25 }).catch(() => null);
+      const ids = found ? [...found.keys()] : [];
+      const records = ids.length ? await UserLevel.find({ guildId: req.guild.id, userId: { $in: ids } }).sort({ xp: -1 }).limit(25).lean() : [];
+      const entries = await Promise.all(
+        records.map(async (r) => describe(r, (await UserLevel.countDocuments({ guildId: req.guild.id, xp: { $gt: r.xp } })) + 1))
+      );
+      return res.json({ entries, page: 1, totalPages: 1, total: entries.length, search: q });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const { entries, total, totalPages } = await getLeaderboard(req.guild.id, page, 10);
+    // Only fetch the members on this page (names/avatars for people who aren't cached).
+    const missing = entries.map((r) => r.userId).filter((id) => !req.guild.members.cache.has(id));
+    if (missing.length) await req.guild.members.fetch({ user: missing }).catch(() => null);
+    const startRank = (page - 1) * 10;
+    res.json({ entries: entries.map((r, i) => describe(r, startRank + i + 1)), page, totalPages, total });
   } catch (err) {
     console.error('Failed to load leaderboard:', err);
     res.status(500).json({ error: 'Failed to load leaderboard.' });
@@ -434,7 +445,11 @@ router.post('/guilds/:guildId/alerts/:id/test', requireAuth, requireGuildAccess,
 
 router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
-    const { enabled, houseEdge, minBet, maxBet, channelId, freePlayEnabled, freePlayAmount, freePlayCooldownHours } = req.body;
+    const { enabled, houseEdge, minBet, maxBet, maxWin, dailyLimit, channelId, freePlayEnabled, freePlayAmount, freePlayCooldownHours } = req.body;
+    const winCap = maxWin === '' || maxWin == null || Number(maxWin) === 0 ? null : Math.floor(Number(maxWin));
+    if (winCap !== null && (!Number.isFinite(winCap) || winCap < 1)) {
+      return res.status(400).json({ ok: false, error: 'Max win must be a positive number of XP (or empty for no cap).' });
+    }
     const edge = Number(houseEdge);
     const min = Number(minBet);
     const max = maxBet === '' || maxBet == null || Number(maxBet) === 0 ? null : Number(maxBet);
@@ -455,6 +470,12 @@ router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, guardA
     config.gamblingHouseEdge = edge;
     config.gamblingMinBet = min;
     config.gamblingMaxBet = max;
+    config.gamblingMaxWin = winCap;
+    if (dailyLimit !== undefined) {
+      const limit = dailyLimit === '' || dailyLimit === null ? 0 : Math.floor(Number(dailyLimit));
+      if (!Number.isFinite(limit) || limit < 0 || limit > 1000) return res.status(400).json({ ok: false, error: 'Daily limit must be 0–1000 games (0 = unlimited).' });
+      config.gamblingDailyLimit = limit;
+    }
     config.gamblingChannelId = channelId || null;
     if (typeof freePlayEnabled === 'boolean') config.gamblingFreePlayEnabled = freePlayEnabled;
     const fpAmount = Math.round(Number(freePlayAmount));
@@ -666,6 +687,35 @@ router.post('/guilds/:guildId/welcome/from-embed', requireAuth, requireGuildAcce
   } catch (err) {
     console.error('Failed to save welcome from embed builder:', err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Goodbye messages (stored with the welcome settings) ---
+router.post('/guilds/:guildId/welcome/goodbye', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  try {
+    const { errors, data } = cleanWelcomeInput(req.body, req.guild);
+    if (errors.length) return res.status(400).json({ ok: false, error: errors[0].replace('welcome channel', 'goodbye channel') });
+    if (data.enabled && !data.channelId) return res.status(400).json({ ok: false, error: 'Pick a channel for goodbye messages.' });
+    await WelcomeConfig.findOneAndUpdate({ guildId: req.guild.id }, { $set: { goodbye: data } }, { upsert: true, setDefaultsOnInsert: true });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Failed to save goodbye config:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/guilds/:guildId/welcome/goodbye/test', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  try {
+    const { errors, data } = cleanWelcomeInput(req.body, req.guild);
+    if (errors.length) return res.status(400).json({ ok: false, error: errors[0] });
+    const member = await req.guild.members.fetch(req.session.user.id).catch(() => null);
+    if (!member) return res.status(400).json({ ok: false, error: "Couldn't find you in this server to use as the test member." });
+    const problem = await sendGoodbye(member, { force: true, config: data });
+    if (problem) return res.status(400).json({ ok: false, error: problem });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Goodbye test failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to send. Check that all URLs are valid.' });
   }
 });
 

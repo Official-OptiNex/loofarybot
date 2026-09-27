@@ -73,7 +73,7 @@ function emptyCard(icon, text) {
 }
 
 // A tiny member search box: type a name, pick from the list; the chosen ID lands in input.dataset.userId.
-function attachMemberPicker(input) {
+function attachMemberPicker(input, { onPick = null } = {}) {
   if (!input || input.dataset.picker) return;
   input.dataset.picker = '1';
   const wrap = document.createElement('div');
@@ -95,6 +95,7 @@ function attachMemberPicker(input) {
     input.value = u.name;
     input.dataset.userId = u.id;
     close();
+    if (onPick) onPick(u);
   };
   input.addEventListener('input', () => {
     delete input.dataset.userId;
@@ -137,6 +138,7 @@ function onManageTabShown(tab) {
   if (tab === 'moderation') {
     loadModeration();
     loadMediaOnly();
+    initCases();
     attachMemberPicker(document.getElementById('pgUser'));
   }
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
@@ -209,6 +211,7 @@ function renderGiveawayList() {
         </div>
         <div class="item-actions">
           <a class="btn secondary small" href="${esc(g.url)}" target="_blank" rel="noopener">Open ↗</a>
+          ${g.entryCount ? `<button class="btn secondary small" onclick="openEntrants('${g.messageId}')">👥 ${isDrop ? 'Claims' : 'Entrants'}</button>` : ''}
           ${actions}
         </div>
       </div>`;
@@ -230,6 +233,7 @@ function applyGiveawayTypeUi() {
   document.getElementById('gwWinnersTitle').textContent = isDrop ? 'Prizes' : 'Winners';
   document.getElementById('gwWinnersHelp').textContent = isDrop ? 'How many people can claim.' : 'How many people win.';
   document.getElementById('gwEmoji').style.display = isDrop ? 'none' : '';
+  document.getElementById('gwBonusRow').style.display = isDrop ? 'none' : '';
   document.getElementById('gwLookHelp').textContent = isDrop ? 'Embed color (drops always use a ⚡ Claim button).' : "Embed color and the entry button's emoji.";
   document.getElementById('gwDesc').placeholder = GW_DEFAULT_DESC[gwType()];
   renderGiveawayPreview();
@@ -245,7 +249,8 @@ function openGiveawayEditor(messageId = null, { copy = false } = {}) {
   document.getElementById('gwEditorTitle').textContent = g ? `Edit “${g.prize}”` : copy ? `New giveaway (copy of “${from.prize}”)` : 'New giveaway';
   document.getElementById('gwSaveBtn').textContent = g ? 'Save changes' : 'Start giveaway';
   document.getElementById('gwId').value = g ? g.messageId : '';
-  document.querySelector(`input[name="gwType"][value="${from ? from.type : 'timed'}"]`).checked = true;
+  const type = from && from.type === 'drop' ? 'drop' : 'timed';
+  document.querySelector(`input[name="gwType"][value="${type}"]`).checked = true;
   document.querySelectorAll('input[name="gwType"]').forEach((r) => (r.disabled = !!g));
   document.getElementById('gwTypeCards').style.opacity = g ? '0.6' : '';
   document.getElementById('gwChannelRow').style.display = g ? 'none' : '';
@@ -256,13 +261,15 @@ function openGiveawayEditor(messageId = null, { copy = false } = {}) {
   document.getElementById('gwWinners').value = from ? from.winnerCount : 1;
   document.getElementById('gwPing').value = '';
   document.getElementById('gwColor').value = from && /^#[0-9a-f]{6}$/i.test(from.colorHex) ? from.colorHex.toLowerCase() : '#5865f2';
-  document.getElementById('gwEmoji').value = from && from.type !== 'drop' ? from.emoji : '';
+  document.getElementById('gwEmoji').value = from && type !== 'drop' ? from.emoji || '' : '';
   // Show the saved text unless it's just the default (the placeholder already shows that).
-  document.getElementById('gwDesc').value = from && from.customDesc !== GW_DEFAULT_DESC[from.type] ? from.customDesc : '';
+  document.getElementById('gwDesc').value = from && from.customDesc && from.customDesc !== GW_DEFAULT_DESC[type] ? from.customDesc : '';
   const req = (from && from.requirements) || {};
   document.getElementById('gwReqRole').value = req.roleId && roles.some((r) => r.id === req.roleId) ? req.roleId : '';
   document.getElementById('gwReqDays').value = req.minDaysInServer || '';
   document.getElementById('gwReqLevel').value = req.minLevel || '';
+  document.getElementById('gwBonusRows').innerHTML = '';
+  ((from && from.bonusEntries) || []).filter((b) => roles.some((r) => r.id === b.roleId)).forEach((b) => addBonusRow(b));
   applyGiveawayTypeUi();
   editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
   document.getElementById(g ? 'gwPrize' : 'gwDuration').focus({ preventScroll: true });
@@ -288,8 +295,29 @@ function readGiveawayForm() {
       roleId: document.getElementById('gwReqRole').value || null,
       minDaysInServer: document.getElementById('gwReqDays').value,
       minLevel: document.getElementById('gwReqLevel').value
-    }
+    },
+    bonusEntries: [...document.querySelectorAll('.gw-bonus-row')]
+      .map((row) => ({ roleId: row.querySelector('.gb-role').value, extra: row.querySelector('.gb-extra').value }))
+      .filter((b) => b.roleId && Number(b.extra) > 0)
   };
+}
+
+function addBonusRow(b = { roleId: '', extra: 1 }) {
+  const rows = document.getElementById('gwBonusRows');
+  if (rows.children.length >= 5) return showToast('Up to 5 bonus roles.');
+  const row = document.createElement('div');
+  row.className = 'field-row gw-bonus-row';
+  row.innerHTML = `
+    <select class="gb-role" aria-label="Bonus role"><option value="">— Pick a role —</option>${roles.map((r) => `<option value="${r.id}" ${r.id === b.roleId ? 'selected' : ''}>@${esc(r.name)}</option>`).join('')}</select>
+    <input type="number" class="gb-extra" min="1" max="10" value="${esc(b.extra || 1)}" style="flex:0 0 110px;" aria-label="Extra entries" title="Extra entries">
+    <button class="btn secondary small" type="button" aria-label="Remove bonus role">✕</button>`;
+  row.querySelector('button').addEventListener('click', () => {
+    row.remove();
+    renderGiveawayPreview();
+  });
+  row.querySelectorAll('select, input').forEach((el) => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderGiveawayPreview));
+  rows.appendChild(row);
+  renderGiveawayPreview();
 }
 
 // Mirrors buildGiveawayEmbed() in the bot so the preview matches what gets posted.
@@ -304,7 +332,9 @@ function renderGiveawayPreview() {
   const endTs = ms ? Date.now() + ms : editing ? editing.endTimestamp : Date.now() + 86400000;
   const prize = f.prize || 'Your prize';
   const reqs = requirementLines({ roleId: f.requirements.roleId, minDaysInServer: Number(f.requirements.minDaysInServer) || 0, minLevel: Number(f.requirements.minLevel) || 0 });
-  const reqText = reqs.length ? `\n\n**Requirements:**\n${reqs.join('\n')}` : '';
+  const reqText =
+    (reqs.length ? `\n\n**Requirements:**\n${reqs.join('\n')}` : '') +
+    (!isDrop && f.bonusEntries.length ? `\n\n**Bonus entries:** ${f.bonusEntries.map((b) => `<@&${b.roleId}> +${Number(b.extra)}`).join(' · ')}` : '');
   const desc = f.description || GW_DEFAULT_DESC[f.type];
   const host = '\u0001HOST\u0001'; // swapped for a pill below so it never depends on the member cache
   const hostName = editing ? editing.hostName || 'host' : viewer.username;
@@ -352,6 +382,55 @@ async function saveGiveaway() {
   loadGiveaways();
 }
 
+const entrantState = { id: null, list: [] };
+
+async function openEntrants(id) {
+  const g = [...gwState.running, ...gwState.ended].find((x) => x.messageId === id);
+  entrantState.id = id;
+  entrantState.ended = g ? g.ended : true;
+  document.getElementById('gwEntrantsTitle').textContent = `👥 ${g ? g.prize : 'Entrants'}`;
+  document.getElementById('gwEntrantsSearch').value = '';
+  document.getElementById('gwEntrantsList').innerHTML = '<p class="muted">Loading…</p>';
+  document.getElementById('gwEntrantsDialog').showModal();
+  try {
+    const data = await manageApi('GET', `giveaways/${id}/entrants`);
+    entrantState.list = data.entrants;
+    document.getElementById('gwEntrantsSummary').textContent =
+      `${data.total} ${data.total === 1 ? 'person' : 'people'}${data.tickets !== data.total ? ` · ${data.tickets} tickets with bonuses` : ''}`;
+    renderEntrants();
+  } catch (err) {
+    document.getElementById('gwEntrantsList').innerHTML = `<p class="muted">❌ ${esc(err.message)}</p>`;
+  }
+}
+
+function renderEntrants() {
+  const q = document.getElementById('gwEntrantsSearch').value.trim().toLowerCase();
+  const list = entrantState.list.filter((e) => !q || `${e.name || ''} ${e.username || ''} ${e.id}`.toLowerCase().includes(q));
+  document.getElementById('gwEntrantsList').innerHTML = list.length
+    ? list
+        .map(
+          (e) => `<div class="entrant-row">
+            ${e.avatarUrl ? `<img src="${esc(e.avatarUrl)}" alt="">` : '<span class="entrant-avatar"></span>'}
+            <div style="flex:1; min-width:0;"><strong>${esc(e.name || 'Left the server')}</strong> <span class="muted" style="font-size:0.78rem;">${esc(e.username ? '@' + e.username : e.id)}</span></div>
+            ${e.won ? '<span class="status-chip good"><span class="dot"></span>Winner</span>' : ''}
+            ${e.tickets > 1 ? `<span class="status-chip"><span class="dot"></span>${e.tickets} tickets</span>` : ''}
+            ${entrantState.ended ? '' : `<button class="btn secondary small" onclick="removeEntrant('${e.id}', this)">Remove</button>`}
+          </div>`
+        )
+        .join('')
+    : '<p class="muted">Nobody matches.</p>';
+}
+
+async function removeEntrant(userId, btn) {
+  const e = entrantState.list.find((x) => x.id === userId);
+  if (!confirm(`Remove ${e && e.name ? e.name : userId} from this giveaway? They can enter again unless requirements stop them.`)) return;
+  const data = await withButton(btn, () => manageApi('DELETE', `giveaways/${entrantState.id}/entrants/${userId}`), '👋 Entrant removed.');
+  if (!data) return;
+  entrantState.list = entrantState.list.filter((x) => x.id !== userId);
+  renderEntrants();
+  loadGiveaways();
+}
+
 async function endGiveaway(id, btn) {
   const g = gwState.running.find((x) => x.messageId === id);
   if (!confirm(`End “${g ? g.prize : 'this giveaway'}” now and draw the winners?`)) return;
@@ -394,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderGiveawayPreview();
     })
   );
+  document.getElementById('gwEntrantsSearch').addEventListener('input', renderEntrants);
   ['gwChannel', 'gwPrize', 'gwDuration', 'gwWinners', 'gwPing', 'gwColor', 'gwEmoji', 'gwDesc', 'gwReqRole', 'gwReqDays', 'gwReqLevel'].forEach((id) => {
     const el = document.getElementById(id);
     el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderGiveawayPreview);
@@ -909,6 +989,231 @@ async function removeMediaOnly(channelId, btn) {
   if (!confirm(`Turn off media-only in ${channelLabel(channelId)}?`)) return;
   const data = await withButton(btn, () => manageApi('DELETE', `mediaonly/${channelId}`), '✅ Media-only turned off.');
   if (data) loadMediaOnly();
+}
+
+/* ------------------------------------------------------------------ Moderation cases */
+
+const CASE_TYPES = {
+  warn: { label: 'Warning', emoji: '⚠️', tone: 'warn' },
+  timeout: { label: 'Timeout', emoji: '⏳', tone: 'warn' },
+  untimeout: { label: 'Timeout removed', emoji: '🔊', tone: 'good' },
+  kick: { label: 'Kick', emoji: '👢', tone: 'off' },
+  ban: { label: 'Ban', emoji: '🔨', tone: 'off' },
+  unban: { label: 'Unban', emoji: '🕊️', tone: 'good' }
+};
+const caseState = { page: 1, init: false, cases: [] };
+
+function fmtDuration(ms) {
+  const parts = [];
+  let s = Math.round(ms / 1000);
+  for (const [l, n] of [['d', 86400], ['h', 3600], ['m', 60], ['s', 1]]) {
+    const v = Math.floor(s / n);
+    if (v) parts.push(`${v}${l}`);
+    s -= v * n;
+  }
+  return parts.join(' ') || '0s';
+}
+
+// A picked member, or a pasted user ID (for banning people who already left, or unbanning).
+function pickedUserId(input) {
+  if (input.dataset.userId) return input.dataset.userId;
+  const raw = input.value.trim().replace(/[<@!>]/g, '');
+  return /^\d{5,25}$/.test(raw) ? raw : null;
+}
+
+function initCases() {
+  if (!document.getElementById('csList')) return;
+  if (!caseState.init) {
+    caseState.init = true;
+    attachMemberPicker(document.getElementById('csUser'));
+    attachMemberPicker(document.getElementById('csFilterUser'), { onPick: () => loadCases(1) });
+    document.getElementById('csFilterType').addEventListener('change', () => loadCases(1));
+    document.getElementById('csType').addEventListener('change', syncCaseForm);
+    syncCaseForm();
+  }
+  loadCases(caseState.page);
+}
+
+function syncCaseForm() {
+  const type = document.getElementById('csType').value;
+  const dur = document.getElementById('csDuration');
+  dur.style.display = type === 'timeout' || type === 'ban' ? '' : 'none';
+  dur.placeholder = type === 'ban' ? 'Temp ban? e.g. 7d (empty = permanent)' : 'Duration, e.g. 10m, 1h, 1d';
+  document.getElementById('csDelete').style.display = type === 'ban' ? '' : 'none';
+  const btn = document.getElementById('csBtn');
+  btn.textContent = { warn: 'Warn', timeout: 'Time out', untimeout: 'Remove timeout', kick: 'Kick', ban: 'Ban', unban: 'Unban' }[type];
+  btn.classList.toggle('danger', ['kick', 'ban'].includes(type));
+  document.getElementById('csHint').textContent =
+    type === 'unban' ? 'Paste the user ID of someone who is banned (right-click them → Copy User ID).' : type === 'ban' ? 'You can ban people who already left by pasting their user ID.' : '';
+}
+
+async function loadCases(page = 1) {
+  const list = document.getElementById('csList');
+  if (!list) return;
+  const params = new URLSearchParams({ page: Math.max(1, page) });
+  const userId = pickedUserId(document.getElementById('csFilterUser'));
+  if (userId) params.set('user', userId);
+  const type = document.getElementById('csFilterType').value;
+  if (type) params.set('type', type);
+  try {
+    const data = await manageApi('GET', `cases?${params}`);
+    caseState.page = data.page;
+    caseState.cases = data.cases;
+    caseState.settings = data.settings;
+    renderEscalation(data.settings);
+    document.getElementById('csSummary').textContent = userId
+      ? `${data.total} case${data.total === 1 ? '' : 's'} · ${data.activeWarnings} active warning${data.activeWarnings === 1 ? '' : 's'}`
+      : `${data.total} case${data.total === 1 ? '' : 's'} in total`;
+    document.getElementById('csPage').textContent = `Page ${data.page} / ${data.totalPages}`;
+    document.getElementById('csPrev').disabled = data.page <= 1;
+    document.getElementById('csNext').disabled = data.page >= data.totalPages;
+    list.innerHTML = data.cases.length
+      ? data.cases
+          .map((c) => {
+            const t = CASE_TYPES[c.type];
+            const extras = [c.durationMs ? fmtDuration(c.durationMs) : '', c.auto ? 'automatic' : '', c.type === 'warn' && !c.active ? 'revoked' : '', c.expiresAt && c.active ? `ends ${fromNow(new Date(c.expiresAt).getTime())}` : '']
+              .filter(Boolean)
+              .join(' · ');
+            return `<div class="case-row ${c.type === 'warn' && !c.active ? 'revoked' : ''}">
+              <span class="case-id">#${c.caseId}</span>
+              <span class="status-chip ${t.tone}"><span class="dot"></span>${t.emoji} ${t.label}</span>
+              <div class="case-main">
+                <div><strong>${esc(c.userName || c.userTag || c.userId)}</strong> <span class="muted" style="font-size:0.78rem;">${esc(c.userTag || '')}</span>${extras ? ` <span class="muted" style="font-size:0.78rem;">· ${esc(extras)}</span>` : ''}</div>
+                <div class="muted" style="font-size:0.82rem;">${esc(c.reason || 'No reason given')} — ${esc(c.moderatorTag || 'LoofaryBot')} · ${fromNow(new Date(c.createdAt).getTime())}</div>
+              </div>
+              <span class="item-actions">
+                ${c.type === 'warn' && c.active ? `<button class="btn secondary small" onclick="revokeCaseRow(${c.caseId}, this)">Revoke</button>` : ''}
+                <button class="btn secondary small" onclick="editCaseReason(${c.caseId})">Edit reason</button>
+                <button class="btn secondary small" title="Show this member's cases" onclick="filterCasesBy('${c.userId}', ${JSON.stringify(esc(c.userName || c.userTag || c.userId)).replace(/"/g, '&quot;')})">History</button>
+                <button class="btn danger small" onclick="deleteCaseRow(${c.caseId})">Delete</button>
+              </span>
+            </div>`;
+          })
+          .join('')
+      : '<p class="muted" style="margin:0;">No cases match.</p>';
+  } catch (err) {
+    list.textContent = `❌ ${err.message}`;
+  }
+}
+
+function filterCasesBy(userId, name) {
+  const input = document.getElementById('csFilterUser');
+  input.value = name;
+  input.dataset.userId = userId;
+  loadCases(1);
+  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function clearCaseFilter() {
+  const input = document.getElementById('csFilterUser');
+  input.value = '';
+  delete input.dataset.userId;
+  document.getElementById('csFilterType').value = '';
+  loadCases(1);
+}
+
+async function runCaseAction() {
+  const type = document.getElementById('csType').value;
+  const input = document.getElementById('csUser');
+  const userId = pickedUserId(input);
+  if (!userId) return showToast('❌ Pick a member from the list, or paste a user ID.');
+  const reason = document.getElementById('csReason').value.trim();
+  if (type === 'warn' && !reason) return showToast('❌ Give a reason for the warning.');
+  const duration = document.getElementById('csDuration').value.trim();
+  if (type === 'timeout' && !parseDurationInput(duration)) return showToast('❌ Give a timeout length, e.g. 10m, 1h, 1d.');
+  if (duration && ['timeout', 'ban'].includes(type) && !parseDurationInput(duration)) return showToast('❌ Invalid duration.');
+  const who = input.value.trim() || userId;
+  const verb = { kick: 'Kick', ban: duration ? `Ban (for ${duration})` : 'Permanently ban' }[type];
+  if (verb && !confirm(`${verb} ${who}?`)) return;
+  const data = await withButton(
+    document.getElementById('csBtn'),
+    () => manageApi('POST', 'cases/action', { type, userId, reason, duration, deleteMessageSeconds: document.getElementById('csDelete').value }),
+    (d) => {
+      let msg = `✅ Case #${d.case.caseId}: ${CASE_TYPES[type].label.toLowerCase()} — ${d.case.userTag}`;
+      if (['warn', 'timeout', 'kick', 'ban'].includes(type)) msg += d.dmSent ? ' · DM sent' : ' · DM not delivered';
+      if (d.escalated) msg += d.escalated.error ? ` · ⚠️ escalation failed: ${d.escalated.error}` : ` · 🔺 auto ${CASE_TYPES[d.escalated.case.type].label.toLowerCase()} (case #${d.escalated.case.caseId})`;
+      return msg;
+    }
+  );
+  if (!data) return;
+  document.getElementById('csReason').value = '';
+  document.getElementById('csDuration').value = '';
+  loadCases(1);
+}
+
+async function revokeCaseRow(id, btn) {
+  if (!confirm(`Revoke warning #${id}? It stays on record but no longer counts toward escalation.`)) return;
+  const data = await withButton(btn, () => manageApi('POST', `cases/${id}/revoke`), `↩️ Warning #${id} revoked.`);
+  if (data) loadCases(caseState.page);
+}
+
+async function editCaseReason(id) {
+  const c = caseState.cases.find((x) => x.caseId === id);
+  const reason = prompt(`New reason for case #${id}:`, c ? c.reason : '');
+  if (reason === null) return;
+  const data = await withButton(null, () => manageApi('POST', `cases/${id}/reason`, { reason }), `✏️ Case #${id} updated.`);
+  if (data) loadCases(caseState.page);
+}
+
+async function deleteCaseRow(id) {
+  if (!confirm(`Delete case #${id} from the record? This doesn't undo the action itself.`)) return;
+  const data = await withButton(null, () => manageApi('DELETE', `cases/${id}`), `🗑️ Case #${id} deleted.`);
+  if (data) loadCases(caseState.page);
+}
+
+function escalationRow(r = { count: '', action: 'timeout', durationMs: null }) {
+  const row = document.createElement('div');
+  row.className = 'field-row esc-row';
+  row.innerHTML = `
+    <input type="number" class="esc-count" min="1" max="50" placeholder="Warnings" value="${esc(r.count)}" style="flex:0 0 110px;" aria-label="Warnings">
+    <select class="esc-action" aria-label="Action">
+      <option value="timeout" ${r.action === 'timeout' ? 'selected' : ''}>⏳ Timeout</option>
+      <option value="kick" ${r.action === 'kick' ? 'selected' : ''}>👢 Kick</option>
+      <option value="ban" ${r.action === 'ban' ? 'selected' : ''}>🔨 Ban</option>
+    </select>
+    <input class="esc-duration" placeholder="Duration (e.g. 1h)" value="${r.durationMs ? fmtDuration(r.durationMs).replace(/ /g, '') : ''}" aria-label="Duration">
+    <button class="btn secondary small" type="button" aria-label="Remove rule">✕</button>`;
+  const sync = () => {
+    const a = row.querySelector('.esc-action').value;
+    const d = row.querySelector('.esc-duration');
+    d.style.display = a === 'kick' ? 'none' : '';
+    d.placeholder = a === 'ban' ? 'Temp ban (empty = permanent)' : 'Duration (e.g. 1h)';
+  };
+  row.querySelector('.esc-action').addEventListener('change', sync);
+  row.querySelector('button').addEventListener('click', () => row.remove());
+  sync();
+  return row;
+}
+
+function renderEscalation(settings) {
+  const rows = document.getElementById('escRows');
+  if (!rows || !settings || rows.dataset.loaded) return;
+  rows.dataset.loaded = '1';
+  rows.innerHTML = '';
+  settings.escalation.forEach((r) => rows.appendChild(escalationRow(r)));
+  if (!settings.escalation.length) rows.innerHTML = '<p class="muted esc-empty" style="margin:0; font-size:0.84rem;">No rules yet — e.g. 3 warnings → 1h timeout, 5 → kick.</p>';
+  document.getElementById('escDm').checked = settings.dmEnabled;
+}
+
+function addEscalationRow() {
+  const rows = document.getElementById('escRows');
+  rows.querySelector('.esc-empty')?.remove();
+  rows.appendChild(escalationRow());
+}
+
+async function saveEscalation() {
+  const escalation = [...document.querySelectorAll('.esc-row')]
+    .map((row) => ({
+      count: row.querySelector('.esc-count').value,
+      action: row.querySelector('.esc-action').value,
+      duration: row.querySelector('.esc-action').value === 'kick' ? '' : row.querySelector('.esc-duration').value.trim()
+    }))
+    .filter((r) => r.count);
+  await withButton(
+    document.getElementById('escSaveBtn'),
+    () => manageApi('POST', 'cases/settings', { escalation, dmEnabled: document.getElementById('escDm').checked }),
+    (d) => `✅ Saved ${d.escalation.length} escalation rule${d.escalation.length === 1 ? '' : 's'}.`
+  );
 }
 
 /* ------------------------------------------------------------------ Member XP (leaderboard page) */

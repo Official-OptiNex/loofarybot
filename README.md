@@ -144,8 +144,10 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - `coinflip` — 50/50, pays `2 × (1 − edge)`.
 - `blackjack` — 6-deck shoe, dealer stands on 17, blackjack pays 3:2, double down on the first
   two cards (no splits). The house edge is taken from winnings.
-- `mines` — a 5×5 board with 1–24 mines. Every gem multiplies your winnings by
-  `tiles left ÷ safe tiles left`; hit a mine and the bet is lost. Cash out any time.
+- `mines` — a 5×5 board with 1–24 mines. **More mines pay more:** every gem multiplies your
+  winnings by `tiles left ÷ safe tiles left`. With the default edge, 3 gems pay ×1.09 with 1 mine,
+  ×1.43 with 3 mines and ×4.85 with 10 mines. Hit a mine and the bet is lost; cash out any time. The board shows the
+  payout ladder for the next few gems, and the `mines` option previews it as you type.
 - `highlow` — call whether the next card (A–K) is higher-or-same or lower-or-same. Each correct
   call multiplies winnings by `1 ÷ chance`. You can skip a card, and cash out any time.
 - **Free play:** if a loss leaves a player below the minimum bet, they get one free **300 XP** bet
@@ -156,6 +158,14 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   average whatever strategy is used. Admins set the edge, min/max bet, and an optional
   gambling-only channel with `/gamble config`. Bets are taken atomically up front, so the same
   XP can't be spent twice.
+- **Daily limit:** members can play **10 games a day** by default (resets at midnight UTC). Every
+  result shows how many plays are left. Change it (0 = unlimited) with `/gamble config
+  daily_limit:` or the dashboard. A game that fails to start doesn't use a play.
+- **Max win per game** (optional, `/gamble config max_win:` or the dashboard): caps what one game
+  can pay. Mines and high-low cash out automatically when the cap is reached.
+- **Dismissed the private controls?** The game keeps going. `/gamble resume` (or the **Show my
+  controls** button on the "finish your game" message) brings them back. Left alone, the game ends
+  after 3 minutes as below, so nothing is lost.
 - An idle game ends after 3 minutes: winnings are cashed out, blackjack auto-stands, and a game
   with nothing won yet is refunded. Restarts settle or refund open games too.
 - Others can watch a game live on its public board, but only the player gets working buttons, in a
@@ -186,8 +196,28 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - Every `message_id` option autocompletes — start typing the prize. Duration options suggest
   common values and show what you typed (e.g. `90m (1h 30m)`).
 - `/loof drop` posts a **Claim!** button; the first N members to click win instantly.
+- **Bonus entries:** give members with certain roles extra tickets (e.g. Boosters +2 = 3 tickets).
+  Their best bonus counts. Set it with `bonus_role`/`bonus_entries` on `/loof start` and
+  `/loof edit`, in the `/loof create` Requirements form, or on the dashboard. Draws are weighted
+  and fair (cryptographic randomness), and rerolls prefer people who haven't won yet.
+- **Entrants:** `/loof entries` or the dashboard's **👥 Entrants** button lists who entered and
+  their ticket counts. The dashboard can also remove an entrant.
+- Older giveaways created before the type/requirements options existed now open correctly in the
+  dashboard's **Edit** and **Duplicate**.
 
 ### Moderation & Security
+- **Cases:** `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban` (optionally temporary, by user ID,
+  with message deletion) and `/unban` each create a numbered case. The member is DM'd the reason
+  (turn off with `/cases dm`), and the action is logged under the new *Moderation actions* log
+  event. The bot refuses actions on the owner, admins (timeouts), yourself, or anyone at or above
+  your top role. Temporary bans are lifted automatically.
+- `/cases user|recent|view|reason|revoke|delete` browses and edits the history. Revoked warnings
+  stay on record but stop counting.
+- **Warning escalation:** `/cases escalation add warnings:3 action:kick` (or timeout/ban with a
+  duration). At that many active warnings the action happens automatically.
+- `/slowmode interval:30s` (or `off`) for a channel.
+- Dashboard **Moderation** page: a *Cases* tab to take action and search, revoke, edit or delete
+  cases; plus *Lockdown & purge*, *Media-only* and *Escalation & DMs* tabs.
 - Logs are stored for 30 days and shown in the dashboard's **Log viewer** (search by user, text or
   channel, filter by event type). Posting to a Discord channel is optional.
 - Message edit/delete logs include a **Jump to message** button, and edits highlight exactly what
@@ -213,7 +243,11 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   `/remind channel …`, `/remind list`, `/remind cancel`. Reminders and timed polls are stored in
   MongoDB and survive restarts.
 
-### Welcome Messages (dashboard **Welcome** tab)
+### Welcome & Goodbye Messages (dashboard **Welcome** tab, `/welcome`, `/goodbye`)
+- `/welcome set|toggle|test|show` and `/goodbye …` manage the channel, text and on/off from Discord.
+  The dashboard's **🚪 Goodbye** tab posts a message when someone leaves (same placeholders,
+  optional embed, nobody is pinged).
+- Fixed: auto-role no longer switches itself off for servers set up before the on/off option existed.
 - Greets every new member in a chosen channel with text, an optional rich embed, or both.
 - Placeholders: `{user}` (mention), `{username}`, `{server}`, `{membercount}`; use `{avatar}` as the
   thumbnail URL to show the new member's avatar. Only the new member is ever pinged.
