@@ -9,6 +9,7 @@ const registerMessageCreateEvent = require('./src/bot/events/messageCreate');
 const registerGuildMemberAddEvent = require('./src/bot/events/guildMemberAdd');
 const registerGuildMemberRemoveEvent = require('./src/bot/events/guildMemberRemove');
 const { registerLoggingEvents } = require('./src/bot/cogs/modules/logging');
+const { registerBoostListener } = require('./src/bot/cogs/modules/boosterPerks');
 
 const { registerProcessHandlers } = require('./src/bot/utils/errorReporter');
 
@@ -22,6 +23,7 @@ async function main() {
   registerGuildMemberAddEvent(client);
   registerGuildMemberRemoveEvent(client);
   registerLoggingEvents(client);
+  registerBoostListener(client);
 
   await client.login(BOT_TOKEN);
 

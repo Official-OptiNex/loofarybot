@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Giveaway = require('../../../database/models/Giveaway');
 const UserLevel = require('../../../database/models/UserLevel');
+const GuildConfig = require('../../../database/models/GuildConfig');
+const { boosterSettings } = require('./boosterPerks');
 const { parseDuration } = require('../../utils/duration');
 
 // Keys track live setTimeout handles so a redeploy doesn't create duplicate timers,
@@ -48,23 +50,37 @@ function describeRequirements(req) {
 
 // "Bonus entries: @Booster +2 · @Supporter +1" — extra chances to win for members with those roles.
 function describeBonus(g) {
-  const list = (g.bonusEntries || []).filter((b) => b.roleId && b.extra > 0);
-  return list.length ? `\n\n**Bonus entries:** ${list.map((b) => `<@&${b.roleId}> +${b.extra}`).join(' · ')}` : '';
+  const list = (g.bonusEntries || []).filter((b) => b.roleId && b.extra > 0).map((b) => `<@&${b.roleId}> +${b.extra}`);
+  if (g.boosterEntries > 0) list.push(`💎 Server boosters +${g.boosterEntries}`);
+  return list.length ? `\n\n**Bonus entries:** ${list.join(' · ')}` : '';
 }
 
-// Each entrant's number of tickets: 1, plus the best bonus among roles they hold.
-function weightFor(member, g) {
-  const list = g.bonusEntries || [];
-  if (!member || !list.length) return 1;
-  return 1 + Math.max(0, ...list.filter((b) => member.roles.cache.has(b.roleId)).map((b) => b.extra));
+// The server's booster perk, saved on each giveaway when it's posted. Giveaways from before the perk
+// existed use the server's current setting.
+async function boosterExtraFor(guildId, g) {
+  if (g.type === 'drop') return 0;
+  if (typeof g.boosterEntries === 'number') return g.boosterEntries;
+  const config = await GuildConfig.findOne({ guildId }, { boosterPerks: 1 }).lean().catch(() => null);
+  const perks = boosterSettings(config || {});
+  return perks.enabled ? perks.giveawayEntries : 0;
+}
+
+// Each entrant's number of tickets: 1, plus the best bonus they have (a bonus role, or boosting).
+function weightFor(member, g, boosterExtra = 0) {
+  if (!member) return 1;
+  const bonuses = (g.bonusEntries || []).filter((b) => member.roles?.cache?.has(b.roleId)).map((b) => b.extra);
+  if (boosterExtra > 0 && member.premiumSince) bonuses.push(boosterExtra);
+  return 1 + Math.max(0, ...bonuses);
 }
 
 async function entryWeights(guild, g, userIds) {
   const weights = new Map(userIds.map((id) => [id, 1]));
-  if (!(g.bonusEntries || []).length || !guild) return weights;
+  if (!guild) return weights;
+  const boosterExtra = await boosterExtraFor(guild.id, g);
+  if (!(g.bonusEntries || []).length && !boosterExtra) return weights;
   for (let i = 0; i < userIds.length; i += 100) {
     const members = await guild.members.fetch({ user: userIds.slice(i, i + 100) }).catch(() => null);
-    members?.forEach((m) => weights.set(m.id, weightFor(m, g)));
+    members?.forEach((m) => weights.set(m.id, weightFor(m, g, boosterExtra)));
   }
   return weights;
 }
@@ -166,6 +182,7 @@ async function postGiveaway(
   client,
   { channel, hostId, durationMs, winnerCount, prize, ping = null, colorHex, emoji, customDesc, type = 'timed', requirements = {}, bonusEntries = [] }
 ) {
+  const perks = type === 'drop' ? null : boosterSettings((await GuildConfig.findOne({ guildId: channel.guild.id }, { boosterPerks: 1 }).lean().catch(() => null)) || {});
   const draft = {
     prize,
     winnerCount,
@@ -182,7 +199,8 @@ async function postGiveaway(
       minLevel: requirements.minLevel || null
     },
     // Drops are first-come — bonus entries only apply to timed giveaways.
-    bonusEntries: type === 'drop' ? [] : cleanBonus(bonusEntries)
+    bonusEntries: type === 'drop' ? [] : cleanBonus(bonusEntries),
+    boosterEntries: perks?.enabled ? perks.giveawayEntries : 0
   };
 
   const msg = await channel.send({
@@ -369,9 +387,11 @@ async function handleButtonInteraction(interaction) {
   const updated = await Giveaway.findOneAndUpdate({ _id: g._id, ended: false }, { $addToSet: { entries: userId } }, { new: true });
   if (!updated) return interaction.reply({ content: '❌ This giveaway has ended.', ephemeral: true });
   await updateEmbedEntries(interaction.message, updated);
-  const tickets = weightFor(interaction.member, updated);
+  const boosterExtra = await boosterExtraFor(interaction.guildId, updated);
+  const tickets = weightFor(interaction.member, updated, boosterExtra);
+  const why = boosterExtra && interaction.member?.premiumSince && tickets === 1 + boosterExtra ? '💎 booster bonus' : 'role bonus';
   return interaction.reply({
-    content: tickets > 1 ? `🎉 You entered the giveaway with **${tickets} entries** (role bonus)! Click again to leave.` : '🎉 You entered the giveaway! Click again to leave.',
+    content: tickets > 1 ? `🎉 You entered the giveaway with **${tickets} entries** (${why})! Click again to leave.` : '🎉 You entered the giveaway! Click again to leave.',
     ephemeral: true
   });
 }
@@ -443,6 +463,8 @@ module.exports = {
   describeBonus,
   cleanBonus,
   entryWeights,
+  boosterExtraFor,
+  weightFor,
   weightedPick,
   checkRequirements,
   replyOrEdit,

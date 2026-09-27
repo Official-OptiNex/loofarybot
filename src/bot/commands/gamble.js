@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
-const { resendControls, getGamblingSettings, minesMultiplier, minesLadder, playCoinflip, startMines, startHighLow, startBlackjack, syncGames } = require('../cogs/modules/gambling');
+const { resendControls, getGamblingSettings, minesMultiplier, minesLadder, playCoinflip, startMines, startHighLow, startBlackjack, syncGames, dailyLimitFor } = require('../cogs/modules/gambling');
+const UserLevel = require('../../database/models/UserLevel');
 
 const betOption = (opt) => opt.setName('bet').setDescription('How much XP to bet').setMinValue(1).setRequired(true);
 
@@ -58,6 +59,9 @@ const data = new SlashCommandBuilder()
       .addIntegerOption((opt) => opt.setName('max_bet').setDescription('Maximum bet in XP (0 = no limit)').setMinValue(0))
       .addIntegerOption((opt) => opt.setName('max_win').setDescription('Most XP one game can win (0 = no limit) — games auto-cash-out at it').setMinValue(0))
       .addIntegerOption((opt) => opt.setName('daily_limit').setDescription('Games each member can play per day (default 10, 0 = unlimited)').setMinValue(0).setMaxValue(1000))
+      .addIntegerOption((opt) =>
+        opt.setName('daily_win_cap').setDescription('Most XP a member can win (net) per day — default 1000, 0 = no cap').setMinValue(0).setMaxValue(10000000)
+      )
       .addChannelOption((opt) =>
         opt
           .setName('channel')
@@ -131,7 +135,18 @@ async function execute(interaction) {
         { name: 'House edge', value: `${s.edgePercent}%`, inline: true },
         { name: 'Bet limits', value: `${s.minBet} – ${s.maxBet ? `${s.maxBet} XP` : 'no max'}`, inline: true },
         { name: 'Channel', value: s.channelId ? `<#${s.channelId}>` : 'Anywhere', inline: true },
-        { name: 'Daily limit', value: s.dailyLimit ? `${s.dailyLimit} games per member per day (resets at midnight UTC)` : 'Unlimited', inline: true },
+        {
+          name: 'Daily limit',
+          value:
+            (s.dailyLimit ? `${s.dailyLimit} games per member per day (resets at midnight UTC)` : 'Unlimited') +
+            (s.dailyLimit && s.booster.enabled && s.booster.extraGambles ? ` · 💎 boosters +${s.booster.extraGambles}` : ''),
+          inline: true
+        },
+        {
+          name: 'Daily win limit',
+          value: s.dailyWinCap ? `+${s.dailyWinCap.toLocaleString()} XP net per day — keeps gambling from skipping days of levels` : 'No cap',
+          inline: true
+        },
         { name: 'Max win per game', value: s.maxWin ? `${s.maxWin.toLocaleString()} XP (games cash out automatically at it)` : 'No cap', inline: true },
         {
           name: '🎟️ Free play',
@@ -150,6 +165,20 @@ async function execute(interaction) {
           value: `Win pays **${(2 - s.edge).toFixed(2)}x**, blackjack **${(1 + 1.5 * (1 - s.edge)).toFixed(2)}x**, push returns your bet. Dealer stands on 17; double down on your first two cards.`
         }
       );
+    // The player's own day so far.
+    const me = await UserLevel.findOne({ guildId: interaction.guildId, userId: interaction.user.id }, { gambleDay: 1, gamblesToday: 1, gambleWinDay: 1, gambleNetToday: 1 }).lean();
+    const today = new Date().toISOString().slice(0, 10);
+    const limit = dailyLimitFor(s, interaction.member);
+    const played = me?.gambleDay === today ? me.gamblesToday || 0 : 0;
+    const net = me?.gambleWinDay === today ? me.gambleNetToday || 0 : 0;
+    embed.addFields({
+      name: '📅 Your day',
+      value: [
+        limit ? `🎲 **${Math.max(0, limit - played)}** / ${limit} plays left` : '🎲 Unlimited plays',
+        `${net >= 0 ? '📈' : '📉'} Today: **${net >= 0 ? '+' : '−'}${Math.abs(net).toLocaleString()} XP**${s.dailyWinCap ? ` (limit +${s.dailyWinCap.toLocaleString()})` : ''}`,
+        `Resets <t:${Math.floor(new Date().setUTCHours(24, 0, 0, 0) / 1000)}:R>`
+      ].join(' · ')
+    });
     return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 
@@ -183,6 +212,8 @@ async function execute(interaction) {
     const maxWin = interaction.options.getInteger('max_win');
     const dailyLimit = interaction.options.getInteger('daily_limit');
     if (dailyLimit !== null) config.gamblingDailyLimit = dailyLimit;
+    const winCap = interaction.options.getInteger('daily_win_cap');
+    if (winCap !== null) config.gamblingDailyWinCap = winCap;
     if (maxWin !== null) config.gamblingMaxWin = maxWin || null;
     if (freePlay !== null) config.gamblingFreePlayEnabled = freePlay;
     if (freePlayXp !== null) config.gamblingFreePlayAmount = freePlayXp;
@@ -193,7 +224,7 @@ async function execute(interaction) {
     return interaction.reply({
       content:
         `✅ Gambling is **${s.enabled ? 'enabled' : 'disabled'}** · House edge **${s.edgePercent}%** · ` +
-        `Bets **${s.minBet}–${s.maxBet || '∞'} XP** · Max win **${s.maxWin ? `${s.maxWin} XP` : 'none'}** · **${s.dailyLimit || '∞'}** games/day · Channel: ${s.channelId ? `<#${s.channelId}>` : 'anywhere'} · ` +
+        `Bets **${s.minBet}–${s.maxBet || '∞'} XP** · Max win **${s.maxWin ? `${s.maxWin} XP` : 'none'}** · **${s.dailyLimit || '∞'}** games/day · Win cap **${s.dailyWinCap ? `+${s.dailyWinCap} XP/day` : 'none'}** · Channel: ${s.channelId ? `<#${s.channelId}>` : 'anywhere'} · ` +
         `Free play: ${s.freePlay.enabled ? `**${s.freePlay.amount} XP** every ${s.freePlay.cooldownMs / 3600000}h` : 'off'}`,
       ephemeral: true
     });

@@ -32,6 +32,8 @@ module.exports = [
     tab: 'leveling',
     commands: [
       { usage: '/daily', perm: null, description: 'Claim daily XP — consecutive days build a streak for bigger rewards.' },
+      { usage: '/perks show', perm: null, description: 'What server boosters get: extra gambles, giveaway entries, a daily XP drop and a thank-you package.' },
+      { usage: '/perks config', perm: 'Manage Server', description: 'Change the booster perks and where drops are announced.' },
       { usage: '/levels rank', perm: null, description: "See your (or someone's) level, XP and server rank." },
       { usage: '/levels leaderboard', perm: null, description: 'The server XP leaderboard.' },
       { usage: '/levels card', perm: null, description: 'Customize your rank card color, background and tagline.' },
@@ -60,10 +62,10 @@ module.exports = [
       { usage: '/gamble blackjack', perm: null, description: 'Beat the dealer to 21 — hit, stand or double down.' },
       { usage: '/gamble mines', perm: null, description: '5×5 minefield: reveal gems, avoid mines, cash out any time.' },
       { usage: '/gamble highlow', perm: null, description: 'Call higher or lower to build a multiplier, then cash out.' },
-      { usage: '/gamble info', perm: null, description: 'Payouts, house edge and bet limits.' },
+      { usage: '/gamble info', perm: null, description: 'Payouts, limits, and how many plays and how much XP you have left today.' },
       { usage: '/gamble resume', perm: null, description: 'Dismissed your private game buttons? Get them back.' },
       { usage: '/gamble sync', perm: null, description: "Stuck? End your game now and get back XP from games that didn't finish (admins: everyone:true)." },
-      { usage: '/gamble config', perm: 'Admin', description: 'Enable gambling, set the house edge, limits and channel.' }
+      { usage: '/gamble config', perm: 'Admin', description: 'Enable gambling; set the house edge, bet limits, daily plays, daily win limit and channel.' }
     ]
   },
   {

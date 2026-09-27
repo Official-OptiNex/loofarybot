@@ -109,6 +109,16 @@ const GuildConfigSchema = new mongoose.Schema(
     gamblingMaxBet: { type: Number, default: null }, // null = no cap
     gamblingMaxWin: { type: Number, default: null }, // most XP profit from one game; null = no cap
     gamblingDailyLimit: { type: Number, default: 10 }, // games per member per UTC day; 0 = unlimited
+    gamblingDailyWinCap: { type: Number, default: 1000 }, // most XP a member can come out ahead per UTC day; 0 = no cap
+    boosterPerks: {
+      enabled: { type: Boolean, default: true },
+      extraGambles: { type: Number, default: 5 }, // added to the daily gamble limit
+      giveawayEntries: { type: Number, default: 2 }, // extra tickets in every timed giveaway
+      dailyXp: { type: Number, default: 100 }, // automatic daily XP drop
+      boostXp: { type: Number, default: 500 }, // one-time thank-you package when someone boosts
+      channelId: { type: String, default: null } // where drops and thank-yous are announced (optional)
+    },
+    boosterDropDay: { type: String, default: null }, // UTC day the last daily booster drop went out
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
     gamblingFreePlayEnabled: { type: Boolean, default: true },

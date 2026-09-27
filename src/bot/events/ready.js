@@ -41,6 +41,7 @@ const mediaonlyCommand = require('../commands/mediaonly');
 const casesCommand = require('../commands/cases');
 const { commands: modActionCommands } = require('../commands/modActions');
 const { commands: greetingCommands } = require('../commands/greetings');
+const perksCommand = require('../commands/perks');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -63,7 +64,8 @@ const ALL_COMMANDS = [
   mediaonlyCommand,
   casesCommand,
   ...modActionCommands,
-  ...greetingCommands
+  ...greetingCommands,
+  perksCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -117,5 +119,8 @@ module.exports = function registerReadyEvent(client) {
 
     // Lift temporary bans when they run out.
     require('../cogs/modules/modCases').startTempBanSweeper(client);
+
+    // Daily XP drop for server boosters.
+    require('../cogs/modules/boosterPerks').startBoosterDrops(client);
   });
 };

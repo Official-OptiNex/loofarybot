@@ -443,6 +443,37 @@ router.post('/guilds/:guildId/alerts/:id/test', requireAuth, requireGuildAccess,
 
 // --- XP Gambling ---
 
+// POST booster perks (Leveling → Booster perks). Same settings as /perks config.
+router.post('/guilds/:guildId/levels/boosterperks', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const num = (v, max, label) => {
+      const n = v === '' || v === null || v === undefined ? 0 : Math.floor(Number(v));
+      if (!Number.isFinite(n) || n < 0 || n > max) throw Object.assign(new Error(`${label} must be between 0 and ${max.toLocaleString()}.`), { status: 400 });
+      return n;
+    };
+    if (b.channelId && !req.guild.channels.cache.has(String(b.channelId))) {
+      return res.status(400).json({ ok: false, error: 'That channel is not in this server.' });
+    }
+    const perks = {
+      enabled: b.enabled !== false,
+      extraGambles: num(b.extraGambles, 100, 'Extra gambles'),
+      giveawayEntries: num(b.giveawayEntries, 10, 'Extra giveaway entries'),
+      dailyXp: num(b.dailyXp, 100000, 'Daily XP'),
+      boostXp: num(b.boostXp, 1000000, 'Boost XP'),
+      channelId: b.channelId ? String(b.channelId) : null
+    };
+    const config = await getOrCreateConfig(req.guild.id);
+    config.boosterPerks = perks;
+    await config.save();
+    res.json({ ok: true, perks, boosters: req.guild.premiumSubscriptionCount ?? 0 });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ ok: false, error: err.message });
+    console.error('Failed to save booster perks:', err);
+    res.status(500).json({ ok: false, error: 'Failed to save booster perks.' });
+  }
+});
+
 router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
     const { enabled, houseEdge, minBet, maxBet, maxWin, dailyLimit, channelId, freePlayEnabled, freePlayAmount, freePlayCooldownHours } = req.body;
@@ -475,6 +506,11 @@ router.post('/guilds/:guildId/gambling', requireAuth, requireGuildAccess, guardA
       const limit = dailyLimit === '' || dailyLimit === null ? 0 : Math.floor(Number(dailyLimit));
       if (!Number.isFinite(limit) || limit < 0 || limit > 1000) return res.status(400).json({ ok: false, error: 'Daily limit must be 0–1000 games (0 = unlimited).' });
       config.gamblingDailyLimit = limit;
+    }
+    if (req.body.dailyWinCap !== undefined) {
+      const cap = req.body.dailyWinCap === '' || req.body.dailyWinCap === null ? 0 : Math.floor(Number(req.body.dailyWinCap));
+      if (!Number.isFinite(cap) || cap < 0 || cap > 10000000) return res.status(400).json({ ok: false, error: 'Daily win limit must be 0 or more XP (0 = no cap).' });
+      config.gamblingDailyWinCap = cap;
     }
     config.gamblingChannelId = channelId || null;
     if (typeof freePlayEnabled === 'boolean') config.gamblingFreePlayEnabled = freePlayEnabled;

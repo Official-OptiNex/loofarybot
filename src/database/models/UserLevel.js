@@ -17,6 +17,10 @@ const UserLevelSchema = new mongoose.Schema(
     // Daily gamble limit: how many games they've started on `gambleDay` (UTC, YYYY-MM-DD).
     gambleDay: { type: String, default: null },
     gamblesToday: { type: Number, default: 0 },
+    // Daily win cap: net XP won from gambling on `gambleWinDay` (UTC). Losses count against it.
+    gambleWinDay: { type: String, default: null },
+    gambleNetToday: { type: Number, default: 0 },
+    boostPackageAt: { type: Date, default: null }, // last booster thank-you package (once per 30 days)
     // Personal /levels card customization.
     card: {
       color: { type: String, default: null },
