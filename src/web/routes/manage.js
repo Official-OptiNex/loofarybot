@@ -763,12 +763,17 @@ router.post('/guilds/:guildId/tickets/settings', ...guard('tickets'), async (req
   const s = await tickets.saveSettings(req.guild.id, patch);
   res.locals.audit = { section: 'Tickets', action: b.publish ? 'Saved ticket settings and posted the panel' : 'Saved ticket settings', detail: '' };
   let panelUrl = null;
+  let warnings = [];
   if (b.publish) {
     const posted = await tickets.publishPanel(req.guild, b.panelChannelId ? String(b.panelChannelId) : null);
     if (posted.error) return bad(res, `Settings saved, but the panel wasn't posted: ${posted.error}`);
     panelUrl = posted.message.url;
+    warnings = posted.warnings || [];
+  } else {
+    // Support roles or locks may have changed — re-apply channel permissions right away.
+    warnings = (await tickets.applyLockdown(req.guild, s)).warnings;
   }
-  res.json({ ok: true, settings: s, panelUrl, missingPerms: tickets.missingBotPerms(req.guild, s) });
+  res.json({ ok: true, settings: s, panelUrl, warnings, missingPerms: tickets.missingBotPerms(req.guild, s) });
 });
 
 router.get('/guilds/:guildId/tickets/history', ...guard('tickets'), async (req, res) => {

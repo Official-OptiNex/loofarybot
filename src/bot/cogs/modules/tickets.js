@@ -46,7 +46,9 @@ function settingsOf(doc) {
     dmOnClose: d.dmOnClose !== false,
     closeDelaySeconds: d.closeDelaySeconds ?? DEFAULTS.closeDelaySeconds,
     logChannelId: d.logChannelId || null,
-    saveTranscripts: d.saveTranscripts !== false
+    saveTranscripts: d.saveTranscripts !== false,
+    lockPanelChannel: d.lockPanelChannel !== false,
+    lockCategory: d.lockCategory !== false
   };
 }
 
@@ -96,7 +98,7 @@ function cleanSettings(guild, input) {
       if (!Number.isFinite(n) || n < 0 || n > 10) throw new Error('Open tickets per member must be 0–10 (0 = no limit).');
       patch.maxOpenPerUser = n;
     }
-    for (const k of ['askReason', 'pingSupport', 'dmOnClose', 'saveTranscripts']) if (has(k)) patch[k] = !!input[k];
+    for (const k of ['askReason', 'pingSupport', 'dmOnClose', 'saveTranscripts', 'lockPanelChannel', 'lockCategory']) if (has(k)) patch[k] = !!input[k];
     if (has('welcomeMessage')) patch.welcomeMessage = text(input.welcomeMessage, 1500);
     if (has('closeDelaySeconds')) {
       const n = Number.parseInt(input.closeDelaySeconds, 10);
@@ -145,10 +147,10 @@ async function saveSettings(guildId, patch) {
 // ---------------------------------------------------------------- Permissions
 
 const isAdmin = (member) => !!member?.permissions?.has(PermissionFlagsBits.Administrator);
-// Support staff: admins, anyone with Manage Server, or a configured support role.
+// Support staff: administrators or a configured support role — exactly the people who can see tickets.
 function isStaff(member, s) {
   if (!member) return false;
-  if (isAdmin(member) || member.permissions?.has(PermissionFlagsBits.ManageGuild)) return true;
+  if (isAdmin(member)) return true;
   return s.supportRoleIds.some((id) => member.roles?.cache?.has(id));
 }
 
@@ -166,6 +168,100 @@ function missingBotPerms(guild, s) {
     [PermissionFlagsBits.EmbedLinks, 'Embed Links']
   ];
   return need.filter(([flag]) => !perms?.has(flag)).map(([, name]) => name);
+}
+
+// ---------------------------------------------------------------- Who can see what
+
+const F = PermissionFlagsBits;
+// What the opener and support get inside a ticket: read, talk, attach.
+const TICKET_ACCESS = [F.ViewChannel, F.SendMessages, F.ReadMessageHistory, F.AttachFiles, F.EmbedLinks, F.AddReactions];
+// Nobody else can see the channel, and nobody (except admins, who bypass) can make threads that
+// could leak it or invite others in.
+const TICKET_EVERYONE_DENY = [F.ViewChannel, F.SendMessages, F.CreatePublicThreads, F.CreatePrivateThreads, F.SendMessagesInThreads];
+const BOT_TICKET_ALLOW = [...TICKET_ACCESS, F.ManageChannels, F.ManageRoles, F.ManageMessages];
+
+const supportRolesIn = (guild, s) => s.supportRoleIds.filter((id) => guild.roles.cache.has(id));
+
+// The complete permission list for a ticket channel: only the opener, members staff added with
+// /ticket add, the support roles, and LoofaryBot. Administrators see it because they bypass overwrites.
+function ticketOverwrites(guild, s, openerId, addedIds = []) {
+  return [
+    { id: guild.roles.everyone.id, deny: TICKET_EVERYONE_DENY },
+    { id: guild.members.me.id, allow: BOT_TICKET_ALLOW },
+    ...supportRolesIn(guild, s).map((id) => ({ id, allow: TICKET_ACCESS, deny: [F.CreatePublicThreads, F.CreatePrivateThreads] })),
+    { id: openerId, allow: TICKET_ACCESS, deny: [F.CreatePublicThreads, F.CreatePrivateThreads, F.MentionEveryone] },
+    ...addedIds.filter((id) => id !== openerId).map((id) => ({ id, allow: TICKET_ACCESS, deny: [F.CreatePublicThreads, F.CreatePrivateThreads, F.MentionEveryone] }))
+  ];
+}
+
+// Panel channel: members can read it and click the button, but can't talk, react or open threads.
+async function lockPanelChannel(guild, channel) {
+  const why = 'Ticket panel channel: members can only click the button';
+  await channel.permissionOverwrites.edit(
+    guild.roles.everyone.id,
+    {
+      ViewChannel: true,
+      ReadMessageHistory: true,
+      SendMessages: false,
+      AddReactions: false,
+      CreatePublicThreads: false,
+      CreatePrivateThreads: false,
+      SendMessagesInThreads: false
+    },
+    { reason: why }
+  );
+  await channel.permissionOverwrites.edit(
+    guild.members.me.id,
+    { ViewChannel: true, SendMessages: true, EmbedLinks: true, ReadMessageHistory: true },
+    { reason: why }
+  );
+}
+
+// Ticket category: hidden from everyone but support and LoofaryBot, so members only ever see their own ticket.
+async function lockCategory(guild, s) {
+  const category = s.categoryId ? guild.channels.cache.get(s.categoryId) : null;
+  if (!category || category.type !== ChannelType.GuildCategory) return;
+  const why = 'Ticket category: only support staff and LoofaryBot';
+  await category.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false }, { reason: why });
+  await category.permissionOverwrites.edit(guild.members.me.id, { ViewChannel: true, ManageChannels: true, ManageRoles: true, SendMessages: true }, { reason: why });
+  for (const id of supportRolesIn(guild, s)) await category.permissionOverwrites.edit(id, { ViewChannel: true }, { reason: why });
+}
+
+// Re-applies the exact ticket permissions to every open ticket (after support roles change, or if
+// someone loosened a ticket's permissions by hand).
+async function syncOpenTickets(guild, s) {
+  const open = await Ticket.find({ guildId: guild.id, status: 'OPEN' }).lean();
+  let fixed = 0;
+  for (const t of open) {
+    const channel = guild.channels.cache.get(t.channelId);
+    if (!channel) continue;
+    await channel.permissionOverwrites.set(ticketOverwrites(guild, s, t.openerId, t.addedUserIds || []), 'Ticket permissions re-applied');
+    fixed++;
+  }
+  return fixed;
+}
+
+/**
+ * Applies every lock the settings ask for. Never throws — returns a list of warnings to show the admin
+ * (usually LoofaryBot missing Manage Roles on a channel).
+ */
+async function applyLockdown(guild, s = null) {
+  s = s || (await getSettings(guild.id));
+  const warnings = [];
+  const panel = s.panelChannelId ? guild.channels.cache.get(s.panelChannelId) : null;
+  if (s.lockPanelChannel && panel) {
+    await lockPanelChannel(guild, panel).catch((err) =>
+      warnings.push(`Couldn't make #${panel.name} button-only — LoofaryBot needs Manage Roles there. (${err.message})`)
+    );
+  }
+  if (s.lockCategory && s.categoryId) {
+    await lockCategory(guild, s).catch((err) => warnings.push(`Couldn't hide the ticket category — LoofaryBot needs Manage Roles on it. (${err.message})`));
+  }
+  const fixed = await syncOpenTickets(guild, s).catch((err) => {
+    warnings.push(`Couldn't update the permissions of open tickets. (${err.message})`);
+    return 0;
+  });
+  return { warnings, fixed };
 }
 
 // ---------------------------------------------------------------- Panel
@@ -213,7 +309,8 @@ async function publishPanel(guild, channelId = null) {
   doc.panelChannelId = channel.id;
   doc.panelMessageId = message.id;
   await doc.save();
-  return { message };
+  const { warnings } = await applyLockdown(guild, settingsOf(doc.toObject()));
+  return { message, warnings };
 }
 
 // ---------------------------------------------------------------- Opening
@@ -284,16 +381,7 @@ async function openTicket(member, { reason = null } = {}) {
     const counter = await TicketConfig.findOneAndUpdate({ guildId: guild.id }, { $inc: { counter: 1 } }, { new: true, upsert: true, setDefaultsOnInsert: true });
     const number = counter.counter;
     const category = s.categoryId && guild.channels.cache.get(s.categoryId)?.type === ChannelType.GuildCategory ? s.categoryId : null;
-    const access = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.EmbedLinks];
-    const overwrites = [
-      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      {
-        id: guild.members.me.id,
-        allow: [...access, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageMessages]
-      },
-      { id: member.id, allow: access },
-      ...s.supportRoleIds.filter((id) => guild.roles.cache.has(id)).map((id) => ({ id, allow: access }))
-    ];
+    const overwrites = ticketOverwrites(guild, s, member.id);
 
     let channel;
     try {
@@ -364,7 +452,7 @@ async function refreshButtons(channel, ticket) {
 }
 
 async function setMemberAccess(channel, ticket, userId, allow) {
-  const access = { ViewChannel: allow, SendMessages: allow, AttachFiles: allow, ReadMessageHistory: allow, EmbedLinks: allow };
+  const access = { ViewChannel: true, SendMessages: true, AttachFiles: true, ReadMessageHistory: true, EmbedLinks: true, AddReactions: true, CreatePublicThreads: false, CreatePrivateThreads: false, MentionEveryone: false };
   if (allow) await channel.permissionOverwrites.edit(userId, access, { reason: `Added to ticket #${ticket.number}` });
   else await channel.permissionOverwrites.delete(userId, `Removed from ticket #${ticket.number}`);
   const set = new Set(ticket.addedUserIds || []);
@@ -601,6 +689,9 @@ module.exports = {
   cleanSettings,
   saveSettings,
   isStaff,
+  ticketOverwrites,
+  applyLockdown,
+  syncOpenTickets,
   missingBotPerms,
   buildPanel,
   publishPanel,

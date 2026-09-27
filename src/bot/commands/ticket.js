@@ -53,6 +53,8 @@ const data = new SlashCommandBuilder()
         o.setName('log_channel').setDescription('Post a summary + transcript here when tickets close').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
       )
       .addBooleanOption((o) => o.setName('dm_on_close').setDescription('DM members when their ticket is closed (default on)'))
+      .addBooleanOption((o) => o.setName('lock_panel_channel').setDescription('Members can only click the button in the panel channel — no messages (default on)'))
+      .addBooleanOption((o) => o.setName('hide_category').setDescription('Hide the ticket category from everyone but support (default on)'))
   )
   .addSubcommand((s) =>
     s.setName('close').setDescription('Close this ticket').addStringOption((o) => o.setName('reason').setDescription('Why it was closed').setMaxLength(500))
@@ -94,6 +96,8 @@ async function execute(interaction) {
     if (o.getInteger('max_open') !== null) input.maxOpenPerUser = o.getInteger('max_open');
     if (o.getBoolean('ask_reason') !== null) input.askReason = o.getBoolean('ask_reason');
     if (o.getBoolean('dm_on_close') !== null) input.dmOnClose = o.getBoolean('dm_on_close');
+    if (o.getBoolean('lock_panel_channel') !== null) input.lockPanelChannel = o.getBoolean('lock_panel_channel');
+    if (o.getBoolean('hide_category') !== null) input.lockCategory = o.getBoolean('hide_category');
     if (o.getChannel('log_channel')) input.logChannelId = o.getChannel('log_channel').id;
     const panel = {};
     for (const [opt, key] of [['title', 'title'], ['description', 'description'], ['color', 'color'], ['thumbnail', 'thumbnailUrl'], ['banner', 'imageUrl'], ['footer', 'footer']]) {
@@ -114,11 +118,17 @@ async function execute(interaction) {
     const posted = await tickets.publishPanel(guild, o.getChannel('channel').id);
     if (posted.error) return interaction.editReply(`⚠️ Settings saved, but the panel couldn't be posted: ${posted.error}`);
     const missing = tickets.missingBotPerms(guild, s);
+    const locks = [
+      s.lockPanelChannel ? `🔒 <#${posted.message.channelId}> is button-only for members` : null,
+      s.lockCategory && s.categoryId ? '🙈 the ticket category is hidden from everyone but support' : null
+    ].filter(Boolean);
     return interaction.editReply(
       `✅ **Tickets are set up.** Panel: ${posted.message.url}\n` +
+        (locks.length ? `${locks.join(' · ')} · tickets are visible only to the opener, support roles and admins\n` : '') +
         `**Category:** ${s.categoryId ? `<#${s.categoryId}>` : 'none (top of the channel list)'} · **Support:** ${s.supportRoleIds.map((id) => `<@&${id}>`).join(' ') || 'admins only'} · ` +
         `**Names:** \`${tickets.channelName(s.nameFormat, 1, interaction.user)}\` · **Per member:** ${s.maxOpenPerUser || 'no limit'}` +
         (missing.length ? `\n⚠️ LoofaryBot still needs **${missing.join(', ')}** to create ticket channels.` : '') +
+        (posted.warnings?.length ? `\n⚠️ ${posted.warnings.join('\n⚠️ ')}` : '') +
         `\n-# Change the look, welcome message and more on the dashboard: ${dashboardUrl(guild.id)}`
     );
   }
@@ -126,7 +136,8 @@ async function execute(interaction) {
   if (sub === 'panel') {
     await interaction.deferReply({ ephemeral: true });
     const posted = await tickets.publishPanel(guild);
-    return interaction.editReply(posted.error ? `❌ ${posted.error}` : `✅ Panel posted: ${posted.message.url}`);
+    if (posted.error) return interaction.editReply(`❌ ${posted.error}`);
+    return interaction.editReply(`✅ Panel posted: ${posted.message.url}${posted.warnings?.length ? `\n⚠️ ${posted.warnings.join('\n⚠️ ')}` : ''}`);
   }
 
   if (sub === 'toggle') {

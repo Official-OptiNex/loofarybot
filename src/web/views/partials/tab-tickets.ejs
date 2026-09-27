@@ -40,11 +40,19 @@
                 <div class="setting-control"><select id="tkCategory"><option value="">No category (top of the list)</option></select></div>
               </div>
               <div class="setting-row stack">
-                <div><div class="setting-title">Support roles</div><div class="setting-help">Can see every ticket and use Claim, Ping and Close. Admins and members with Manage Server always can.</div></div>
+                <div><div class="setting-title">Support roles</div><div class="setting-help">The only roles that can see and talk in tickets (with the member who opened it) and use Claim, Ping and Close. Administrators always can.</div></div>
                 <input type="search" id="tkRoleSearch" placeholder="Filter roles…" aria-label="Filter roles">
                 <div class="check-grid" id="tkRoles">
                   <% roles.forEach(r => { %><label class="check-pill" data-name="<%= r.name.toLowerCase() %>"><input type="checkbox" value="<%= r.id %>" class="tk-role"><span>@<%= r.name %></span></label><% }) %>
                 </div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">🔒 Button-only panel channel</div><div class="setting-help">Members can see the panel and click the button, but can't send messages, react or start threads there. Admins can still post.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="tkLockPanel"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">🙈 Hide the ticket category</div><div class="setting-help">Only support roles and admins see the category. Each ticket is always private: only its opener, support roles and admins can view it or talk in it.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="tkLockCategory"><span class="track"></span></label></div>
               </div>
               <div class="setting-row">
                 <div><div class="setting-title">Channel names</div><div class="setting-help">Use <code>{number}</code> and/or <code>{username}</code>. Example: <code id="tkNameExample">ticket-0001</code></div></div>
