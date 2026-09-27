@@ -1049,3 +1049,25 @@ kbd { font-family: inherit; font-size: 0.75rem; padding: 1px 6px; border-radius:
 .entrant-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0; border-bottom: 1px solid var(--border-card); flex-wrap: wrap; }
 .entrant-row:last-child { border-bottom: none; }
 .entrant-row img, .entrant-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--bg-elevated); flex-shrink: 0; }
+
+/* Tickets */
+.warn-card { border-left: 3px solid #f0b232; font-size: 0.88rem; }
+.check-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; max-height: 180px; overflow: auto; padding: 0.2rem 0; }
+.check-pill {
+  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.65rem; border-radius: 99px; font-size: 0.8rem; cursor: pointer;
+  background: var(--bg-elevated); border: 1px solid var(--border-card); user-select: none;
+}
+.check-pill input { width: auto; margin: 0; accent-color: #5865f2; }
+.check-pill:has(input:checked) { border-color: #5865f2; background: rgba(88, 101, 242, 0.16); }
+.tk-embed-body { display: flex; gap: 0.8rem; justify-content: space-between; align-items: flex-start; }
+.tk-embed .tk-thumb { width: 80px; height: 80px; object-fit: cover; margin-top: 0; flex-shrink: 0; }
+.mock-button.danger { background: #da373c; }
+.mock-button.secondary { background: #4e5058; }
+.ticket-num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-label); min-width: 54px; }
+.transcript { max-height: 60vh; overflow: auto; display: grid; gap: 0.55rem; font-size: 0.86rem; }
+.transcript-line { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.6rem; }
+.transcript-line .who { font-weight: 600; }
+.transcript-line .who.bot { color: #949cf7; }
+.transcript-line .when { color: var(--text-label); font-size: 0.72rem; }
+.transcript-line .text { grid-column: 1 / -1; white-space: pre-wrap; word-break: break-word; }
+.transcript-line .files a { font-size: 0.78rem; margin-right: 0.5rem; }

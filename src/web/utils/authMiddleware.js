@@ -20,6 +20,7 @@ const MOD_PAGES = {
   reactionroles: 'Reaction Roles',
   community: 'Polls & Reminders',
   moderation: 'Moderation (lockdown, purge)',
+  tickets: 'Tickets',
   embed: 'Embed Builder'
 };
 const DEFAULT_MOD_PAGES = ['leaderboard', 'commands', 'logviewer'];

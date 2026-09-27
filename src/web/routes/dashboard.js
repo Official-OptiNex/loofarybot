@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth, requireGuildAccess, resolveAccess, canUse, sessionHasManage, MOD_PAGES } = require('../utils/authMiddleware');
 const { inviteUrl } = require('../utils/site');
 const GuildConfig = require('../../database/models/GuildConfig');
+const TicketConfig = require('../../database/models/TicketConfig');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const UserLevel = require('../../database/models/UserLevel');
 const { getEffectiveXpSettings } = require('../../bot/cogs/modules/leveling');
@@ -157,6 +158,7 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     levelColorTiers: levelColors.describeTiers(configDoc || {}, guild),
     levelColorPalette: levelColors.PALETTE,
     welcome: welcomeDoc || new WelcomeConfig({ guildId: guild.id }).toObject(),
+    ticketsEnabled: (await TicketConfig.findOne({ guildId: guild.id }, { enabled: 1 }).lean().catch(() => null))?.enabled !== false,
     gambling: getGamblingSettings(config),
     logEvents: LOG_EVENTS,
     defaultTrapEmbed: DEFAULT_TRAP_EMBED,

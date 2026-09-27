@@ -142,6 +142,10 @@ function onManageTabShown(tab) {
     attachMemberPicker(document.getElementById('pgUser'));
   }
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
+  if (tab === 'tickets') {
+    loadTickets();
+    loadTicketHistory(tkState.page || 1);
+  }
 }
 
 /* ------------------------------------------------------------------ Giveaways */
@@ -1238,3 +1242,276 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!action) return;
   action.addEventListener('change', () => (document.getElementById('mxAmount').disabled = action.value === 'reset'));
 });
+
+/* ------------------------------------------------------------------ Tickets */
+
+const tkState = { loaded: false, settings: null, open: [], history: [], page: 1, searchTimer: null };
+const TK_STYLE_CLASS = { Primary: 'primary', Success: 'success', Secondary: 'secondary', Danger: 'danger' };
+
+async function loadTickets() {
+  const list = document.getElementById('tkOpenList');
+  if (!list) return;
+  let data;
+  try {
+    data = await manageApi('GET', 'tickets');
+  } catch (err) {
+    list.innerHTML = emptyCard('⚠️', esc(err.message));
+    return;
+  }
+  tkState.open = data.open;
+  const st = data.stats;
+  document.getElementById('tkStatus').innerHTML = [
+    `<span class="status-chip ${st.open ? 'warn' : 'good'}"><span class="dot"></span>${st.open} open</span>`,
+    st.open ? `<span class="status-chip ${st.unclaimed ? 'warn' : ''}"><span class="dot"></span>${st.unclaimed} unclaimed</span>` : '',
+    `<span class="status-chip"><span class="dot"></span>${st.week} this week</span>`,
+    `<span class="status-chip"><span class="dot"></span>${st.closed} closed in total</span>`,
+    data.panelUrl ? '' : '<span class="status-chip warn"><span class="dot"></span>No panel posted yet</span>'
+  ].join('');
+  const warn = document.getElementById('tkPermWarn');
+  warn.style.display = data.missingPerms.length ? '' : 'none';
+  warn.innerHTML = data.missingPerms.length
+    ? `⚠️ LoofaryBot can't create ticket channels yet — give its role <strong>${data.missingPerms.map(esc).join(', ')}</strong>${data.settings.categoryId ? ' (in the ticket category too)' : ''}.`
+    : '';
+  const link = document.getElementById('tkPanelLink');
+  link.style.display = data.panelUrl ? '' : 'none';
+  if (data.panelUrl) link.href = data.panelUrl;
+  document.getElementById('tkPublishBtn').textContent = data.panelUrl ? 'Save & update panel' : 'Save & post panel';
+
+  const cat = document.getElementById('tkCategory');
+  const keep = cat.value || data.settings.categoryId || '';
+  cat.innerHTML =
+    '<option value="">No category (top of the list)</option>' +
+    data.categories.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.children}/50)</option>`).join('');
+  cat.value = keep;
+  if (!tkState.loaded) fillTicketForm(data.settings);
+  tkState.loaded = true;
+  renderOpenTickets();
+}
+
+function renderOpenTickets() {
+  const list = document.getElementById('tkOpenList');
+  document.getElementById('tkOpenSummary').textContent = tkState.open.length
+    ? `${tkState.open.length} open ticket${tkState.open.length === 1 ? '' : 's'}`
+    : '';
+  if (!tkState.open.length) {
+    list.innerHTML = emptyCard('✨', 'No open tickets. New ones show up here as members open them.');
+    return;
+  }
+  list.innerHTML = tkState.open
+    .map(
+      (t) => `<div class="card item-card">
+        <span class="ticket-num">#${t.number}</span>
+        <div class="item-main">
+          <div class="item-title">${esc(t.openerName)} <span class="muted" style="font-size:0.78rem; font-weight:400;">${esc(t.openerTag || '')}</span>
+            ${t.claimedBy ? `<span class="status-chip good"><span class="dot"></span>📌 ${esc(t.claimedByName)}</span>` : '<span class="status-chip warn"><span class="dot"></span>Unclaimed</span>'}
+            ${t.channelExists ? '' : '<span class="status-chip off"><span class="dot"></span>Channel missing</span>'}</div>
+          <div class="item-meta">Opened ${fromNow(new Date(t.createdAt).getTime())}${t.reason ? ` · ${esc(t.reason.slice(0, 140))}` : ''}</div>
+        </div>
+        <span class="item-actions">
+          <a class="btn secondary small" href="${t.channelUrl}" target="_blank" rel="noopener">Jump ↗</a>
+          <button class="btn danger small" onclick="closeTicketRow('${t.id}', this)">Close</button>
+        </span>
+      </div>`
+    )
+    .join('');
+}
+
+async function closeTicketRow(id, btn) {
+  const t = tkState.open.find((x) => x.id === id);
+  const reason = prompt(`Close ticket #${t ? t.number : ''}? Reason (optional — sent to the member):`, '');
+  if (reason === null) return;
+  const data = await withButton(btn, () => manageApi('POST', `tickets/${id}/close`, { reason }), (d) => `🔒 Ticket #${d.ticket.number} closed${d.dmSent ? ' — the member was sent a DM' : ''}.`);
+  if (data) {
+    loadTickets();
+    loadTicketHistory(1);
+  }
+}
+
+function fillTicketForm(s) {
+  tkState.settings = s;
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  const c = (id, val) => (document.getElementById(id).checked = !!val);
+  v('tkPanelChannel', s.panelChannelId || '');
+  v('tkCategory', s.categoryId || '');
+  document.querySelectorAll('.tk-role').forEach((el) => (el.checked = s.supportRoleIds.includes(el.value)));
+  v('tkNameFormat', s.nameFormat);
+  v('tkMaxOpen', s.maxOpenPerUser);
+  c('tkAskReason', s.askReason);
+  c('tkPingSupport', s.pingSupport);
+  v('tkWelcome', s.welcomeMessage);
+  v('tkTitle', s.panel.title);
+  v('tkDesc', s.panel.description);
+  v('tkColor', /^#[0-9a-f]{6}$/i.test(s.panel.color) ? s.panel.color : '#5865F2');
+  v('tkThumb', s.panel.thumbnailUrl);
+  v('tkImage', s.panel.imageUrl);
+  v('tkFooter', s.panel.footer);
+  v('tkBtnLabel', s.button.label);
+  v('tkBtnStyle', s.button.style);
+  v('tkBtnEmoji', s.button.emoji);
+  c('tkDm', s.dmOnClose);
+  v('tkDelay', s.closeDelaySeconds);
+  c('tkTranscripts', s.saveTranscripts);
+  v('tkLogChannel', s.logChannelId || '');
+  renderTicketPreview();
+}
+
+function readTicketForm() {
+  const v = (id) => document.getElementById(id).value;
+  const c = (id) => document.getElementById(id).checked;
+  return {
+    panelChannelId: v('tkPanelChannel') || null,
+    categoryId: v('tkCategory') || null,
+    supportRoleIds: [...document.querySelectorAll('.tk-role:checked')].map((el) => el.value),
+    nameFormat: v('tkNameFormat').trim() || 'ticket-{number}',
+    maxOpenPerUser: v('tkMaxOpen') === '' ? 1 : Number(v('tkMaxOpen')),
+    askReason: c('tkAskReason'),
+    pingSupport: c('tkPingSupport'),
+    welcomeMessage: v('tkWelcome'),
+    panel: { title: v('tkTitle'), description: v('tkDesc'), color: v('tkColor'), thumbnailUrl: v('tkThumb').trim(), imageUrl: v('tkImage').trim(), footer: v('tkFooter') },
+    button: { label: v('tkBtnLabel'), style: v('tkBtnStyle'), emoji: v('tkBtnEmoji').trim() },
+    dmOnClose: c('tkDm'),
+    closeDelaySeconds: v('tkDelay') === '' ? 5 : Number(v('tkDelay')),
+    saveTranscripts: c('tkTranscripts'),
+    logChannelId: v('tkLogChannel') || null
+  };
+}
+
+function ticketNameExample(format) {
+  const name = (typeof viewer !== 'undefined' && viewer.username) || 'member';
+  return (format || 'ticket-{number}')
+    .toLowerCase()
+    .replace(/\{number\}/g, '0001')
+    .replace(/\{username\}/g, name.toLowerCase().replace(/[^a-z0-9_-]+/g, ''))
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function renderTicketPreview() {
+  const f = readTicketForm();
+  document.getElementById('tkpChannel').textContent = f.panelChannelId ? channelLabel(f.panelChannelId) : '# support';
+  document.getElementById('tkpEmbed').style.borderLeftColor = f.panel.color;
+  document.getElementById('tkpTitle').textContent = f.panel.title || '🎫 Need help?';
+  document.getElementById('tkpDesc').innerHTML = discordText(f.panel.description);
+  const img = (id, url) => {
+    const el = document.getElementById(id);
+    el.style.display = /^https?:\/\//i.test(url) ? '' : 'none';
+    if (/^https?:\/\//i.test(url)) el.src = url;
+  };
+  img('tkpThumb', f.panel.thumbnailUrl);
+  img('tkpImage', f.panel.imageUrl);
+  document.getElementById('tkpFooter').textContent = f.panel.footer || '';
+  const btn = document.getElementById('tkpButton');
+  btn.className = `mock-button ${TK_STYLE_CLASS[f.button.style] || 'primary'}`;
+  btn.textContent = `${f.button.emoji ? `${f.button.emoji} ` : ''}${f.button.label || 'Open a ticket'}`;
+  document.getElementById('tkNameExample').textContent = ticketNameExample(f.nameFormat);
+}
+
+async function saveTicketSettings(publish) {
+  const body = readTicketForm();
+  if (publish && !body.panelChannelId) return showToast('❌ Pick a panel channel first.');
+  const data = await withButton(document.getElementById(publish ? 'tkPublishBtn' : null), () => manageApi('POST', 'tickets/settings', { ...body, publish }), publish ? '✅ Saved — the panel is live.' : '✅ Ticket settings saved.');
+  if (data) {
+    tkState.settings = data.settings;
+    loadTickets();
+  }
+}
+
+async function loadTicketHistory(page = 1) {
+  const list = document.getElementById('tkHistList');
+  if (!list) return;
+  const q = document.getElementById('tkSearch').value.trim();
+  let data;
+  try {
+    data = await manageApi('GET', `tickets/history?page=${Math.max(1, page)}&q=${encodeURIComponent(q)}`);
+  } catch (err) {
+    list.innerHTML = emptyCard('⚠️', esc(err.message));
+    return;
+  }
+  tkState.page = data.page;
+  tkState.history = data.tickets;
+  document.getElementById('tkHistSummary').textContent = `${data.total} closed ticket${data.total === 1 ? '' : 's'}${q ? ` matching “${q}”` : ''}`;
+  document.getElementById('tkPage').textContent = `Page ${data.page} / ${data.totalPages}`;
+  document.getElementById('tkPrev').disabled = data.page <= 1;
+  document.getElementById('tkNext').disabled = data.page >= data.totalPages;
+  list.innerHTML = data.tickets.length
+    ? data.tickets
+        .map((t) => {
+          const openFor = t.closedAt ? Math.max(0, new Date(t.closedAt) - new Date(t.createdAt)) : 0;
+          return `<div class="card item-card">
+            <span class="ticket-num">#${t.number}</span>
+            <div class="item-main">
+              <div class="item-title">${esc(t.openerName)} <span class="muted" style="font-size:0.78rem; font-weight:400;">${esc(t.openerTag || '')}</span></div>
+              <div class="item-meta">Closed ${t.closedAt ? fromNow(new Date(t.closedAt).getTime()) : ''} by ${esc(t.closedByName || 'the system')}${t.claimedByName ? ` · handled by ${esc(t.claimedByName)}` : ''} · open ${fmtDuration(openFor) || 'under a minute'}</div>
+              <div class="item-meta">${t.reason ? `Opened for: ${esc(t.reason.slice(0, 120))}` : ''}${t.reason && t.closeReason ? ' · ' : ''}${t.closeReason ? `Closed: ${esc(t.closeReason.slice(0, 120))}` : ''}</div>
+            </div>
+            <span class="item-actions">
+              <button class="btn secondary small" onclick="openTranscript('${t.id}')" ${t.messageCount ? '' : 'disabled title="No transcript saved"'}>📜 Transcript${t.messageCount ? ` (${t.messageCount})` : ''}</button>
+            </span>
+          </div>`;
+        })
+        .join('')
+    : emptyCard('🗂️', q ? 'No closed tickets match that search.' : 'Closed tickets show up here with their transcripts.');
+}
+
+async function openTranscript(id) {
+  const data = await withButton(null, () => manageApi('GET', `tickets/${id}`));
+  if (!data) return;
+  const t = data.ticket;
+  document.getElementById('tkTranscriptTitle').textContent = `Ticket #${t.number} — ${t.openerName}`;
+  document.getElementById('tkTranscriptMeta').textContent =
+    `Opened ${new Date(t.createdAt).toLocaleString()} · closed ${t.closedAt ? new Date(t.closedAt).toLocaleString() : '—'} by ${t.closedByName || 'the system'}${t.closeReason ? ` — ${t.closeReason}` : ''}`;
+  document.getElementById('tkTranscriptBody').innerHTML = data.transcript.length
+    ? data.transcript
+        .map(
+          (l) => `<div class="transcript-line">
+            <span class="who ${l.bot ? 'bot' : ''}">${esc(l.authorTag || l.authorId)}${l.bot ? ' <span class="discord-bot-badge">BOT</span>' : ''}</span>
+            <span class="when">${new Date(l.at).toLocaleString()}</span>
+            <div class="text">${esc(l.content || '')}</div>
+            ${l.attachments?.length ? `<div class="files">${l.attachments.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">📎 file ${i + 1}</a>`).join('')}</div>` : ''}
+          </div>`
+        )
+        .join('')
+    : emptyCard('📜', 'No messages were saved for this ticket.');
+  document.getElementById('tkTranscriptDownload').onclick = () => {
+    const text = [
+      `Ticket #${t.number} — ${t.openerTag || t.openerName}`,
+      t.reason ? `Reason: ${t.reason}` : null,
+      `Closed by ${t.closedByName || 'the system'}${t.closeReason ? ` — ${t.closeReason}` : ''}`,
+      '-'.repeat(60),
+      ...data.transcript.map((l) => `[${new Date(l.at).toISOString().replace('T', ' ').slice(0, 19)}] ${l.authorTag}${l.bot ? ' [BOT]' : ''}: ${l.content || ''}${l.attachments?.length ? ` ${l.attachments.join(' ')}` : ''}`)
+    ]
+      .filter((x) => x !== null)
+      .join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    a.download = `ticket-${t.number}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  document.getElementById('tkTranscriptDialog').showModal();
+}
+
+(function initTicketUi() {
+  const panel = document.getElementById('tab-tickets');
+  if (!panel) return;
+  panel.querySelectorAll('input, textarea, select').forEach((el) => {
+    if (el.id === 'tkSearch' || el.id === 'tkRoleSearch') return;
+    el.addEventListener('input', renderTicketPreview);
+    el.addEventListener('change', renderTicketPreview);
+  });
+  panel.querySelectorAll('[data-tk-format]').forEach((b) =>
+    b.addEventListener('click', () => {
+      document.getElementById('tkNameFormat').value = b.dataset.tkFormat;
+      renderTicketPreview();
+    })
+  );
+  document.getElementById('tkRoleSearch').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    panel.querySelectorAll('#tkRoles .check-pill').forEach((p) => (p.style.display = !q || p.dataset.name.includes(q) ? '' : 'none'));
+  });
+  document.getElementById('tkSearch').addEventListener('input', () => {
+    clearTimeout(tkState.searchTimer);
+    tkState.searchTimer = setTimeout(() => loadTicketHistory(1), 300);
+  });
+})();

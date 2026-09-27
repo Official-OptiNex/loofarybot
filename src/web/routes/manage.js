@@ -17,6 +17,8 @@ const lockdownModule = require('../../bot/cogs/modules/lockdown');
 const mediaOnly = require('../../bot/cogs/modules/mediaOnly');
 const modCases = require('../../bot/cogs/modules/modCases');
 const ModCase = require('../../database/models/ModCase');
+const Ticket = require('../../database/models/Ticket');
+const tickets = require('../../bot/cogs/modules/tickets');
 const levelColors = require('../../bot/cogs/modules/levelColors');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const { parseDuration } = require('../../bot/utils/duration');
@@ -703,6 +705,117 @@ router.post('/guilds/:guildId/levels/member-xp', ...guard('leveling'), async (re
     detail: `Level ${result.oldLevel} → ${result.newLevel}`
   };
   res.json({ ok: true, xp: result.record.xp, level: result.newLevel, roleFailures: result.roleFailures.length });
+});
+
+// ---------------------------------------------------------------- Tickets (same as /ticket)
+
+const nameOf = (guild, id, fallback) => guild.members.cache.get(id)?.displayName || fallback || id;
+function serializeTicket(t, guild) {
+  return {
+    id: String(t._id),
+    number: t.number,
+    channelId: t.channelId,
+    channelUrl: `https://discord.com/channels/${guild.id}/${t.channelId}`,
+    channelExists: guild.channels.cache.has(t.channelId),
+    openerId: t.openerId,
+    openerName: nameOf(guild, t.openerId, t.openerTag),
+    openerTag: t.openerTag,
+    reason: t.reason,
+    status: t.status,
+    claimedBy: t.claimedBy,
+    claimedByName: t.claimedBy ? nameOf(guild, t.claimedBy, t.claimedByTag) : null,
+    closedByName: t.closedBy ? nameOf(guild, t.closedBy, t.closedByTag) : t.closedByTag,
+    closeReason: t.closeReason,
+    createdAt: t.createdAt,
+    closedAt: t.closedAt,
+    messageCount: t.messageCount || 0
+  };
+}
+
+router.get('/guilds/:guildId/tickets', ...guard('tickets'), async (req, res) => {
+  const guild = req.guild;
+  const s = await tickets.getSettings(guild.id);
+  const [open, closedCount, weekCount] = await Promise.all([
+    Ticket.find({ guildId: guild.id, status: 'OPEN' }).sort({ number: 1 }).lean(),
+    Ticket.countDocuments({ guildId: guild.id, status: 'CLOSED' }),
+    Ticket.countDocuments({ guildId: guild.id, createdAt: { $gte: new Date(Date.now() - 7 * 86400000) } })
+  ]);
+  const categories = guild.channels.cache
+    .filter((c) => c.type === 4) // GuildCategory
+    .sort((a, b) => a.position - b.position)
+    .map((c) => ({ id: c.id, name: c.name, children: c.children?.cache?.size ?? 0 }));
+  const panelChannel = s.panelChannelId ? guild.channels.cache.get(s.panelChannelId) : null;
+  res.json({
+    settings: s,
+    open: open.map((t) => serializeTicket(t, guild)),
+    stats: { open: open.length, closed: closedCount, week: weekCount, unclaimed: open.filter((t) => !t.claimedBy).length },
+    categories,
+    missingPerms: tickets.missingBotPerms(guild, s),
+    panelUrl: panelChannel && s.panelMessageId ? messageUrl(guild.id, panelChannel.id, s.panelMessageId) : null
+  });
+});
+
+// Save settings; with `publish`, also post/update the panel (in `panelChannelId` if given).
+router.post('/guilds/:guildId/tickets/settings', ...guard('tickets'), async (req, res) => {
+  const b = req.body || {};
+  const { patch, error } = tickets.cleanSettings(req.guild, b);
+  if (error) return bad(res, error);
+  const s = await tickets.saveSettings(req.guild.id, patch);
+  res.locals.audit = { section: 'Tickets', action: b.publish ? 'Saved ticket settings and posted the panel' : 'Saved ticket settings', detail: '' };
+  let panelUrl = null;
+  if (b.publish) {
+    const posted = await tickets.publishPanel(req.guild, b.panelChannelId ? String(b.panelChannelId) : null);
+    if (posted.error) return bad(res, `Settings saved, but the panel wasn't posted: ${posted.error}`);
+    panelUrl = posted.message.url;
+  }
+  res.json({ ok: true, settings: s, panelUrl, missingPerms: tickets.missingBotPerms(req.guild, s) });
+});
+
+router.get('/guilds/:guildId/tickets/history', ...guard('tickets'), async (req, res) => {
+  const guild = req.guild;
+  const page = Math.max(1, int(req.query.page) || 1);
+  const pageSize = 15;
+  const filter = { guildId: guild.id, status: 'CLOSED' };
+  const q = str(req.query.q, 80);
+  if (q) {
+    const num = Number.parseInt(q.replace(/^#/, ''), 10);
+    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    // Members matched by display name, so "nick" finds tickets opened by Nick.
+    const memberIds = guild.members.cache.filter((m) => rx.test(m.displayName) || rx.test(m.user.username)).map((m) => m.id);
+    filter.$or = [
+      { openerTag: rx },
+      { reason: rx },
+      { closeReason: rx },
+      { claimedByTag: rx },
+      { closedByTag: rx },
+      { openerId: q },
+      ...(memberIds.length ? [{ openerId: { $in: memberIds.slice(0, 200) } }] : []),
+      ...(Number.isFinite(num) && /^#?\d+$/.test(q) ? [{ number: num }] : [])
+    ];
+  }
+  const [rows, total] = await Promise.all([
+    Ticket.find(filter, { transcript: 0 }).sort({ closedAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean(),
+    Ticket.countDocuments(filter)
+  ]);
+  res.json({ tickets: rows.map((t) => serializeTicket(t, guild)), page, totalPages: Math.max(1, Math.ceil(total / pageSize)), total });
+});
+
+router.get('/guilds/:guildId/tickets/:ticketId', ...guard('tickets'), async (req, res) => {
+  const t = await Ticket.findOne({ _id: req.params.ticketId, guildId: req.guild.id }).lean().catch(() => null);
+  if (!t) return bad(res, 'That ticket was not found.', 404);
+  res.json({ ticket: serializeTicket(t, req.guild), transcript: t.transcript || [] });
+});
+
+router.post('/guilds/:guildId/tickets/:ticketId/close', ...guard('tickets'), async (req, res) => {
+  const t = await Ticket.findOne({ _id: req.params.ticketId, guildId: req.guild.id }).catch(() => null);
+  if (!t) return bad(res, 'That ticket was not found.', 404);
+  if (t.status !== 'OPEN') return bad(res, 'That ticket is already closed.');
+  // The member's DM names the staff member, not "(dashboard)".
+  const u = req.session.user;
+  const result = await tickets.closeTicket(req.guild, t, { id: u.id, tag: u.global_name || u.username }, str(req.body?.reason, 500) || null);
+  if (result.error) return bad(res, result.error);
+  res.locals.audit = { section: 'Tickets', action: `Closed ticket #${t.number}`, detail: str(req.body?.reason, 100) };
+  res.json({ ok: true, ticket: serializeTicket(result.ticket, req.guild), dmSent: !!result.dmSent });
 });
 
 module.exports = router;

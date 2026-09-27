@@ -24,7 +24,7 @@ const router = express.Router();
 
 // Maps each API route to the dashboard page it belongs to, so moderators can only use the pages
 // they've been given. null = available to anyone with dashboard access.
-const MODULE_PAGES = { welcome: 'welcome', honeypot: 'honeypot', leveling: 'leveling', autorole: 'autorole', gambling: 'gambling', logs: 'logs', alerts: 'alerts' };
+const MODULE_PAGES = { tickets: 'tickets', welcome: 'welcome', honeypot: 'honeypot', leveling: 'leveling', autorole: 'autorole', gambling: 'gambling', logs: 'logs', alerts: 'alerts' };
 function pageFor(req) {
   const tail = (req.route?.path || '').replace('/guilds/:guildId', '').replace(/^\//, '');
   const first = tail.split('/')[0];
@@ -575,6 +575,11 @@ router.post('/guilds/:guildId/modules/:module', requireAuth, requireGuildAccess,
       }
       await WelcomeConfig.updateOne({ guildId: req.guild.id }, { $set: { enabled } }, { upsert: true });
       return res.json({ ok: true, enabled });
+    }
+
+    if (module === 'tickets') {
+      const s = await require('../../bot/cogs/modules/tickets').saveSettings(req.guild.id, { enabled });
+      return res.json({ ok: true, enabled, note: enabled && !s.panelMessageId ? 'Post the ticket panel on the Tickets page so members can open tickets.' : null });
     }
 
     const field = MODULE_FIELDS[module];

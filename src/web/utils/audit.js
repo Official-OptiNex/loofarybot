@@ -7,7 +7,8 @@ const MODULE_NAMES = {
   autorole: 'Auto-Role',
   gambling: 'Gambling',
   logs: 'Logs',
-  alerts: 'Alerts'
+  alerts: 'Alerts',
+  tickets: 'Tickets'
 };
 
 // Field names that are noise in the "changed" summary.

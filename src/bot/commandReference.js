@@ -125,6 +125,23 @@ module.exports = [
     ]
   },
   {
+    id: 'tickets',
+    group: 'Tickets',
+    icon: '🎫',
+    blurb: 'Private support channels opened from a panel button, with claim, ping, transcripts and DM on close.',
+    tab: 'tickets',
+    commands: [
+      { usage: '/ticket setup', perm: 'Manage Server', description: 'Pick the panel channel, category, support roles, names and look — then post the panel.' },
+      { usage: '/ticket panel', perm: 'Manage Server', description: 'Re-post the ticket panel (or update it after changes).' },
+      { usage: '/ticket toggle', perm: 'Manage Server', description: 'Turn the ticket system on or off.' },
+      { usage: '/ticket close', perm: null, description: 'Close the ticket you’re in (the member who opened it or support), with an optional reason.' },
+      { usage: '/ticket claim', perm: 'Support', description: 'Claim a ticket so others know you’re on it (again to unclaim).' },
+      { usage: '/ticket add · remove', perm: 'Support', description: 'Let another member see a ticket, or remove them.' },
+      { usage: '/ticket rename', perm: 'Support', description: 'Rename the ticket channel.' },
+      { usage: '/ticket list', perm: 'Support', description: 'All open tickets, who opened them and who claimed them.' }
+    ]
+  },
+  {
     id: 'roles',
     group: 'Roles',
     icon: '🎭',
