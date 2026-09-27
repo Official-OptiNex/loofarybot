@@ -252,8 +252,16 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   `{number}`/`{username}`), open tickets per member (default 1), asking members what they need first,
   the welcome message inside tickets, and the panel's title, text, color, thumbnail, banner, footer and
   button label / color / emoji. Saving again updates the panel in place.
-- Each ticket is a private channel: `@everyone` can't see it; the member, the support roles, admins
-  and LoofaryBot can. It starts with a welcome message and **🔒 Close · 📌 Claim · 🔔 Ping user**
+- **Locked down by default:**
+  - The panel channel is **button-only**: members can see the panel and click the button, but can't
+    send messages, react or start threads there.
+  - The ticket category is **hidden** from everyone except support roles and admins.
+  - Each ticket can only be seen and talked in by the member who opened it, the support roles and
+    administrators (plus LoofaryBot); nobody can start threads inside it.
+  - These permissions are re-applied whenever ticket settings are saved or the panel is posted, which
+    also repairs tickets whose permissions were loosened by hand or whose support roles changed.
+  - Both locks can be turned off (`/ticket setup lock_panel_channel:false hide_category:false` or the
+    dashboard). Only administrators and the support roles count as support. It starts with a welcome message and **🔒 Close · 📌 Claim · 🔔 Ping user**
   buttons. Claiming shows who's handling it; `/ticket add · remove · rename` manage it.
 - **Closing** (button, `/ticket close`, or the dashboard) asks for an optional reason, then: DMs the
   member *"Your ticket #12 in Server has been closed by Staff. Reason: …"*, saves a transcript, posts

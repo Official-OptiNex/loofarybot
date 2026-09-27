@@ -42,6 +42,10 @@ const TicketConfigSchema = new mongoose.Schema(
     closeDelaySeconds: { type: Number, default: 5 }, // countdown before the channel is deleted
     logChannelId: { type: String, default: null }, // close summaries + transcript files
     saveTranscripts: { type: Boolean, default: true },
+    // Permissions LoofaryBot manages: the panel channel is button-only for members, and the ticket
+    // category is hidden from everyone but support.
+    lockPanelChannel: { type: Boolean, default: true },
+    lockCategory: { type: Boolean, default: true },
 
     counter: { type: Number, default: 0 } // last ticket number handed out
   },

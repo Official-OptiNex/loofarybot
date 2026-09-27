@@ -1338,6 +1338,8 @@ function fillTicketForm(s) {
   v('tkMaxOpen', s.maxOpenPerUser);
   c('tkAskReason', s.askReason);
   c('tkPingSupport', s.pingSupport);
+  c('tkLockPanel', s.lockPanelChannel);
+  c('tkLockCategory', s.lockCategory);
   v('tkWelcome', s.welcomeMessage);
   v('tkTitle', s.panel.title);
   v('tkDesc', s.panel.description);
@@ -1366,6 +1368,8 @@ function readTicketForm() {
     maxOpenPerUser: v('tkMaxOpen') === '' ? 1 : Number(v('tkMaxOpen')),
     askReason: c('tkAskReason'),
     pingSupport: c('tkPingSupport'),
+    lockPanelChannel: c('tkLockPanel'),
+    lockCategory: c('tkLockCategory'),
     welcomeMessage: v('tkWelcome'),
     panel: { title: v('tkTitle'), description: v('tkDesc'), color: v('tkColor'), thumbnailUrl: v('tkThumb').trim(), imageUrl: v('tkImage').trim(), footer: v('tkFooter') },
     button: { label: v('tkBtnLabel'), style: v('tkBtnStyle'), emoji: v('tkBtnEmoji').trim() },
@@ -1413,6 +1417,7 @@ async function saveTicketSettings(publish) {
   const data = await withButton(document.getElementById(publish ? 'tkPublishBtn' : null), () => manageApi('POST', 'tickets/settings', { ...body, publish }), publish ? '✅ Saved — the panel is live.' : '✅ Ticket settings saved.');
   if (data) {
     tkState.settings = data.settings;
+    if (data.warnings?.length) showToast(`⚠️ ${data.warnings[0]}`);
     loadTickets();
   }
 }
