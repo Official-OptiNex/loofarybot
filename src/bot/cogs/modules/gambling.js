@@ -30,6 +30,8 @@ function getGamblingSettings(config) {
     edgePercent,
     minBet: config.gamblingMinBet ?? 10,
     maxBet: config.gamblingMaxBet ?? null,
+    maxWin: config.gamblingMaxWin > 0 ? config.gamblingMaxWin : null, // most XP one game can win (profit), null = no cap
+    dailyLimit: Math.max(0, config.gamblingDailyLimit ?? 10), // games per member per UTC day, 0 = unlimited
     channelId: config.gamblingChannelId ?? null,
     freePlay: {
       enabled: config.gamblingFreePlayEnabled !== false,
@@ -40,6 +42,13 @@ function getGamblingSettings(config) {
 }
 
 const fmtMult = (m) => `${m.toFixed(2)}x`;
+
+// Applies the server's max-win cap: at most `maxWin` XP profit on top of the stake.
+function capReturn(settings, bet, returned) {
+  const cap = settings?.maxWin;
+  return cap && returned > bet + cap ? bet + cap : returned;
+}
+const hitCap = (game) => !!game.settings?.maxWin && Math.floor(game.bet * game.currentMultiplier()) >= game.bet + game.settings.maxWin;
 const fmtNum = (n) => Number(n).toLocaleString('en-US');
 
 async function fetchBalance(guildId, userId) {
@@ -53,6 +62,47 @@ function balanceText(balance, net) {
   const change = net === 0 ? '±0' : `${net > 0 ? '+' : '−'}${fmtNum(Math.abs(net))}`;
   return `💳 **Balance:** \`${fmtNum(balance.xp)} XP\` · Level **${balance.level}** · this game: **${change} XP**`;
 }
+
+// ---------------------------------------------------------------- Daily play limit
+
+const utcDay = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+const nextUtcMidnight = () => {
+  const d = new Date();
+  d.setUTCHours(24, 0, 0, 0);
+  return d.getTime();
+};
+
+/**
+ * Uses one of today's plays in a single atomic update (so spamming can't slip past the limit).
+ * Returns { ok, left } — left is null when there's no limit — or { ok: false } when out of plays.
+ */
+async function takeDailyPlay(guildId, userId, limit) {
+  if (!limit) return { ok: true, left: null };
+  const day = utcDay();
+  const updated = await UserLevel.findOneAndUpdate(
+    { guildId, userId, $or: [{ gambleDay: { $ne: day } }, { gamblesToday: { $lt: limit } }] },
+    [
+      {
+        $set: {
+          gamblesToday: { $cond: [{ $eq: ['$gambleDay', day] }, { $add: [{ $ifNull: ['$gamblesToday', 0] }, 1] }, 1] },
+          gambleDay: day
+        }
+      }
+    ],
+    { new: true, projection: { gamblesToday: 1 } }
+  );
+  if (updated) return { ok: true, left: Math.max(0, limit - updated.gamblesToday) };
+  // No record at all means they've never earned XP — let the bet itself explain that.
+  const exists = await UserLevel.exists({ guildId, userId });
+  return exists ? { ok: false } : { ok: true, left: null, untracked: true };
+}
+
+// Gives a play back when the bet didn't go ahead after all.
+async function returnDailyPlay(guildId, userId) {
+  await UserLevel.updateOne({ guildId, userId, gambleDay: utcDay(), gamblesToday: { $gt: 0 } }, { $inc: { gamblesToday: -1 } }).catch(() => null);
+}
+
+const playsLeftText = (left) => (left === null || left === undefined ? '' : `🎲 **${left}** play${left === 1 ? '' : 's'} left today`);
 
 // ---------------------------------------------------------------- Free play (going broke)
 
@@ -116,7 +166,7 @@ async function settle(game, returned) {
 
 // Text shown under a finished game: balance line plus any free-play notice.
 function settledText(game) {
-  return [balanceText(game.balance, game.net), game.freePlayNote].filter(Boolean).join('\n');
+  return [balanceText(game.balance, game.net), game.freePlayNote, playsLeftText(game.playsLeft)].filter(Boolean).join('\n');
 }
 
 // Returns the player's stake after a refund: their own XP, and their free play if it was one.
@@ -177,21 +227,28 @@ async function placeBet(interaction, bet) {
   if (bet < settings.minBet) return fail(`❌ The minimum bet is **${settings.minBet} XP**.`);
   if (settings.maxBet && bet > settings.maxBet) return fail(`❌ The maximum bet is **${settings.maxBet} XP**.`);
 
+  const daily = await takeDailyPlay(interaction.guildId, interaction.user.id, settings.dailyLimit);
+  if (!daily.ok) {
+    return fail(`🎲 You've used all **${settings.dailyLimit}** gambles for today. You can play again <t:${Math.floor(nextUtcMidnight() / 1000)}:R>.`);
+  }
+  const giveBack = () => (daily.left !== null ? returnDailyPlay(interaction.guildId, interaction.user.id) : null);
+
   // A player holding a free play who can't cover this bet plays it for free instead.
   const record = await UserLevel.findOne({ guildId: interaction.guildId, userId: interaction.user.id }, { xp: 1, freePlays: 1 }).lean();
   if (record?.freePlays > 0 && (record.xp ?? 0) < bet && settings.freePlay.enabled) {
     if (await consumeFreePlay(interaction.guildId, interaction.user.id)) {
-      return { config, settings, bet: settings.freePlay.amount, freePlay: true, paidStake: 0 };
+      return { config, settings, bet: settings.freePlay.amount, freePlay: true, paidStake: 0, playsLeft: daily.left };
     }
   }
 
   const debited = await debitXp(interaction.guildId, interaction.user.id, bet, levelXpBase);
   if (!debited) {
+    await giveBack();
     const status = freePlayText(await maybeGrantFreePlay(interaction.guildId, interaction.user.id, settings, { xp: record?.xp ?? 0 }), settings);
     return fail(`❌ You don't have **${fmtNum(bet)} XP** to bet. Check your balance with \`/levels rank\`.${status ? `\n${status}` : ''}`);
   }
 
-  return { config, settings, bet, freePlay: false, paidStake: bet };
+  return { config, settings, bet, freePlay: false, paidStake: bet, playsLeft: daily.left };
 }
 
 const freePlayBanner = (ctx) =>
@@ -213,7 +270,7 @@ async function playCoinflip(interaction, bet, side) {
   const result = randInt(2) === 0 ? 'heads' : 'tails';
   const won = result === side;
   const multiplier = 2 * (1 - ctx.settings.edge);
-  const winnings = won ? Math.floor(bet * multiplier) : 0;
+  const winnings = won ? capReturn(ctx.settings, bet, Math.floor(bet * multiplier)) : 0;
   const levelResult = await payout(interaction.guild, interaction.user.id, winnings, ctx.config);
   const balance = await fetchBalance(interaction.guildId, interaction.user.id);
   const net = winnings - ctx.paidStake;
@@ -233,7 +290,7 @@ async function playCoinflip(interaction, bet, side) {
             ? '❌ No luck this time — it was a free play, so you lost nothing.'
             : `❌ You lost **${fmtNum(bet)} XP**.`) +
         levelNote(levelResult) +
-        `\n\n${balanceText(balance, net)}${freeNote ? `\n${freeNote}` : ''}`
+        `\n\n${balanceText(balance, net)}${freeNote ? `\n${freeNote}` : ''}${ctx.playsLeft !== null && ctx.playsLeft !== undefined ? `\n${playsLeftText(ctx.playsLeft)}` : ''}`
     );
   return respond(interaction, { embeds: [embed], allowedMentions: { parse: [] } });
 }
@@ -245,6 +302,7 @@ function startGame(interaction, game, ctx) {
   game.settings = ctx.settings;
   game.freePlay = !!ctx.freePlay;
   game.paidStake = ctx.paidStake;
+  game.playsLeft = ctx.playsLeft;
   game.userId = interaction.user.id;
   game.guildId = interaction.guildId;
   game.guild = interaction.guild;
@@ -306,7 +364,9 @@ function spectatorView(game, payload) {
 }
 
 function playerView(game, payload) {
-  return game.finished ? clearNote(payload) : withNote(payload, '-# 🎮 Your controls — only you can see these buttons. Everyone else watches the public board.');
+  return game.finished
+    ? clearNote(payload)
+    : withNote(payload, '-# 🎮 Your controls — only you can see these buttons. Everyone else watches the public board. Dismissed them? `/gamble resume` brings them back.');
 }
 
 /** Posts a new game: the public (watch-only) board, then the player's private controls. */
@@ -416,9 +476,37 @@ async function busyReply(interaction, game) {
   const endsAt = Math.floor(((game.lastActive || Date.now()) + IDLE_TIMEOUT_MS) / 1000);
   const where = game.message?.url ? `[your ${game.kind} game](${game.message.url})` : `your ${game.kind} game`;
   return interaction.reply({
-    content: `❌ Finish ${where} first — it ends by itself <t:${endsAt}:R> if you leave it. Stuck? Use \`/gamble sync\`.`,
+    content: `❌ Finish ${where} first — it ends by itself <t:${endsAt}:R> if you leave it. Lost your buttons? Press below. Stuck? \`/gamble sync\`.`,
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`gctl:${game.id}`).setLabel('Show my controls').setEmoji('🎮').setStyle(ButtonStyle.Primary)
+      )
+    ],
     ephemeral: true
   });
+}
+
+/**
+ * Re-sends the player's private controls (e.g. after they dismissed them). The new copy becomes
+ * the one the bot keeps updated. Used by /gamble resume and the "Show my controls" button.
+ */
+async function resendControls(interaction, game = null) {
+  game = game || (await currentGame(interaction.guildId, interaction.user.id));
+  if (!game) return interaction.reply({ content: "You don't have a game running — start one with `/gamble`.", ephemeral: true });
+  if (game.userId !== interaction.user.id) return interaction.reply({ content: "🙅 This isn't your game.", ephemeral: true });
+  if (game.publicControls) {
+    return interaction.reply({ content: `Your game's buttons are on [the board](${game.message?.url || 'https://discord.com'}).`, ephemeral: true });
+  }
+  touchGame(game);
+  const payload = game.render();
+  await interaction.reply({ ...playerView(game, payload), flags: (payload.flags ?? 0) | MessageFlags.Ephemeral });
+  game.editControls = (p) => interaction.editReply(playerView(game, p));
+}
+
+async function handleControlsButton(interaction) {
+  const game = activeGames.get(interaction.customId.split(':')[1]);
+  if (!game || game.finished) return interaction.reply({ content: '⌛ That game is already over.', ephemeral: true });
+  return resendControls(interaction, game);
 }
 
 const EXPIRE_NOTES = {
@@ -451,12 +539,15 @@ async function abortGame(game) {
   if (game.finished) return;
   endGame(game);
   await refundStake(game);
+  if (game.playsLeft !== null && game.playsLeft !== undefined) await returnDailyPlay(game.guildId, game.userId);
   game.status = 'refunded';
 }
 
 async function cashOut(game, note = '') {
   endGame(game);
-  const winnings = Math.floor(game.bet * game.currentMultiplier());
+  const uncapped = Math.floor(game.bet * game.currentMultiplier());
+  const winnings = capReturn(game.settings, game.bet, uncapped);
+  if (winnings < uncapped) note = `${note ? `${note}\n` : ''}🏁 Capped at this server's max win of **${fmtNum(game.settings.maxWin)} XP**.`;
   const levelResult = await gamePayout(game, winnings);
   await settle(game, winnings);
   game.status = 'cashed';
@@ -470,6 +561,14 @@ function minesMultiplier(safeRevealed, mineCount, edge) {
   let m = 1;
   for (let i = 0; i < safeRevealed; i++) m *= (GRID_SIZE - i) / (GRID_SIZE - mineCount - i);
   return m * (1 - edge);
+}
+
+// "1 gem 1.09x · 2 → 1.25x · 3 → 1.43x · 5 → 1.94x · all 22 → 2,331x", starting from the next gem.
+function minesLadder(mineCount, edge, revealed = 0) {
+  const safe = GRID_SIZE - mineCount;
+  const steps = [...new Set([1, 2, 3, 5, 8, 12, safe].map((n) => Math.max(n, revealed + 1)).filter((n) => n <= safe))].slice(0, 5);
+  const fmt = (m) => (m >= 1000 ? Math.round(m).toLocaleString() : m.toFixed(2)) + 'x';
+  return steps.map((n) => `${n === safe ? `all ${n}` : n} gem${n === 1 ? '' : 's'} ${fmt(minesMultiplier(n, mineCount, edge))}`).join(' · ');
 }
 
 function createMinesGame(bet, mineCount, config, settings) {
@@ -499,6 +598,8 @@ function renderMines(game, note) {
   const next = minesMultiplier(game.revealed.size + 1, game.mineCount, game.edge);
 
   let header = `## 💣 Mines — <@${game.userId}>\n**Bet:** ${game.bet} XP · **Mines:** ${game.mineCount} · **Gems found:** ${game.revealed.size}`;
+  // The payout ladder for this mine count — more mines, steeper ladder.
+  if (!over) header += `\n-# ${minesLadder(game.mineCount, game.edge, game.revealed.size)}`;
   if (!over) {
     header +=
       `\n**Current:** ${fmtMult(game.revealed.size > 0 ? game.currentMultiplier() : 0)}` +
@@ -584,6 +685,8 @@ async function handleMinesClick(interaction, game, action) {
   if (game.revealed.size === GRID_SIZE - game.mineCount) {
     return interaction.update(await cashOut(game, '🏆 Cleared the whole board!'));
   }
+  // Nothing more to win past the server's cap — bank it rather than risk a mine for nothing.
+  if (hitCap(game)) return interaction.update(await cashOut(game, '🏁 Max win reached — cashed out automatically.'));
   return interaction.update(game.render());
 }
 
@@ -710,6 +813,7 @@ async function handleHighLowClick(interaction, game, action) {
   }
   game.fairMultiplier /= p;
   game.correct += 1;
+  if (hitCap(game)) return interaction.update(await cashOut(game, `✅ ${cardLabel(next)} — correct!\n🏁 Max win reached — cashed out automatically.`));
   return interaction.update(game.render(`✅ ${cardLabel(next)} — correct!`));
 }
 
@@ -817,7 +921,7 @@ async function resolveBlackjack(game, note = '') {
     else outcome = 'lose';
   }
 
-  const returned = blackjackReturn(game, outcome);
+  const returned = capReturn(game.settings, game.bet, blackjackReturn(game, outcome));
   const levelResult = await gamePayout(game, returned);
   game.outcome = outcome;
   game.status = ['blackjack', 'win', 'dealer_bust'].includes(outcome) ? 'won' : outcome === 'push' ? 'push' : 'lost';
@@ -1087,6 +1191,7 @@ async function handleGambleButton(interaction) {
 module.exports = {
   getGamblingSettings,
   minesMultiplier,
+  minesLadder,
   pHigherOrSame,
   pLowerOrSame,
   playCoinflip,
@@ -1098,6 +1203,8 @@ module.exports = {
   handValue,
   blackjackReturn,
   handleGambleButton,
+  handleControlsButton,
+  resendControls,
   startGameSweeper,
   sweepStuckGames,
   syncGames,

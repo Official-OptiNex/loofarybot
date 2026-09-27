@@ -40,6 +40,8 @@ function describe(req) {
     welcome: ['Welcome', 'Updated welcome message', `${b.enabled ? 'On' : 'Off'} · ${b.embedEnabled ? 'with embed' : 'text only'}`],
     'welcome/from-embed': ['Welcome', 'Set welcome message from the Embed Builder', ''],
     'welcome/test': ['Welcome', 'Sent a test welcome message', ''],
+    'welcome/goodbye': ['Welcome', 'Updated goodbye message', `${b.enabled ? 'On' : 'Off'}`],
+    'welcome/goodbye/test': ['Welcome', 'Sent a test goodbye message', ''],
     'embed-templates': ['Embed Builder', `Saved embed template “${String(b.name || '').slice(0, 60)}”`, ''],
     'embed-templates/:name': ['Embed Builder', `Deleted embed template “${String(req.params.name || '').slice(0, 60)}”`, ''],
     autorole: ['Auto-Role', 'Updated auto-role', ''],

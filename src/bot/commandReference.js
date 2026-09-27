@@ -13,13 +13,14 @@ module.exports = [
     tab: 'giveaways',
     commands: [
       { usage: '/loof create', perm: 'Admin', description: 'Set up a giveaway or drop in a form — type, channel, look, requirements, ping — with a live preview.' },
-      { usage: '/loof start', perm: 'Admin', description: 'Start a timed giveaway or a drop right away with inline options.' },
+      { usage: '/loof start', perm: 'Admin', description: 'Start a timed giveaway or a drop right away — requirements and role bonus entries included.' },
       { usage: '/loof drop', perm: 'Admin', description: 'First-to-click drop — the first N people to press Claim win instantly.' },
       { usage: '/loof edit', perm: 'Admin', description: 'Change the prize, winners, end time, description, color or emoji of a running giveaway.' },
       { usage: '/loof requirements', perm: 'Admin', description: 'Require a role, days in the server, or an XP level to enter.' },
       { usage: '/loof end', perm: 'Admin', description: 'End a giveaway early and draw winners now.' },
       { usage: '/loof reroll', perm: 'Admin', description: 'Draw a new winner for an ended giveaway.' },
       { usage: '/loof delete', perm: 'Admin', description: 'Delete a giveaway and its message.' },
+      { usage: '/loof entries', perm: 'Admin', description: 'See who entered a giveaway, with bonus entries and winners.' },
       { usage: '/loof list', perm: 'Admin', description: 'Running giveaways (with entries and jump links) and recently ended ones.' }
     ]
   },
@@ -60,6 +61,7 @@ module.exports = [
       { usage: '/gamble mines', perm: null, description: '5×5 minefield: reveal gems, avoid mines, cash out any time.' },
       { usage: '/gamble highlow', perm: null, description: 'Call higher or lower to build a multiplier, then cash out.' },
       { usage: '/gamble info', perm: null, description: 'Payouts, house edge and bet limits.' },
+      { usage: '/gamble resume', perm: null, description: 'Dismissed your private game buttons? Get them back.' },
       { usage: '/gamble sync', perm: null, description: "Stuck? End your game now and get back XP from games that didn't finish (admins: everyone:true)." },
       { usage: '/gamble config', perm: 'Admin', description: 'Enable gambling, set the house edge, limits and channel.' }
     ]
@@ -97,13 +99,21 @@ module.exports = [
     id: 'moderation',
     group: 'Moderation & Logs',
     icon: '🛡️',
-    blurb: 'Server logs, lockdowns and cleanup tools.',
+    blurb: 'Warnings, timeouts, kicks and bans with a case history, plus logs, lockdowns and cleanup tools.',
     tab: 'moderation',
     commands: [
       { usage: '/logs set', perm: 'Manage Server', description: 'Choose the channel that receives server logs.' },
       { usage: '/logs toggle', perm: 'Manage Server', description: 'Switch individual log types on or off.' },
       { usage: '/logs enable · disable', perm: 'Manage Server', description: 'Turn the whole logging module on or off.' },
       { usage: '/logs status', perm: 'Manage Server', description: 'Show the logging setup.' },
+      { usage: '/warn', perm: 'Timeout Members', description: 'Warn a member (DM’d with the reason; can trigger automatic escalation).' },
+      { usage: '/timeout · /untimeout', perm: 'Timeout Members', description: 'Time a member out for up to 28 days, or lift it.' },
+      { usage: '/kick', perm: 'Kick Members', description: 'Kick a member, with a reason recorded as a case.' },
+      { usage: '/ban · /unban', perm: 'Ban Members', description: 'Ban (optionally temporarily, even by user ID) or unban.' },
+      { usage: '/cases user · recent · view', perm: 'Timeout Members', description: 'Moderation history for a member or the whole server.' },
+      { usage: '/cases reason · revoke · delete', perm: 'Timeout Members', description: 'Edit a case, revoke a warning, or delete a case.' },
+      { usage: '/cases escalation add · remove · list', perm: 'Manage Server', description: 'Automatic timeout / kick / ban at N warnings.' },
+      { usage: '/slowmode', perm: 'Manage Channels', description: 'Set or turn off a channel’s slowmode.' },
       { usage: '/lockdown', perm: 'Manage Channels', description: 'Stop non-staff from talking in a channel or the whole server.' },
       { usage: '/unlockdown', perm: 'Manage Channels', description: 'Lift a lockdown and restore the original permissions.' },
       { usage: '/purge', perm: 'Manage Messages', description: 'Bulk-delete recent messages, optionally from one user.' },
@@ -123,6 +133,17 @@ module.exports = [
       { usage: '/reactionrole create', perm: 'Manage Roles', description: 'Post a self-assign role panel (buttons or dropdown).' },
       { usage: '/reactionrole add · remove', perm: 'Manage Roles', description: 'Add or remove roles on a panel.' },
       { usage: '/reactionrole list · delete', perm: 'Manage Roles', description: 'List or delete role panels.' }
+    ]
+  },
+  {
+    id: 'welcome',
+    group: 'Welcome & Goodbye',
+    icon: '👋',
+    blurb: 'Greet people who join and say goodbye to people who leave.',
+    tab: 'welcome',
+    commands: [
+      { usage: '/welcome set · toggle · test · show', perm: 'Manage Server', description: 'Welcome channel and message, on/off, a test post and the current setup.' },
+      { usage: '/goodbye set · toggle · test · show', perm: 'Manage Server', description: 'The same for goodbye messages when someone leaves.' }
     ]
   },
   {

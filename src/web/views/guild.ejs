@@ -322,6 +322,7 @@
           <div class="subtabs" data-subtabs>
             <button class="active" data-sub="w-message">✉️ Message</button>
             <button data-sub="w-embed">🧩 Embed</button>
+            <button data-sub="w-goodbye">🚪 Goodbye</button>
           </div>
 
           <div class="subpage" data-page="w-message">
@@ -373,6 +374,39 @@
                   <input id="wFooter" maxlength="2048" value="<%= we.footer || '' %>" placeholder="You are member #{membercount}">
                 </div>
               </div>
+            </div>
+          </div>
+          <div class="subpage hidden" data-page="w-goodbye">
+            <% const gb = Object.assign({ enabled: false, channelId: null, messageContent: '👋 **{username}** left **{server}**. We now have {membercount} members.', embedEnabled: false, embedConfig: {} }, welcome.goodbye || {}); const gbe = gb.embedConfig || {}; %>
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">Goodbye messages</div><div class="setting-help">Post a message when someone leaves. Nobody is pinged. Same as <code>/goodbye</code>.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="gbEnabled" <%= gb.enabled ? 'checked' : '' %>><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-title">Channel</div>
+                <div class="setting-control"><select id="gbChannel"><%- channelOptions(gb.channelId, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Message text</div><div class="setting-help">Placeholders: <code>{username}</code> <code>{user}</code> <code>{server}</code> <code>{membercount}</code> (count after they left).</div></div>
+                <textarea id="gbContent" maxlength="2000" rows="3"><%= gb.messageContent || '' %></textarea>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Embed</div><div class="setting-help">Optional. <code>{avatar}</code> as the thumbnail shows their avatar.</div></div>
+                <div class="setting-control">
+                  <label class="switch sm"><input type="checkbox" id="gbEmbed" <%= gb.embedEnabled ? 'checked' : '' %>><span class="track"></span></label>
+                  <input id="gbColor" type="color" value="<%= gbe.color || '#ED4245' %>" style="flex:0 0 64px; min-width:64px;">
+                </div>
+              </div>
+              <div class="setting-row stack">
+                <input id="gbTitle" maxlength="256" value="<%= gbe.title || '' %>" placeholder="Embed title, e.g. Goodbye, {username}">
+                <textarea id="gbDesc" maxlength="4096" rows="2" placeholder="Embed description"><%= gbe.description || '' %></textarea>
+                <input id="gbThumb" value="<%= gbe.thumbnailUrl || '' %>" placeholder="Thumbnail URL or {avatar}">
+              </div>
+            </div>
+            <div class="savebar" style="position:static;">
+              <button class="btn secondary" onclick="saveGoodbye(true)">📨 Send test</button>
+              <button class="btn" onclick="saveGoodbye(false)">Save goodbye</button>
             </div>
           </div>
         </div>
@@ -763,6 +797,8 @@
           <div class="hero-status">
             <%- chip('', gambling.edgePercent + '% house edge') %>
             <%- chip('', 'Bets ' + gambling.minBet + '–' + (gambling.maxBet || '∞') + ' XP') %>
+            <%- chip(gambling.maxWin ? 'good' : '', gambling.maxWin ? 'Max win ' + gambling.maxWin + ' XP' : 'No max win') %>
+            <%- chip('', gambling.dailyLimit ? gambling.dailyLimit + ' games / day' : 'Unlimited games') %>
             <%- chip('', channelName(gambling.channelId) ? 'Only in ' + esc(channelName(gambling.channelId)) : 'Any channel') %>
           </div>
         </div>
@@ -780,6 +816,14 @@
               <input type="number" id="gMin" min="1" value="<%= gambling.minBet %>" placeholder="Min">
               <input type="number" id="gMax" min="1" value="<%= gambling.maxBet || '' %>" placeholder="Max">
             </div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Daily limit</div><div class="setting-help">How many games each member can play per day (resets at midnight UTC). 0 = unlimited.</div></div>
+            <div class="setting-control"><input type="number" id="gDaily" min="0" max="1000" value="<%= gambling.dailyLimit %>"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Max win per game</div><div class="setting-help">The most XP one game can win. Games that reach it cash out automatically — stops a lucky mines board from printing millions of XP. Blank = no cap.</div></div>
+            <div class="setting-control"><input type="number" id="gMaxWin" min="1" value="<%= gambling.maxWin || '' %>" placeholder="No cap"></div>
           </div>
           <div class="setting-row">
             <div><div class="setting-title">Allowed channel</div><div class="setting-help">Keep gambling out of general chat.</div></div>
@@ -1113,6 +1157,9 @@
         </div>
       </div>
       <div class="card">
+        <div class="cmd-toolbar" style="margin-bottom:0.8rem;">
+          <input type="search" id="lbSearch" placeholder="Find a member's rank…" autocomplete="off" aria-label="Search the leaderboard">
+        </div>
         <div id="leaderboardRows" class="muted">Loading…</div>
         <div class="pagination">
           <button class="btn secondary small" id="lbPrev" onclick="changeLeaderboardPage(-1)">← Prev</button>
@@ -1272,22 +1319,31 @@
       await fetchLeaderboardPage(1);
     }
 
+    let lbSearchTimer = null;
+    document.getElementById('lbSearch')?.addEventListener('input', () => {
+      clearTimeout(lbSearchTimer);
+      lbSearchTimer = setTimeout(() => fetchLeaderboardPage(1), 300);
+    });
+
     async function fetchLeaderboardPage(page) {
       const container = document.getElementById('leaderboardRows');
       container.innerHTML = '<p class="muted">Loading…</p>';
       try {
-        const res = await fetch(`/api/guilds/${guildId}/leaderboard?page=${page}`);
+        const q = (document.getElementById('lbSearch') || {}).value || '';
+        const res = await fetch(`/api/guilds/${guildId}/leaderboard?page=${page}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to load.');
 
         lbCurrentPage = data.page;
         lbTotalPages = data.totalPages;
-        document.getElementById('lbPageLabel').textContent = `Page ${data.page} of ${data.totalPages} · ${data.total} ranked member(s)`;
+        document.getElementById('lbPageLabel').textContent = data.search
+          ? `${data.total} match(es) for “${data.search}”`
+          : `Page ${data.page} of ${data.totalPages} · ${data.total} ranked member(s)`;
         document.getElementById('lbPrev').disabled = data.page <= 1;
         document.getElementById('lbNext').disabled = data.page >= data.totalPages;
 
         if (data.entries.length === 0) {
-          container.innerHTML = '<p class="muted">No XP data yet for this server.</p>';
+          container.innerHTML = data.search ? '<p class="muted">Nobody with XP matches that name.</p>' : '<p class="muted">No XP data yet for this server.</p>';
           return;
         }
 
@@ -1432,8 +1488,7 @@
         ['🪙 Coinflip', 'Win (50/50)', x(2 * (1 - edge))],
         ['🂡 Blackjack', 'Win · push returns the bet', x(2 - edge)],
         ['🂡 Blackjack', 'Natural blackjack (3:2)', x(1 + 1.5 * (1 - edge))],
-        ['💣 Mines', '3 mines, 1 gem → 5 gems', `${x(mines(1, 3))} → ${x(mines(5, 3))}`],
-        ['💣 Mines', '10 mines, 1 gem → 3 gems', `${x(mines(1, 10))} → ${x(mines(3, 10))}`],
+        ...[1, 3, 5, 10, 20].map((m) => ['💣 Mines', `${m} mine${m > 1 ? 's' : ''}: 1 → 3 gems`, `${x(mines(1, m))} → ${mines(3, m) >= 100 ? Math.round(mines(3, m)).toLocaleString() + 'x' : x(mines(3, m))}`]),
         ['🃏 High-Low', 'One correct call on a 7', x((1 - edge) / (7 / 13))]
       ];
       document.getElementById('gOdds').innerHTML =
@@ -1450,6 +1505,8 @@
           houseEdge: document.getElementById('gEdge').value,
           minBet: document.getElementById('gMin').value,
           maxBet: document.getElementById('gMax').value,
+          maxWin: document.getElementById('gMaxWin').value,
+          dailyLimit: document.getElementById('gDaily').value,
           channelId: document.getElementById('gChannel').value,
           freePlayEnabled: document.getElementById('gFreePlay').checked,
           freePlayAmount: document.getElementById('gFreeAmount').value,
@@ -1692,6 +1749,25 @@
     function saveWelcome() {
       postJson('welcome', readWelcomeForm(), '✅ Welcome settings saved.');
     }
+
+    // --- Goodbye messages ---
+    async function saveGoodbye(test) {
+      const body = {
+        enabled: document.getElementById('gbEnabled').checked,
+        channelId: document.getElementById('gbChannel').value,
+        messageContent: document.getElementById('gbContent').value,
+        embedEnabled: document.getElementById('gbEmbed').checked,
+        embedConfig: {
+          title: document.getElementById('gbTitle').value,
+          description: document.getElementById('gbDesc').value,
+          color: document.getElementById('gbColor').value,
+          thumbnailUrl: document.getElementById('gbThumb').value.trim()
+        }
+      };
+      if (test && !body.channelId) return showToast('❌ Pick a channel first.');
+      await postJson(test ? 'welcome/goodbye/test' : 'welcome/goodbye', body, test ? '📨 Test goodbye sent (as if you left).' : '✅ Goodbye message saved.');
+    }
+    if (document.getElementById('gbContent')) LoofMentions.attach(document.getElementById('gbContent'));
 
     async function testWelcome() {
       try {

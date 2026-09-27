@@ -1,6 +1,8 @@
 const UserLevel = require('../../database/models/UserLevel');
 const Reminder = require('../../database/models/Reminder');
 const Giveaway = require('../../database/models/Giveaway');
+const { sendGoodbye } = require('../cogs/modules/welcome');
+const { reportIssue } = require('../utils/errorReporter');
 
 /**
  * When someone leaves, drop their per-server data: XP/level/rank card (so they vanish from the
@@ -19,6 +21,12 @@ async function clearMemberData(guildId, userId) {
 module.exports = function registerGuildMemberRemoveEvent(client) {
   client.on('guildMemberRemove', async (member) => {
     if (member.user?.bot) return;
+    // Goodbye message first (it only needs their name), then clean up their data.
+    sendGoodbye(member)
+      .then((problem) => {
+        if (problem && !/disabled|empty/i.test(problem)) reportIssue(member.guild.id, 'Goodbye message not sent', problem);
+      })
+      .catch((err) => console.error('Goodbye message failed:', err.message));
     try {
       await clearMemberData(member.guild.id, member.id);
     } catch (err) {

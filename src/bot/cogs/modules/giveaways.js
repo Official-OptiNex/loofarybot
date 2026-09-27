@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Giveaway = require('../../../database/models/Giveaway');
 const UserLevel = require('../../../database/models/UserLevel');
@@ -45,6 +46,42 @@ function describeRequirements(req) {
   return `\n\n**Requirements:**\n${parts.join('\n')}`;
 }
 
+// "Bonus entries: @Booster +2 · @Supporter +1" — extra chances to win for members with those roles.
+function describeBonus(g) {
+  const list = (g.bonusEntries || []).filter((b) => b.roleId && b.extra > 0);
+  return list.length ? `\n\n**Bonus entries:** ${list.map((b) => `<@&${b.roleId}> +${b.extra}`).join(' · ')}` : '';
+}
+
+// Each entrant's number of tickets: 1, plus the best bonus among roles they hold.
+function weightFor(member, g) {
+  const list = g.bonusEntries || [];
+  if (!member || !list.length) return 1;
+  return 1 + Math.max(0, ...list.filter((b) => member.roles.cache.has(b.roleId)).map((b) => b.extra));
+}
+
+async function entryWeights(guild, g, userIds) {
+  const weights = new Map(userIds.map((id) => [id, 1]));
+  if (!(g.bonusEntries || []).length || !guild) return weights;
+  for (let i = 0; i < userIds.length; i += 100) {
+    const members = await guild.members.fetch({ user: userIds.slice(i, i + 100) }).catch(() => null);
+    members?.forEach((m) => weights.set(m.id, weightFor(m, g)));
+  }
+  return weights;
+}
+
+// Fair random pick of `count` different people, each weighted by their tickets.
+function weightedPick(ids, weights, count) {
+  const pool = [...ids];
+  const picked = [];
+  while (picked.length < count && pool.length) {
+    const total = pool.reduce((n, id) => n + (weights.get(id) || 1), 0);
+    let roll = crypto.randomInt(total);
+    const idx = pool.findIndex((id) => (roll -= weights.get(id) || 1) < 0);
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+  return picked;
+}
+
 function buildGiveawayEmbed(g) {
   if (g.type === 'drop') {
     return new EmbedBuilder()
@@ -59,7 +96,7 @@ function buildGiveawayEmbed(g) {
   return new EmbedBuilder()
     .setTitle(`🎁 Giveaway: ${g.prize}`)
     .setDescription(
-      `${g.customDesc}${describeRequirements(g.requirements)}\n\n**Ends:** ${formatTime(g.endTimestamp)}\n**Winners:** ${g.winnerCount}\n**Hosted By:** <@${g.hostId}>`
+      `${g.customDesc}${describeRequirements(g.requirements)}${describeBonus(g)}\n\n**Ends:** ${formatTime(g.endTimestamp)}\n**Winners:** ${g.winnerCount}\n**Hosted By:** <@${g.hostId}>`
     )
     .setColor(g.colorHex)
     .setFooter({ text: `Entries: ${g.entries.length}` })
@@ -127,7 +164,7 @@ async function replyOrEdit(interaction, options) {
  */
 async function postGiveaway(
   client,
-  { channel, hostId, durationMs, winnerCount, prize, ping = null, colorHex, emoji, customDesc, type = 'timed', requirements = {} }
+  { channel, hostId, durationMs, winnerCount, prize, ping = null, colorHex, emoji, customDesc, type = 'timed', requirements = {}, bonusEntries = [] }
 ) {
   const draft = {
     prize,
@@ -143,7 +180,9 @@ async function postGiveaway(
       roleId: requirements.roleId || null,
       minDaysInServer: requirements.minDaysInServer || null,
       minLevel: requirements.minLevel || null
-    }
+    },
+    // Drops are first-come — bonus entries only apply to timed giveaways.
+    bonusEntries: type === 'drop' ? [] : cleanBonus(bonusEntries)
   };
 
   const msg = await channel.send({
@@ -154,6 +193,14 @@ async function postGiveaway(
   const giveaway = await Giveaway.create({ messageId: msg.id, channelId: channel.id, guildId: channel.guild.id, ...draft });
   scheduleGiveawayEnd(client, msg.id, durationMs);
   return { message: msg, giveaway };
+}
+
+function cleanBonus(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : [])
+    .map((b) => ({ roleId: b?.roleId ? String(b.roleId) : null, extra: Math.min(Math.max(Number.parseInt(b?.extra, 10) || 0, 0), 10) }))
+    .filter((b) => b.roleId && b.extra > 0 && !seen.has(b.roleId) && seen.add(b.roleId))
+    .slice(0, 5);
 }
 
 async function launchGiveaway(client, { interaction, pingRole, ping, ...options }) {
@@ -197,9 +244,12 @@ async function rerollGiveaway(client, g) {
   const { channel } = await fetchGiveawayMessage(client, g);
   let pool = [...g.entries];
   if (hasRequirements(g.requirements) && channel?.guild) pool = await filterEligible(channel.guild, g, pool);
+  // Prefer someone who hasn't won yet; only fall back to past winners if nobody else is left.
+  const fresh = pool.filter((id) => !(g.winners || []).includes(id));
+  if (fresh.length) pool = fresh;
   if (pool.length === 0) return { error: 'No eligible entries to reroll from.' };
 
-  const winner = pool[Math.floor(Math.random() * pool.length)];
+  const [winner] = weightedPick(pool, await entryWeights(channel?.guild, g, pool), 1);
   await Giveaway.updateOne({ _id: g._id }, { $push: { winners: winner } });
   if (channel) channel.send(`🎉 New winner for **${g.prize}**: <@${winner}>!`).catch(() => null);
   return { winner };
@@ -258,8 +308,8 @@ async function finishGiveaway(client, g) {
     if (hasRequirements(g.requirements) && channel.guild) {
       pool = await filterEligible(channel.guild, g, pool);
     }
-    const shuffled = pool.sort(() => 0.5 - Math.random());
-    winners = shuffled.slice(0, Math.min(g.winnerCount, shuffled.length));
+    // Weighted by bonus entries (1 ticket each otherwise), fair random, no one picked twice.
+    winners = weightedPick(pool, await entryWeights(channel.guild, g, pool), g.winnerCount);
   }
   await Giveaway.updateOne({ _id: g._id }, { $set: { winners } });
   const winnerMentions = winners.length > 0 ? winners.map((id) => `<@${id}>`).join(', ') : 'No valid entries.';
@@ -310,7 +360,7 @@ async function handleButtonInteraction(interaction) {
   if (g.entries.includes(userId)) {
     const updated = await Giveaway.findOneAndUpdate({ _id: g._id }, { $pull: { entries: userId } }, { new: true });
     await updateEmbedEntries(interaction.message, updated);
-    return interaction.reply({ content: 'You left the giveaway.', ephemeral: true });
+    return interaction.reply({ content: '👋 You left the giveaway. Click Enter again to rejoin.', ephemeral: true });
   }
 
   const reason = await checkRequirements(interaction.member, g);
@@ -319,7 +369,11 @@ async function handleButtonInteraction(interaction) {
   const updated = await Giveaway.findOneAndUpdate({ _id: g._id, ended: false }, { $addToSet: { entries: userId } }, { new: true });
   if (!updated) return interaction.reply({ content: '❌ This giveaway has ended.', ephemeral: true });
   await updateEmbedEntries(interaction.message, updated);
-  return interaction.reply({ content: '🎉 You entered the giveaway!', ephemeral: true });
+  const tickets = weightFor(interaction.member, updated);
+  return interaction.reply({
+    content: tickets > 1 ? `🎉 You entered the giveaway with **${tickets} entries** (role bonus)! Click again to leave.` : '🎉 You entered the giveaway! Click again to leave.',
+    ephemeral: true
+  });
 }
 
 async function handleDropClaim(interaction) {
@@ -386,6 +440,10 @@ module.exports = {
   buildEntryRow,
   hasRequirements,
   describeRequirements,
+  describeBonus,
+  cleanBonus,
+  entryWeights,
+  weightedPick,
   checkRequirements,
   replyOrEdit,
   postGiveaway,

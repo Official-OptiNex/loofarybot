@@ -15,6 +15,21 @@ const WelcomeConfigSchema = new mongoose.Schema(
       imageUrl: { type: String, default: '' },
       thumbnailUrl: { type: String, default: '' },
       footer: { type: String, default: '' }
+    },
+    // Goodbye message when someone leaves (same placeholders; nobody is pinged).
+    goodbye: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      messageContent: { type: String, default: '👋 **{username}** left **{server}**. We now have {membercount} members.' },
+      embedEnabled: { type: Boolean, default: false },
+      embedConfig: {
+        title: { type: String, default: '' },
+        description: { type: String, default: '' },
+        color: { type: String, default: '#ED4245' },
+        imageUrl: { type: String, default: '' },
+        thumbnailUrl: { type: String, default: '' },
+        footer: { type: String, default: '' }
+      }
     }
   },
   { timestamps: true }

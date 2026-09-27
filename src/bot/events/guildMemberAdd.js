@@ -5,7 +5,9 @@ const { reportError, reportIssue } = require('../utils/errorReporter');
 
 async function applyAutoRole(member) {
   const config = await GuildConfig.findOne({ guildId: member.guild.id }).lean();
-  if (!config || !config.autoRoleEnabled || !config.autoRoleId) return;
+  // Servers set up before the on/off switch existed have no autoRoleEnabled field — treat missing as on,
+  // the same as the dashboard does.
+  if (!config || config.autoRoleEnabled === false || !config.autoRoleId) return;
 
   const role = member.guild.roles.cache.get(config.autoRoleId);
   const botMember = member.guild.members.me;

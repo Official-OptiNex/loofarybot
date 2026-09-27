@@ -14,6 +14,9 @@ const UserLevelSchema = new mongoose.Schema(
     // Gambling free play: an unused free bet (0 or 1) and when the last one was given.
     freePlays: { type: Number, default: 0 },
     lastFreePlayGrantedAt: { type: Date, default: null },
+    // Daily gamble limit: how many games they've started on `gambleDay` (UTC, YYYY-MM-DD).
+    gambleDay: { type: String, default: null },
+    gamblesToday: { type: Number, default: 0 },
     // Personal /levels card customization.
     card: {
       color: { type: String, default: null },

@@ -6,7 +6,7 @@ const LogEntrySchema = new mongoose.Schema(
     guildId: { type: String, required: true },
     type: {
       type: String,
-      enum: ['messageEdit', 'messageDelete', 'memberJoin', 'memberLeave', 'voice', 'roles'],
+      enum: ['messageEdit', 'messageDelete', 'memberJoin', 'memberLeave', 'voice', 'roles', 'modActions'],
       required: true
     },
     userId: { type: String, default: null },

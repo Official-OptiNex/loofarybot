@@ -18,7 +18,8 @@ const LOG_EVENTS = {
   memberJoin: 'Member joins',
   memberLeave: 'Member leaves',
   voice: 'Voice channel activity',
-  roles: 'Role changes'
+  roles: 'Role changes',
+  modActions: 'Moderator actions (warns, timeouts, kicks, bans)'
 };
 
 const truncate = (str, max = 1024) => (!str ? '*(empty)*' : str.length > max ? `${str.slice(0, max - 1)}…` : str);

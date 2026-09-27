@@ -107,6 +107,8 @@ const GuildConfigSchema = new mongoose.Schema(
     gamblingHouseEdge: { type: Number, default: 4 }, // percent
     gamblingMinBet: { type: Number, default: 10 },
     gamblingMaxBet: { type: Number, default: null }, // null = no cap
+    gamblingMaxWin: { type: Number, default: null }, // most XP profit from one game; null = no cap
+    gamblingDailyLimit: { type: Number, default: 10 }, // games per member per UTC day; 0 = unlimited
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
     gamblingFreePlayEnabled: { type: Boolean, default: true },
@@ -133,8 +135,27 @@ const GuildConfigSchema = new mongoose.Schema(
       memberJoin: { type: Boolean, default: true },
       memberLeave: { type: Boolean, default: true },
       voice: { type: Boolean, default: true },
-      roles: { type: Boolean, default: true }
+      roles: { type: Boolean, default: true },
+      modActions: { type: Boolean, default: true }
     },
+
+    // --- Moderation cases ---
+    caseCounter: { type: Number, default: 0 },
+    // Warning escalation: when a member reaches `count` active warnings, this action runs automatically.
+    warnEscalation: {
+      type: [
+        new mongoose.Schema(
+          {
+            count: { type: Number, required: true },
+            action: { type: String, enum: ['timeout', 'kick', 'ban'], required: true },
+            durationMs: { type: Number, default: null } // timeouts (and temporary bans)
+          },
+          { _id: false }
+        )
+      ],
+      default: []
+    },
+    modDmEnabled: { type: Boolean, default: true }, // DM members when they're warned / timed out / kicked / banned
 
     // --- Lockdown ---
     lockdownOverwrites: { type: [LockdownOverwriteSchema], default: [] },

@@ -1,13 +1,75 @@
-    <!-- MODERATION (same as /lockdown, /unlockdown and /purge) -->
+    <!-- MODERATION (same as /warn /timeout /kick /ban /unban /cases, /lockdown /unlockdown /purge, /slowmode and /mediaonly) -->
     <div class="tab-panel hidden" id="tab-moderation">
       <div class="module-hero">
         <div class="hero-icon red">🛡️</div>
         <div>
           <h1>Moderation</h1>
-          <p>Lock channels or the whole server, bulk-delete messages and keep channels media-only — the same as <code>/lockdown</code>, <code>/unlockdown</code>, <code>/purge</code> and <code>/mediaonly</code>.</p>
+          <p>Warn, time out, kick and ban with a full case history; lock channels, purge messages and keep channels media-only — the same as <code>/warn</code>, <code>/timeout</code>, <code>/kick</code>, <code>/ban</code>, <code>/cases</code>, <code>/lockdown</code>, <code>/purge</code> and <code>/mediaonly</code>.</p>
           <div class="hero-status" id="modStatus"></div>
         </div>
       </div>
+
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="md-cases">📁 Cases</button>
+        <button data-sub="md-lock">🔒 Lockdown & purge</button>
+        <button data-sub="md-media">📸 Media-only</button>
+        <button data-sub="md-escalation">🔺 Escalation & DMs</button>
+      </div>
+
+      <div class="subpage" data-page="md-cases">
+        <div class="card">
+          <h3 style="margin-top:0;">⚖️ Take action</h3>
+          <p class="muted" style="font-size:0.84rem; margin-top:0;">Acts as you — your Discord permissions and role position apply, just like the slash commands. Every action becomes a numbered case.</p>
+          <div class="case-form">
+            <div class="member-picker"><input id="csUser" placeholder="Member name (or paste a user ID)" autocomplete="off" aria-label="Member"></div>
+            <select id="csType" aria-label="Action">
+              <option value="warn">⚠️ Warn</option>
+              <option value="timeout">⏳ Timeout</option>
+              <option value="untimeout">🔊 Remove timeout</option>
+              <option value="kick">👢 Kick</option>
+              <option value="ban">🔨 Ban</option>
+              <option value="unban">🕊️ Unban</option>
+            </select>
+            <input id="csDuration" placeholder="Duration (e.g. 1h)" autocomplete="off" aria-label="Duration">
+            <select id="csDelete" aria-label="Delete recent messages">
+              <option value="0">Keep their messages</option>
+              <option value="3600">Delete last hour</option>
+              <option value="86400">Delete last 24h</option>
+              <option value="604800">Delete last 7 days</option>
+            </select>
+            <input id="csReason" maxlength="500" placeholder="Reason (shown to the member)" aria-label="Reason">
+            <button class="btn" id="csBtn" onclick="runCaseAction()">Apply</button>
+          </div>
+          <p class="muted" id="csHint" style="font-size:0.78rem; margin:0.5rem 0 0;"></p>
+        </div>
+
+        <div class="card">
+          <div class="list-toolbar" style="margin-bottom:0.6rem;">
+            <h3 style="margin:0;">📁 Case history</h3>
+            <div class="case-filters">
+              <div class="member-picker"><input id="csFilterUser" placeholder="Filter by member" autocomplete="off" aria-label="Filter by member"></div>
+              <select id="csFilterType" aria-label="Filter by action">
+                <option value="">All actions</option>
+                <option value="warn">Warnings</option>
+                <option value="timeout">Timeouts</option>
+                <option value="kick">Kicks</option>
+                <option value="ban">Bans</option>
+                <option value="unban">Unbans</option>
+              </select>
+              <button class="btn secondary small" onclick="clearCaseFilter()">Clear</button>
+            </div>
+          </div>
+          <div id="csSummary" class="muted" style="font-size:0.84rem; margin-bottom:0.5rem;"></div>
+          <div id="csList" class="muted">Loading…</div>
+          <div class="pagination">
+            <button class="btn secondary small" id="csPrev" onclick="loadCases(caseState.page - 1)">← Prev</button>
+            <span class="muted" id="csPage">Page 1</span>
+            <button class="btn secondary small" id="csNext" onclick="loadCases(caseState.page + 1)">Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="md-lock">
 
       <div class="two-col">
         <div class="card">
@@ -56,7 +118,10 @@
         </div>
       </div>
 
-      <div class="card" style="margin-top:1.25rem;">
+      </div>
+
+      <div class="subpage hidden" data-page="md-media">
+      <div class="card">
         <h3 style="margin-top:0;">📸 Media-only channels</h3>
         <p class="muted" style="font-size:0.84rem; margin-top:0;">Posts without an image, video or file are removed automatically (with a short notice that deletes itself). Chat inside threads is always allowed. Same as <code>/mediaonly</code>.</p>
         <div class="mo-form">
@@ -67,5 +132,21 @@
           <button class="btn" id="moSaveBtn" onclick="saveMediaOnly()">Make media-only</button>
         </div>
         <div id="moList" class="muted" style="margin-top:0.9rem;">Loading…</div>
+      </div>
+      </div>
+
+      <div class="subpage hidden" data-page="md-escalation">
+        <div class="card settings-card">
+          <div class="setting-row stack">
+            <div><div class="setting-title">🔺 Warning escalation</div><div class="setting-help">When a member reaches a number of <em>active</em> warnings, this happens automatically (and is recorded as its own case). Revoked warnings don't count. Same as <code>/cases escalation</code>.</div></div>
+            <div id="escRows"></div>
+            <div><button class="btn secondary small" type="button" onclick="addEscalationRow()">+ Add rule</button></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">📬 DM members</div><div class="setting-help">Tell members when they're warned, timed out, kicked or banned, with the reason. Same as <code>/cases dm</code>.</div></div>
+            <div class="setting-control"><label class="switch"><input type="checkbox" id="escDm" checked><span class="track"></span></label></div>
+          </div>
+        </div>
+        <div class="savebar"><button class="btn" id="escSaveBtn" onclick="saveEscalation()">Save changes</button></div>
       </div>
     </div>

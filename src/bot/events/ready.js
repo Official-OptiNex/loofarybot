@@ -38,6 +38,9 @@ const remindCommand = require('../commands/remind');
 const alertsCommand = require('../commands/alerts');
 const dailyCommand = require('../commands/daily');
 const mediaonlyCommand = require('../commands/mediaonly');
+const casesCommand = require('../commands/cases');
+const { commands: modActionCommands } = require('../commands/modActions');
+const { commands: greetingCommands } = require('../commands/greetings');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -57,7 +60,10 @@ const ALL_COMMANDS = [
   remindCommand,
   alertsCommand,
   dailyCommand,
-  mediaonlyCommand
+  mediaonlyCommand,
+  casesCommand,
+  ...modActionCommands,
+  ...greetingCommands
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -108,5 +114,8 @@ module.exports = function registerReadyEvent(client) {
       .then((n) => n && console.log(`Refunded ${n} interrupted game bet(s).`))
       .catch(console.error);
     gambling.startGameSweeper(client);
+
+    // Lift temporary bans when they run out.
+    require('../cogs/modules/modCases').startTempBanSweeper(client);
   });
 };

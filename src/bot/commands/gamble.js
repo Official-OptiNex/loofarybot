@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
-const { getGamblingSettings, minesMultiplier, playCoinflip, startMines, startHighLow, startBlackjack, syncGames } = require('../cogs/modules/gambling');
+const { resendControls, getGamblingSettings, minesMultiplier, minesLadder, playCoinflip, startMines, startHighLow, startBlackjack, syncGames } = require('../cogs/modules/gambling');
 
 const betOption = (opt) => opt.setName('bet').setDescription('How much XP to bet').setMinValue(1).setRequired(true);
 
@@ -26,7 +26,12 @@ const data = new SlashCommandBuilder()
       .setDescription('5x5 minefield — reveal gems, avoid mines, cash out any time')
       .addIntegerOption(betOption)
       .addIntegerOption((opt) =>
-        opt.setName('mines').setDescription('Number of mines (1-24, default 3). More mines = bigger multipliers').setMinValue(1).setMaxValue(24)
+        opt
+          .setName('mines')
+          .setDescription('Number of mines (1-24, default 3). More mines = bigger multipliers')
+          .setMinValue(1)
+          .setMaxValue(24)
+          .setAutocomplete(true)
       )
   )
   .addSubcommand((sub) =>
@@ -36,6 +41,7 @@ const data = new SlashCommandBuilder()
     sub.setName('blackjack').setDescription('Beat the dealer to 21 — hit, stand or double down').addIntegerOption(betOption)
   )
   .addSubcommand((sub) => sub.setName('info').setDescription('Show payouts, the house edge, and bet limits'))
+  .addSubcommand((sub) => sub.setName('resume').setDescription('Get your game buttons back (if you dismissed them)'))
   .addSubcommand((sub) =>
     sub
       .setName('sync')
@@ -50,6 +56,8 @@ const data = new SlashCommandBuilder()
       .addNumberOption((opt) => opt.setName('house_edge').setDescription('House edge in percent (0-50, default 4)').setMinValue(0).setMaxValue(50))
       .addIntegerOption((opt) => opt.setName('min_bet').setDescription('Minimum bet in XP').setMinValue(1))
       .addIntegerOption((opt) => opt.setName('max_bet').setDescription('Maximum bet in XP (0 = no limit)').setMinValue(0))
+      .addIntegerOption((opt) => opt.setName('max_win').setDescription('Most XP one game can win (0 = no limit) — games auto-cash-out at it').setMinValue(0))
+      .addIntegerOption((opt) => opt.setName('daily_limit').setDescription('Games each member can play per day (default 10, 0 = unlimited)').setMinValue(0).setMaxValue(1000))
       .addChannelOption((opt) =>
         opt
           .setName('channel')
@@ -77,6 +85,8 @@ async function execute(interaction) {
   if (sub === 'blackjack') {
     return startBlackjack(interaction, interaction.options.getInteger('bet'));
   }
+
+  if (sub === 'resume') return resendControls(interaction);
 
   if (sub === 'sync') {
     const everyone = interaction.options.getBoolean('everyone') ?? false;
@@ -111,9 +121,8 @@ async function execute(interaction) {
   if (sub === 'info') {
     const config = await getOrCreateConfig(interaction.guildId);
     const s = getGamblingSettings(config);
-    const mineExamples = [1, 3, 5, 10]
-      .map((m) => `${m} mine${m > 1 ? 's' : ''}: 1 gem ${minesMultiplier(1, m, s.edge).toFixed(2)}x · 3 gems ${minesMultiplier(3, m, s.edge).toFixed(2)}x`)
-      .join('\n');
+    // More mines = a steeper payout ladder.
+    const mineExamples = [1, 3, 5, 10, 20].map((m) => `**${m} mine${m > 1 ? 's' : ''}:** ${minesLadder(m, s.edge)}`).join('\n');
     const embed = new EmbedBuilder()
       .setTitle('🎰 XP Gambling')
       .setColor(s.enabled ? '#57F287' : '#ED4245')
@@ -122,6 +131,8 @@ async function execute(interaction) {
         { name: 'House edge', value: `${s.edgePercent}%`, inline: true },
         { name: 'Bet limits', value: `${s.minBet} – ${s.maxBet ? `${s.maxBet} XP` : 'no max'}`, inline: true },
         { name: 'Channel', value: s.channelId ? `<#${s.channelId}>` : 'Anywhere', inline: true },
+        { name: 'Daily limit', value: s.dailyLimit ? `${s.dailyLimit} games per member per day (resets at midnight UTC)` : 'Unlimited', inline: true },
+        { name: 'Max win per game', value: s.maxWin ? `${s.maxWin.toLocaleString()} XP (games cash out automatically at it)` : 'No cap', inline: true },
         {
           name: '🎟️ Free play',
           value: s.freePlay.enabled
@@ -129,7 +140,7 @@ async function execute(interaction) {
             : 'Off'
         },
         { name: '🪙 Coinflip', value: `50/50, pays **${(2 * (1 - s.edge)).toFixed(2)}x**` },
-        { name: '💣 Mines', value: mineExamples },
+        { name: '💣 Mines — more mines, bigger payouts', value: mineExamples },
         {
           name: '🃏 High-Low',
           value: `Each correct call multiplies your winnings by \`1 / chance\` (edge taken once at cash-out) — e.g. one call on a 7 pays ${((1 - s.edge) / (7 / 13)).toFixed(2)}x.`
@@ -169,6 +180,10 @@ async function execute(interaction) {
     const freePlay = interaction.options.getBoolean('free_play');
     const freePlayXp = interaction.options.getInteger('free_play_xp');
     const freePlayCooldown = interaction.options.getInteger('free_play_cooldown');
+    const maxWin = interaction.options.getInteger('max_win');
+    const dailyLimit = interaction.options.getInteger('daily_limit');
+    if (dailyLimit !== null) config.gamblingDailyLimit = dailyLimit;
+    if (maxWin !== null) config.gamblingMaxWin = maxWin || null;
     if (freePlay !== null) config.gamblingFreePlayEnabled = freePlay;
     if (freePlayXp !== null) config.gamblingFreePlayAmount = freePlayXp;
     if (freePlayCooldown !== null) config.gamblingFreePlayCooldownHours = freePlayCooldown;
@@ -178,11 +193,22 @@ async function execute(interaction) {
     return interaction.reply({
       content:
         `✅ Gambling is **${s.enabled ? 'enabled' : 'disabled'}** · House edge **${s.edgePercent}%** · ` +
-        `Bets **${s.minBet}–${s.maxBet || '∞'} XP** · Channel: ${s.channelId ? `<#${s.channelId}>` : 'anywhere'} · ` +
+        `Bets **${s.minBet}–${s.maxBet || '∞'} XP** · Max win **${s.maxWin ? `${s.maxWin} XP` : 'none'}** · **${s.dailyLimit || '∞'}** games/day · Channel: ${s.channelId ? `<#${s.channelId}>` : 'anywhere'} · ` +
         `Free play: ${s.freePlay.enabled ? `**${s.freePlay.amount} XP** every ${s.freePlay.cooldownMs / 3600000}h` : 'off'}`,
       ephemeral: true
     });
   }
 }
 
-module.exports = { data, execute };
+// Mine count suggestions preview the payouts, so it's obvious more mines pay more.
+async function autocomplete(interaction) {
+  const typed = interaction.options.getFocused();
+  const config = await getOrCreateConfig(interaction.guildId);
+  const { edge } = getGamblingSettings(config);
+  const counts = typed ? [Number(typed)].filter((n) => n >= 1 && n <= 24) : [1, 3, 5, 7, 10, 15, 20, 24];
+  return interaction.respond(
+    counts.map((m) => ({ name: `${m} mine${m === 1 ? '' : 's'} — ${minesLadder(m, edge)}`.slice(0, 100), value: m }))
+  );
+}
+
+module.exports = { data, execute, autocomplete };
