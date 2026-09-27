@@ -161,6 +161,12 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - **Daily limit:** members can play **10 games a day** by default (resets at midnight UTC). Every
   result shows how many plays are left. Change it (0 = unlimited) with `/gamble config
   daily_limit:` or the dashboard. A game that fails to start doesn't use a play.
+- **Daily win limit** (default **+1,000 XP** a day, `/gamble config daily_win_cap:` or the dashboard;
+  0 = off): the most XP a member can come out ahead from gambling each day, counting wins minus
+  losses. A game never pays past what's left of it; mines and high-low cash out automatically when
+  they reach it. Once a member hits it, more bets wait until midnight UTC. Without it, a few lucky
+  all-in bets could turn 500 XP into level 13 in minutes. `/gamble info` shows each member's plays
+  and winnings left today.
 - **Max win per game** (optional, `/gamble config max_win:` or the dashboard): caps what one game
   can pay. Mines and high-low cash out automatically when the cap is reached.
 - **Dismissed the private controls?** The game keeps going. `/gamble resume` (or the **Show my
@@ -275,6 +281,18 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - YouTube uses the channel's public RSS feed every 5 minutes — no API key. Following a channel
   never announces its old videos, and at most 3 new videos are posted per check.
 - Alerts in announcement channels are auto-published to followers.
+
+### Booster perks (`/perks` or dashboard **Leveling → Booster perks**)
+Server boosters get, by default:
+- 🎲 **+5 gambles a day** on top of the daily gamble limit.
+- 🎁 **+2 entries in every timed giveaway** (their best bonus counts if they also have a bonus role).
+- 📦 **100 XP every day, automatically**, sent just after midnight UTC. Optionally announced in a
+  channel, without pings.
+- 💝 **A 500 XP thank-you package** when they boost, with a DM listing their perks. Once per 30 days,
+  so unboosting and reboosting can't farm it.
+
+`/perks show` lists them for anyone. `/perks config` (Manage Server) or the dashboard changes every
+amount, the announcement channel, or turns them off.
 
 ### Daily streaks (`/daily`)
 - Claim XP once per UTC day. Consecutive days add a streak bonus (default +10/day, capped at

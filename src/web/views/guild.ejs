@@ -588,6 +588,7 @@
         <button data-sub="lv-colors">🎨 Level colors</button>
         <button data-sub="lv-daily">🔥 Daily streaks</button>
         <button data-sub="lv-cards">🪪 Rank cards</button>
+        <button data-sub="lv-boost">💎 Booster perks</button>
       </div>
 
       <div class="subpage" data-page="lv-xp">
@@ -749,8 +750,45 @@
         </div>
       </div>
 
+      <% const bp = gambling.booster; %>
+      <div class="subpage hidden" data-page="lv-boost">
+        <div class="two-col">
+          <div class="card settings-card">
+            <div class="setting-row">
+              <div><div class="setting-title">Booster perks</div><div class="setting-help">Rewards for members who boost the server. Same as <code>/perks config</code>; members see them with <code>/perks show</code>.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="bpEnabled" <%= bp.enabled ? 'checked' : '' %>><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">🎲 Extra gambles</div><div class="setting-help">Added to the daily gamble limit (Gambling page).</div></div>
+              <div class="setting-control"><input type="number" id="bpGambles" min="0" max="100" value="<%= bp.extraGambles %>" class="bp-input"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">🎁 Extra giveaway entries</div><div class="setting-help">Extra tickets in every timed giveaway started from now on. If a member also has a bonus role, their best bonus counts.</div></div>
+              <div class="setting-control"><input type="number" id="bpEntries" min="0" max="10" value="<%= bp.giveawayEntries %>" class="bp-input"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">📦 Daily XP drop</div><div class="setting-help">Every booster automatically gets this much XP once a day, just after midnight UTC. 0 = off.</div></div>
+              <div class="setting-control"><input type="number" id="bpDaily" min="0" max="100000" value="<%= bp.dailyXp %>" class="bp-input"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">💝 Thank-you package</div><div class="setting-help">One-time XP when someone boosts (at most once every 30 days per member, so unboosting and reboosting can't farm it). They also get a DM listing their perks. 0 = off.</div></div>
+              <div class="setting-control"><input type="number" id="bpBoost" min="0" max="1000000" value="<%= bp.boostXp %>" class="bp-input"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Announcements</div><div class="setting-help">Post the daily drop and thank-yous here (no pings). Leave empty to give the XP quietly.</div></div>
+              <div class="setting-control"><select id="bpChannel"><%- channelOptions(bp.channelId, 'Don\'t announce') %></select></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top:0;">What boosters get</h3>
+            <div id="bpSummary" class="muted" style="line-height:1.8;"></div>
+            <p class="muted" style="font-size:0.78rem; margin-bottom:0;"><%= guild.premiumSubscriptionCount || 0 %> boost(s) right now · Tier <%= guild.premiumTier || 0 %></p>
+          </div>
+        </div>
+      </div>
+
       <div class="savebar">
-        <span class="hint">Saves every leveling tab at once, including level colors.</span>
+        <span class="hint">Saves every leveling tab at once, including level colors and booster perks.</span>
         <button class="btn" onclick="saveLevelsAll()">Save changes</button>
       </div>
     </div>
@@ -799,6 +837,7 @@
             <%- chip('', 'Bets ' + gambling.minBet + '–' + (gambling.maxBet || '∞') + ' XP') %>
             <%- chip(gambling.maxWin ? 'good' : '', gambling.maxWin ? 'Max win ' + gambling.maxWin + ' XP' : 'No max win') %>
             <%- chip('', gambling.dailyLimit ? gambling.dailyLimit + ' games / day' : 'Unlimited games') %>
+            <%- chip(gambling.dailyWinCap ? 'good' : '', gambling.dailyWinCap ? 'Win cap +' + gambling.dailyWinCap.toLocaleString() + ' XP / day' : 'No daily win cap') %>
             <%- chip('', channelName(gambling.channelId) ? 'Only in ' + esc(channelName(gambling.channelId)) : 'Any channel') %>
           </div>
         </div>
@@ -820,6 +859,10 @@
           <div class="setting-row">
             <div><div class="setting-title">Daily limit</div><div class="setting-help">How many games each member can play per day (resets at midnight UTC). 0 = unlimited.</div></div>
             <div class="setting-control"><input type="number" id="gDaily" min="0" max="1000" value="<%= gambling.dailyLimit %>"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Daily win limit</div><div class="setting-help">The most XP a member can come out ahead from gambling each day (wins minus losses). Games cash out automatically at it and more bets wait until midnight UTC — so a lucky streak can't skip days of chatting. Default 1,000. 0 = no cap.</div></div>
+            <div class="setting-control"><input type="number" id="gWinCap" min="0" value="<%= gambling.dailyWinCap %>"></div>
           </div>
           <div class="setting-row">
             <div><div class="setting-title">Max win per game</div><div class="setting-help">The most XP one game can win. Games that reach it cash out automatically — stops a lucky mines board from printing millions of XP. Blank = no cap.</div></div>
@@ -1507,6 +1550,7 @@
           maxBet: document.getElementById('gMax').value,
           maxWin: document.getElementById('gMaxWin').value,
           dailyLimit: document.getElementById('gDaily').value,
+          dailyWinCap: document.getElementById('gWinCap').value,
           channelId: document.getElementById('gChannel').value,
           freePlayEnabled: document.getElementById('gFreePlay').checked,
           freePlayAmount: document.getElementById('gFreeAmount').value,
@@ -1787,10 +1831,46 @@
       await saveLevels();
       try {
         await saveLevelColors({ quiet: true });
+        await saveBoosterPerks();
       } catch (err) {
         showToast(`❌ ${err.message}`);
       }
     }
+
+    // --- Booster perks ---
+    function readBoosterPerks() {
+      const n = (id) => document.getElementById(id).value;
+      return {
+        enabled: document.getElementById('bpEnabled').checked,
+        extraGambles: n('bpGambles'),
+        giveawayEntries: n('bpEntries'),
+        dailyXp: n('bpDaily'),
+        boostXp: n('bpBoost'),
+        channelId: n('bpChannel')
+      };
+    }
+    function renderBoosterPerks() {
+      const p = readBoosterPerks();
+      const lines = [
+        +p.extraGambles ? `🎲 <strong>+${fmt(+p.extraGambles)}</strong> gambles a day` : '',
+        +p.giveawayEntries ? `🎁 <strong>+${fmt(+p.giveawayEntries)}</strong> entries in every giveaway (${1 + +p.giveawayEntries} tickets)` : '',
+        +p.dailyXp ? `📦 <strong>${fmt(+p.dailyXp)} XP</strong> every day, automatically` : '',
+        +p.boostXp ? `💝 <strong>${fmt(+p.boostXp)} XP</strong> when they boost` : ''
+      ].filter(Boolean);
+      document.getElementById('bpSummary').innerHTML = !p.enabled ? 'Booster perks are off.' : lines.length ? lines.join('<br>') : 'Every perk is set to 0.';
+    }
+    async function saveBoosterPerks() {
+      const res = await fetch(`/api/guilds/${guildId}/levels/boosterperks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(readBoosterPerks())
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to save booster perks.');
+    }
+    document.querySelectorAll('.bp-input, #bpEnabled').forEach((el) => el.addEventListener('input', renderBoosterPerks));
+    document.getElementById('bpEnabled').addEventListener('change', renderBoosterPerks);
+    renderBoosterPerks();
 
     // --- Daily streaks ---
     function readDaily() {

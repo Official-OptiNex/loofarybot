@@ -11,6 +11,7 @@ const {
 const { getOrCreateConfig, getEffectiveXpSettings, adjustXp, debitXp } = require('./leveling');
 const UserLevel = require('../../../database/models/UserLevel');
 const ActiveBet = require('../../../database/models/ActiveBet');
+const { boosterSettings } = require('./boosterPerks');
 
 const GRID_SIZE = 25; // 5x5 mines board
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
@@ -32,6 +33,8 @@ function getGamblingSettings(config) {
     maxBet: config.gamblingMaxBet ?? null,
     maxWin: config.gamblingMaxWin > 0 ? config.gamblingMaxWin : null, // most XP one game can win (profit), null = no cap
     dailyLimit: Math.max(0, config.gamblingDailyLimit ?? 10), // games per member per UTC day, 0 = unlimited
+    dailyWinCap: Math.max(0, config.gamblingDailyWinCap ?? 1000), // most XP a member can come out ahead per UTC day, 0 = no cap
+    booster: boosterSettings(config),
     channelId: config.gamblingChannelId ?? null,
     freePlay: {
       enabled: config.gamblingFreePlayEnabled !== false,
@@ -43,12 +46,21 @@ function getGamblingSettings(config) {
 
 const fmtMult = (m) => `${m.toFixed(2)}x`;
 
-// Applies the server's max-win cap: at most `maxWin` XP profit on top of the stake.
-function capReturn(settings, bet, returned) {
-  const cap = settings?.maxWin;
-  return cap && returned > bet + cap ? bet + cap : returned;
+// The most one game may pay back: the stake plus the smaller of the server's per-game max win and
+// what's left of the player's daily win cap. `g` is a game (or a coinflip's bet context).
+function maxReturn(g) {
+  const caps = [];
+  if (g.settings?.maxWin) caps.push(g.bet + g.settings.maxWin);
+  if (g.winRoom !== null && g.winRoom !== undefined) caps.push((g.paidStake ?? g.bet) + Math.max(0, g.winRoom));
+  return caps.length ? Math.min(...caps) : Infinity;
 }
-const hitCap = (game) => !!game.settings?.maxWin && Math.floor(game.bet * game.currentMultiplier()) >= game.bet + game.settings.maxWin;
+const capReturn = (g, returned) => Math.min(returned, maxReturn(g));
+const hitCap = (game) => Math.floor(game.bet * game.currentMultiplier()) >= maxReturn(game);
+// Which cap stopped the game, for the message.
+const capLabel = (g) =>
+  g.winRoom !== null && g.winRoom !== undefined && (g.paidStake ?? g.bet) + Math.max(0, g.winRoom) <= (g.settings?.maxWin ? g.bet + g.settings.maxWin : Infinity)
+    ? `today's win limit (**+${fmtNum(g.settings.dailyWinCap)} XP** a day)`
+    : `this server's max win of **${fmtNum(g.settings.maxWin)} XP**`;
 const fmtNum = (n) => Number(n).toLocaleString('en-US');
 
 async function fetchBalance(guildId, userId) {
@@ -101,6 +113,33 @@ async function takeDailyPlay(guildId, userId, limit) {
 async function returnDailyPlay(guildId, userId) {
   await UserLevel.updateOne({ guildId, userId, gambleDay: utcDay(), gamblesToday: { $gt: 0 } }, { $inc: { gamblesToday: -1 } }).catch(() => null);
 }
+
+// Daily win cap: net XP won today (wins minus losses). Anyone this far ahead can't gamble again until
+// midnight UTC, and a game never pays more than what's left — so gambling can't skip days of levels.
+async function recordNet(guildId, userId, net) {
+  if (!net) return;
+  const day = utcDay();
+  await UserLevel.updateOne({ guildId, userId }, [
+    {
+      $set: {
+        gambleNetToday: { $cond: [{ $eq: ['$gambleWinDay', day] }, { $add: [{ $ifNull: ['$gambleNetToday', 0] }, net] }, net] },
+        gambleWinDay: day
+      }
+    }
+  ]).catch((err) => console.error('Failed to record gambling result:', err.message));
+}
+
+const netToday = (record) => (record?.gambleWinDay === utcDay() ? record.gambleNetToday || 0 : 0);
+
+function winCapText(settings, net) {
+  if (!settings.dailyWinCap || net === null || net === undefined) return '';
+  if (net >= settings.dailyWinCap) return `🏦 **Daily win limit reached** (+${fmtNum(settings.dailyWinCap)} XP) — you can gamble again <t:${Math.floor(nextUtcMidnight() / 1000)}:R>.`;
+  return net > 0 ? `🏦 Won today: **+${fmtNum(net)}** / ${fmtNum(settings.dailyWinCap)} XP` : '';
+}
+
+// Daily plays for this member: boosters get extra (0 stays unlimited).
+const dailyLimitFor = (settings, member) =>
+  settings.dailyLimit && settings.booster?.enabled && member?.premiumSince ? settings.dailyLimit + settings.booster.extraGambles : settings.dailyLimit;
 
 const playsLeftText = (left) => (left === null || left === undefined ? '' : `🎲 **${left}** play${left === 1 ? '' : 's'} left today`);
 
@@ -158,6 +197,8 @@ function freePlayText(outcome, settings) {
 // staked — free plays cost nothing), their fresh balance, and a free play if they went broke.
 async function settle(game, returned) {
   game.net = returned - (game.paidStake ?? game.bet);
+  await recordNet(game.guildId, game.userId, game.net);
+  if (game.startNet !== null && game.startNet !== undefined) game.netToday = game.startNet + game.net;
   game.balance = await fetchBalance(game.guildId, game.userId);
   if (game.net < 0 || (game.freePlay && returned === 0)) {
     game.freePlayNote = freePlayText(await maybeGrantFreePlay(game.guildId, game.userId, game.settings, game.balance), game.settings);
@@ -166,7 +207,7 @@ async function settle(game, returned) {
 
 // Text shown under a finished game: balance line plus any free-play notice.
 function settledText(game) {
-  return [balanceText(game.balance, game.net), game.freePlayNote, playsLeftText(game.playsLeft)].filter(Boolean).join('\n');
+  return [balanceText(game.balance, game.net), game.freePlayNote, playsLeftText(game.playsLeft), winCapText(game.settings, game.netToday)].filter(Boolean).join('\n');
 }
 
 // Returns the player's stake after a refund: their own XP, and their free play if it was one.
@@ -227,17 +268,35 @@ async function placeBet(interaction, bet) {
   if (bet < settings.minBet) return fail(`❌ The minimum bet is **${settings.minBet} XP**.`);
   if (settings.maxBet && bet > settings.maxBet) return fail(`❌ The maximum bet is **${settings.maxBet} XP**.`);
 
-  const daily = await takeDailyPlay(interaction.guildId, interaction.user.id, settings.dailyLimit);
+  const record = await UserLevel.findOne(
+    { guildId: interaction.guildId, userId: interaction.user.id },
+    { xp: 1, freePlays: 1, gambleWinDay: 1, gambleNetToday: 1 }
+  ).lean();
+  const startNet = settings.dailyWinCap ? netToday(record) : null;
+  if (startNet !== null && startNet >= settings.dailyWinCap) {
+    return fail(
+      `🏦 You've won **+${fmtNum(startNet)} XP** from gambling today — that's this server's daily limit (+${fmtNum(settings.dailyWinCap)}). ` +
+        `You can gamble again <t:${Math.floor(nextUtcMidnight() / 1000)}:R>. Chatting still earns XP!`
+    );
+  }
+  const winRoom = startNet !== null ? settings.dailyWinCap - startNet : null;
+
+  const limit = dailyLimitFor(settings, interaction.member);
+  const daily = await takeDailyPlay(interaction.guildId, interaction.user.id, limit);
   if (!daily.ok) {
-    return fail(`🎲 You've used all **${settings.dailyLimit}** gambles for today. You can play again <t:${Math.floor(nextUtcMidnight() / 1000)}:R>.`);
+    const perk =
+      limit === settings.dailyLimit && settings.booster?.enabled && settings.booster.extraGambles
+        ? `\n-# 💎 Server boosters get **+${settings.booster.extraGambles}** gambles a day.`
+        : '';
+    return fail(`🎲 You've used all **${limit}** gambles for today. You can play again <t:${Math.floor(nextUtcMidnight() / 1000)}:R>.${perk}`);
   }
   const giveBack = () => (daily.left !== null ? returnDailyPlay(interaction.guildId, interaction.user.id) : null);
+  const extra = { playsLeft: daily.left, winRoom, startNet };
 
   // A player holding a free play who can't cover this bet plays it for free instead.
-  const record = await UserLevel.findOne({ guildId: interaction.guildId, userId: interaction.user.id }, { xp: 1, freePlays: 1 }).lean();
   if (record?.freePlays > 0 && (record.xp ?? 0) < bet && settings.freePlay.enabled) {
     if (await consumeFreePlay(interaction.guildId, interaction.user.id)) {
-      return { config, settings, bet: settings.freePlay.amount, freePlay: true, paidStake: 0, playsLeft: daily.left };
+      return { config, settings, bet: settings.freePlay.amount, freePlay: true, paidStake: 0, ...extra };
     }
   }
 
@@ -248,7 +307,7 @@ async function placeBet(interaction, bet) {
     return fail(`❌ You don't have **${fmtNum(bet)} XP** to bet. Check your balance with \`/levels rank\`.${status ? `\n${status}` : ''}`);
   }
 
-  return { config, settings, bet, freePlay: false, paidStake: bet, playsLeft: daily.left };
+  return { config, settings, bet, freePlay: false, paidStake: bet, ...extra };
 }
 
 const freePlayBanner = (ctx) =>
@@ -270,10 +329,13 @@ async function playCoinflip(interaction, bet, side) {
   const result = randInt(2) === 0 ? 'heads' : 'tails';
   const won = result === side;
   const multiplier = 2 * (1 - ctx.settings.edge);
-  const winnings = won ? capReturn(ctx.settings, bet, Math.floor(bet * multiplier)) : 0;
+  const uncapped = won ? Math.floor(bet * multiplier) : 0;
+  const winnings = capReturn(ctx, uncapped);
   const levelResult = await payout(interaction.guild, interaction.user.id, winnings, ctx.config);
   const balance = await fetchBalance(interaction.guildId, interaction.user.id);
   const net = winnings - ctx.paidStake;
+  await recordNet(interaction.guildId, interaction.user.id, net);
+  const capText = winCapText(ctx.settings, ctx.startNet !== null ? ctx.startNet + net : null);
   const freeNote = net < 0 || (ctx.freePlay && !won)
     ? freePlayText(await maybeGrantFreePlay(interaction.guildId, interaction.user.id, ctx.settings, balance), ctx.settings)
     : '';
@@ -285,12 +347,12 @@ async function playCoinflip(interaction, bet, side) {
       (ctx.freePlay ? `${freePlayBanner(ctx)}\n` : '') +
         `${interaction.user} bet **${fmtNum(bet)} XP** on **${side}**.\n` +
         (won
-          ? `✅ You won **${fmtNum(winnings)} XP** (${fmtMult(multiplier)}).`
+          ? `✅ You won **${fmtNum(winnings)} XP** (${fmtMult(multiplier)}).${winnings < uncapped ? `\n🏁 Capped by ${capLabel(ctx)}.` : ''}`
           : ctx.freePlay
             ? '❌ No luck this time — it was a free play, so you lost nothing.'
             : `❌ You lost **${fmtNum(bet)} XP**.`) +
         levelNote(levelResult) +
-        `\n\n${balanceText(balance, net)}${freeNote ? `\n${freeNote}` : ''}${ctx.playsLeft !== null && ctx.playsLeft !== undefined ? `\n${playsLeftText(ctx.playsLeft)}` : ''}`
+        `\n\n${balanceText(balance, net)}${freeNote ? `\n${freeNote}` : ''}${ctx.playsLeft !== null && ctx.playsLeft !== undefined ? `\n${playsLeftText(ctx.playsLeft)}` : ''}${capText ? `\n${capText}` : ''}`
     );
   return respond(interaction, { embeds: [embed], allowedMentions: { parse: [] } });
 }
@@ -303,6 +365,8 @@ function startGame(interaction, game, ctx) {
   game.freePlay = !!ctx.freePlay;
   game.paidStake = ctx.paidStake;
   game.playsLeft = ctx.playsLeft;
+  game.winRoom = ctx.winRoom;
+  game.startNet = ctx.startNet;
   game.userId = interaction.user.id;
   game.guildId = interaction.guildId;
   game.guild = interaction.guild;
@@ -546,8 +610,8 @@ async function abortGame(game) {
 async function cashOut(game, note = '') {
   endGame(game);
   const uncapped = Math.floor(game.bet * game.currentMultiplier());
-  const winnings = capReturn(game.settings, game.bet, uncapped);
-  if (winnings < uncapped) note = `${note ? `${note}\n` : ''}🏁 Capped at this server's max win of **${fmtNum(game.settings.maxWin)} XP**.`;
+  const winnings = capReturn(game, uncapped);
+  if (winnings < uncapped) note = `${note ? `${note}\n` : ''}🏁 Capped by ${capLabel(game)}.`;
   const levelResult = await gamePayout(game, winnings);
   await settle(game, winnings);
   game.status = 'cashed';
@@ -686,7 +750,7 @@ async function handleMinesClick(interaction, game, action) {
     return interaction.update(await cashOut(game, '🏆 Cleared the whole board!'));
   }
   // Nothing more to win past the server's cap — bank it rather than risk a mine for nothing.
-  if (hitCap(game)) return interaction.update(await cashOut(game, '🏁 Max win reached — cashed out automatically.'));
+  if (hitCap(game)) return interaction.update(await cashOut(game, `🏁 Reached ${capLabel(game)} — cashed out automatically.`));
   return interaction.update(game.render());
 }
 
@@ -813,7 +877,7 @@ async function handleHighLowClick(interaction, game, action) {
   }
   game.fairMultiplier /= p;
   game.correct += 1;
-  if (hitCap(game)) return interaction.update(await cashOut(game, `✅ ${cardLabel(next)} — correct!\n🏁 Max win reached — cashed out automatically.`));
+  if (hitCap(game)) return interaction.update(await cashOut(game, `✅ ${cardLabel(next)} — correct!\n🏁 Reached ${capLabel(game)} — cashed out automatically.`));
   return interaction.update(game.render(`✅ ${cardLabel(next)} — correct!`));
 }
 
@@ -921,7 +985,9 @@ async function resolveBlackjack(game, note = '') {
     else outcome = 'lose';
   }
 
-  const returned = capReturn(game.settings, game.bet, blackjackReturn(game, outcome));
+  const uncapped = blackjackReturn(game, outcome);
+  const returned = capReturn(game, uncapped);
+  if (returned < uncapped) note = [note, `🏁 Capped by ${capLabel(game)}.`].filter(Boolean).join('\n');
   const levelResult = await gamePayout(game, returned);
   game.outcome = outcome;
   game.status = ['blackjack', 'win', 'dealer_bust'].includes(outcome) ? 'won' : outcome === 'push' ? 'push' : 'lost';
@@ -1190,6 +1256,8 @@ async function handleGambleButton(interaction) {
 
 module.exports = {
   getGamblingSettings,
+  dailyLimitFor,
+  winCapText,
   minesMultiplier,
   minesLadder,
   pHigherOrSame,

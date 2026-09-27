@@ -14,6 +14,7 @@ const GiveawaySchema = new mongoose.Schema(
     hostId: { type: String, required: true },
     entries: { type: [String], default: [] },
     winners: { type: [String], default: [] }, // drawn when it ends (rerolls are appended)
+    boosterEntries: { type: Number, default: undefined }, // extra tickets for server boosters, saved when posted
     // Extra tickets for members with these roles (timed giveaways): best bonus counts.
     bonusEntries: {
       type: [new mongoose.Schema({ roleId: { type: String, required: true }, extra: { type: Number, required: true } }, { _id: false })],
