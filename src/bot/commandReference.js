@@ -32,6 +32,8 @@ module.exports = [
     tab: 'leveling',
     commands: [
       { usage: '/daily', perm: null, description: 'Claim daily XP — consecutive days build a streak for bigger rewards.' },
+      { usage: '/xpdrop setup', perm: 'Manage Server', description: 'Random XP drops in chat — pick channels, XP range and how often; first to click wins.' },
+      { usage: '/xpdrop now · status · toggle', perm: 'Manage Server', description: 'Drop one right now, see recent winners and the next drop, or turn drops on/off.' },
       { usage: '/perks show', perm: null, description: 'What server boosters get: extra gambles, giveaway entries, a daily XP drop and a thank-you package.' },
       { usage: '/perks config', perm: 'Manage Server', description: 'Change the booster perks and where drops are announced.' },
       { usage: '/levels rank', perm: null, description: "See your (or someone's) level, XP and server rank." },
@@ -64,6 +66,7 @@ module.exports = [
       { usage: '/gamble blackjack', perm: null, description: 'Beat the dealer to 21 — hit, stand or double down.' },
       { usage: '/gamble mines', perm: null, description: '5×5 minefield: reveal gems, avoid mines, cash out any time.' },
       { usage: '/gamble highlow', perm: null, description: 'Call higher or lower to build a multiplier, then cash out.' },
+      { usage: '/gamble stats', perm: null, description: 'Your games, win rate, net XP, biggest win and streaks — or the server’s top players.' },
       { usage: '/gamble info', perm: null, description: 'Payouts, limits, and how many plays and how much XP you have left today.' },
       { usage: '/gamble resume', perm: null, description: 'Dismissed your private game buttons? Get them back.' },
       { usage: '/gamble sync', perm: null, description: "Stuck? End your game now and get back XP from games that didn't finish (admins: everyone:true)." },

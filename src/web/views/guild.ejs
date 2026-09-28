@@ -592,6 +592,7 @@
         <button data-sub="lv-daily">🔥 Daily streaks</button>
         <button data-sub="lv-cards">🪪 Rank cards</button>
         <button data-sub="lv-boost">💎 Booster perks</button>
+        <button data-sub="lv-drops">🎁 Chat drops</button>
       </div>
 
       <div class="subpage" data-page="lv-xp">
@@ -754,6 +755,60 @@
       </div>
 
       <% const bp = gambling.booster; %>
+      <% const cd = config.chatDrops || {}; %>
+      <div class="subpage hidden" data-page="lv-drops">
+        <div class="two-col">
+          <div class="card settings-card">
+            <div class="setting-row">
+              <div><div class="setting-title">Chat drops</div><div class="setting-help">Every so often LoofaryBot drops “🎁 XP Drop!” in an active channel. The first person to click wins it — usually 1 winner, sometimes 2 or 3. Same as <code>/xpdrop</code>.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="cdEnabled" <%= cd.enabled ? 'checked' : '' %>><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Channels</div><div class="setting-help">Drops appear in one of these, picked at random from the ones people are chatting in.</div></div>
+              <div class="check-grid" id="cdChannels">
+                <% channels.forEach(c => { %><label class="check-pill"><input type="checkbox" class="cd-channel" value="<%= c.id %>" <%= (cd.channelIds || []).includes(c.id) ? 'checked' : '' %>><span>#<%= c.name %></span></label><% }) %>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">XP per drop</div><div class="setting-help">A random amount in this range (each winner gets it).</div></div>
+              <div class="setting-control">
+                <input type="number" id="cdMinXp" min="1" max="100000" value="<%= cd.minXp ?? 50 %>" aria-label="Minimum XP">
+                <input type="number" id="cdMaxXp" min="1" max="100000" value="<%= cd.maxXp ?? 250 %>" aria-label="Maximum XP">
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Time between drops</div><div class="setting-help">Random, in minutes.</div></div>
+              <div class="setting-control">
+                <input type="number" id="cdMinMin" min="5" max="10080" value="<%= cd.minMinutes ?? 30 %>" aria-label="Minimum minutes">
+                <input type="number" id="cdMaxMin" min="5" max="10080" value="<%= cd.maxMinutes ?? 90 %>" aria-label="Maximum minutes">
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Only when chat is active</div><div class="setting-help">Messages needed in a channel in the last 10 minutes. If it's quiet, the drop waits until people are talking (0 = always).</div></div>
+              <div class="setting-control"><input type="number" id="cdActivity" min="0" max="100" value="<%= cd.minActivity ?? 3 %>"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Claim window</div><div class="setting-help">Seconds a drop stays up. Unclaimed drops are removed.</div></div>
+              <div class="setting-control"><input type="number" id="cdClaim" min="15" max="3600" value="<%= cd.claimSeconds ?? 120 %>"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Try it</div><div class="setting-help">Drop one right now (uses the XP range above once saved).</div></div>
+              <div class="setting-control">
+                <select id="cdNowChannel"><%- channelOptions(null, '— Channel —') %></select>
+                <button class="btn secondary" type="button" onclick="dropNow(this)">🎁 Drop now</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top:0;">Status</h3>
+            <div id="cdStatus" class="muted" style="line-height:1.8;">Loading…</div>
+            <h3>Recent drops</h3>
+            <div id="cdRecent" class="muted">Loading…</div>
+            <p class="muted" style="font-size:0.78rem; margin-bottom:0;">Winner odds: 1 winner 70% · 2 winners 22% · 3 winners 8%.</p>
+          </div>
+        </div>
+      </div>
+
       <div class="subpage hidden" data-page="lv-boost">
         <div class="two-col">
           <div class="card settings-card">
@@ -791,7 +846,7 @@
       </div>
 
       <div class="savebar">
-        <span class="hint">Saves every leveling tab at once, including level colors and booster perks.</span>
+        <span class="hint">Saves every leveling tab at once, including level colors, booster perks and chat drops.</span>
         <button class="btn" onclick="saveLevelsAll()">Save changes</button>
       </div>
     </div>
@@ -890,6 +945,14 @@
           <h3 style="margin-top:0;">Payouts at this edge</h3>
           <table class="payout-table" id="gOdds"></table>
         </div>
+      </div>
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="list-toolbar" style="margin-bottom:0.4rem;">
+          <h3 style="margin:0;">🏆 Top gamblers</h3>
+          <span class="muted" id="gStatsTotals" style="font-size:0.84rem;"></span>
+        </div>
+        <table class="payout-table" id="gStatsTable"><tr><td class="muted">Loading…</td></tr></table>
+        <p class="muted" style="font-size:0.78rem; margin:0.5rem 0 0;">Members see their own with <code>/gamble stats</code>, or the server's with <code>/gamble stats server:true</code>. Refunded games aren't counted.</p>
       </div>
       <div class="savebar"><button class="btn" onclick="saveGambling()">Save changes</button></div>
     </div>
@@ -1252,6 +1315,8 @@
     const guildName = <%- JSON.stringify(guild.name).replace(/</g, '\\u003c') %>;
     const memberCount = <%= stats.memberCount %>;
     const viewer = <%- JSON.stringify(viewer).replace(/</g, '\\u003c') %>;
+    // Extra giveaway tickets for server boosters (Leveling → Booster perks) — shown in the giveaway preview.
+    const boosterGiveawayEntries = <%= gambling.booster.enabled ? gambling.booster.giveawayEntries : 0 %>;
 
     function esc(str) {
       return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1441,6 +1506,28 @@
       container.appendChild(row);
     }
 
+    // --- Unsaved changes: warn before leaving the page with edits that weren't saved ---
+    let unsaved = false;
+    const IGNORE_DIRTY = 'input[type="search"], dialog *, .case-form *, .case-filters *, .list-toolbar *, .member-picker *, #cdNowChannel, #themeToggle, .module-toggle';
+    function setUnsaved(on) {
+      unsaved = on;
+      document.body.classList.toggle('has-unsaved', on);
+    }
+    const markSaved = () => setUnsaved(false);
+    document.querySelectorAll('.tab-panel').forEach((panel) =>
+      ['input', 'change'].forEach((type) =>
+        panel.addEventListener(type, (e) => {
+          if (!e.isTrusted || !e.target.matches('input, textarea, select') || e.target.matches(IGNORE_DIRTY)) return;
+          setUnsaved(true);
+        })
+      )
+    );
+    window.addEventListener('beforeunload', (e) => {
+      if (!unsaved) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+
     async function postJson(path, payload, okMsg) {
       try {
         const res = await fetch(`/api/guilds/${guildId}/${path}`, {
@@ -1449,6 +1536,7 @@
           body: JSON.stringify(payload)
         });
         const data = await res.json().catch(() => ({}));
+        if (res.ok) markSaved();
         showToast(res.ok ? okMsg : `❌ ${data.error || 'Failed to save.'}`);
       } catch {
         showToast('❌ Failed to save.');
@@ -1838,7 +1926,9 @@
       try {
         await saveLevelColors({ quiet: true });
         await saveBoosterPerks();
+        await saveChatDrops();
       } catch (err) {
+        setUnsaved(true); // part of the Leveling page didn't save
         showToast(`❌ ${err.message}`);
       }
     }
@@ -1966,6 +2056,7 @@
     }
     function closeAlertEditor() {
       document.getElementById('alertEditor').style.display = 'none';
+      markSaved(); // closing the editor discards its edits
     }
     // Placeholders show the platform's default text; the color picker starts at the platform color.
     function applyPlatformDefaults(resetColor = true, color = '') {
@@ -2038,6 +2129,7 @@
         const res = await fetch(`/api/guilds/${guildId}/alerts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Failed to save.');
+        markSaved();
         showToast(`✅ Following ${data.subscription.displayName}.`);
         closeAlertEditor();
         await loadAlerts();
@@ -2168,7 +2260,7 @@
         const s = data.summary;
         box.innerHTML = `<div class="log-content">
           <strong>${esc(s.guildName)}</strong> · exported ${s.exportedAt ? esc(new Date(s.exportedAt).toLocaleString()) : 'unknown date'}<br>
-          <span class="muted">${[s.hasSettings && 'module settings', s.hasWelcome && 'welcome', s.alerts && `${s.alerts} alert(s)`, s.embedTemplates && `${s.embedTemplates} embed template(s)`, s.members && `${fmt(s.members)} members' XP`].filter(Boolean).join(' · ')}</span>
+          <span class="muted">${[s.hasSettings && 'module settings', s.hasWelcome && 'welcome', s.hasTickets && 'tickets', s.alerts && `${s.alerts} alert(s)`, s.embedTemplates && `${s.embedTemplates} embed template(s)`, s.members && `${fmt(s.members)} members' XP`].filter(Boolean).join(' · ')}</span>
           ${s.crossServer ? '<br><span style="color:var(--c-yellow);">⚠️ This file is from a different server — channel and role picks won\'t match here and will need re-selecting.</span>' : ''}
         </div>
         ${s.members ? '<label style="display:flex; align-items:center; gap:0.5rem; font-weight:500; color:var(--text-main);"><input type="checkbox" id="importXp" style="width:auto;"> Also import members\' XP (overwrites current XP)</label>' : ''}

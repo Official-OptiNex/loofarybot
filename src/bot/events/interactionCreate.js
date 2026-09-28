@@ -7,6 +7,7 @@ const { reportError } = require('../utils/errorReporter');
 const honeypotCommand = require('../commands/honeypot');
 const giveawayForm = require('../cogs/modules/giveawayForm');
 const { handleTicketButton, handleTicketModal } = require('../cogs/modules/tickets');
+const { handleDropButton } = require('../cogs/modules/chatDrops');
 
 // Routes a component's customId to its feature by prefix.
 function routeButton(interaction) {
@@ -16,6 +17,7 @@ function routeButton(interaction) {
   if (id.startsWith('rr:')) return handleRoleButton(interaction);
   if (id.startsWith('poll:')) return handleVote(interaction);
   if (id.startsWith('tk:')) return handleTicketButton(interaction); // support tickets
+  if (id.startsWith('xpd:')) return handleDropButton(interaction); // chat XP drops
   if (id.startsWith('gwd:')) return giveawayForm.handleDraftButton(interaction, interaction.client); // /loof create form
   return handleButtonInteraction(interaction); // giveaways & drops
 }

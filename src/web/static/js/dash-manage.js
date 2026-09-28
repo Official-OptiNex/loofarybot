@@ -13,6 +13,7 @@ async function manageApi(method, path, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status}).`);
+  if (method !== 'GET' && typeof markSaved === 'function') markSaved();
   return data;
 }
 
@@ -142,6 +143,8 @@ function onManageTabShown(tab) {
     attachMemberPicker(document.getElementById('pgUser'));
   }
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
+  if (tab === 'leveling') loadChatDrops();
+  if (tab === 'gambling') loadGambleStats();
   if (tab === 'tickets') {
     loadTickets();
     loadTicketHistory(tkState.page || 1);
@@ -282,6 +285,7 @@ function openGiveawayEditor(messageId = null, { copy = false } = {}) {
 function closeGiveawayEditor() {
   document.getElementById('gwEditor').style.display = 'none';
   document.getElementById('gwId').value = '';
+  if (typeof markSaved === 'function') markSaved(); // closing an editor discards its edits
 }
 
 function readGiveawayForm() {
@@ -336,9 +340,10 @@ function renderGiveawayPreview() {
   const endTs = ms ? Date.now() + ms : editing ? editing.endTimestamp : Date.now() + 86400000;
   const prize = f.prize || 'Your prize';
   const reqs = requirementLines({ roleId: f.requirements.roleId, minDaysInServer: Number(f.requirements.minDaysInServer) || 0, minLevel: Number(f.requirements.minLevel) || 0 });
-  const reqText =
-    (reqs.length ? `\n\n**Requirements:**\n${reqs.join('\n')}` : '') +
-    (!isDrop && f.bonusEntries.length ? `\n\n**Bonus entries:** ${f.bonusEntries.map((b) => `<@&${b.roleId}> +${Number(b.extra)}`).join(' · ')}` : '');
+  // Same as the real embed: role bonuses, plus the booster perk saved on the giveaway (or the server's current one for new giveaways).
+  const boosterExtra = isDrop ? 0 : editing && typeof editing.boosterEntries === 'number' ? editing.boosterEntries : typeof boosterGiveawayEntries === 'number' ? boosterGiveawayEntries : 0;
+  const bonusParts = [...(!isDrop ? f.bonusEntries.map((b) => `<@&${b.roleId}> +${Number(b.extra)}`) : []), ...(boosterExtra > 0 ? [`💎 Server boosters +${boosterExtra}`] : [])];
+  const reqText = (reqs.length ? `\n\n**Requirements:**\n${reqs.join('\n')}` : '') + (bonusParts.length ? `\n\n**Bonus entries:** ${bonusParts.join(' · ')}` : '');
   const desc = f.description || GW_DEFAULT_DESC[f.type];
   const host = '\u0001HOST\u0001'; // swapped for a pill below so it never depends on the member cache
   const hostName = editing ? editing.hostName || 'host' : viewer.username;
@@ -598,6 +603,7 @@ function openPanelEditor(messageId = null) {
 function closePanelEditor() {
   document.getElementById('rrEditor').style.display = 'none';
   document.getElementById('rrId').value = '';
+  if (typeof markSaved === 'function') markSaved(); // closing an editor discards its edits
 }
 
 // Mirrors buildPanelMessage() in the bot.
@@ -1520,3 +1526,109 @@ async function openTranscript(id) {
     tkState.searchTimer = setTimeout(() => loadTicketHistory(1), 300);
   });
 })();
+
+/* ------------------------------------------------------------------ Chat drops (Leveling tab) */
+
+function readChatDrops() {
+  const n = (id) => document.getElementById(id).value;
+  return {
+    enabled: document.getElementById('cdEnabled').checked,
+    channelIds: [...document.querySelectorAll('.cd-channel:checked')].map((el) => el.value),
+    minXp: n('cdMinXp'),
+    maxXp: n('cdMaxXp'),
+    minMinutes: n('cdMinMin'),
+    maxMinutes: n('cdMaxMin'),
+    minActivity: n('cdActivity'),
+    claimSeconds: n('cdClaim')
+  };
+}
+
+async function loadChatDrops() {
+  const status = document.getElementById('cdStatus');
+  if (!status) return;
+  let data;
+  try {
+    data = await manageApi('GET', 'levels/chatdrops');
+  } catch (err) {
+    status.textContent = `⚠️ ${err.message}`;
+    return;
+  }
+  const s = data.settings;
+  // Fill the form from the live settings once (they may have changed via /xpdrop since the page loaded).
+  if (!loadChatDrops.filled) {
+    loadChatDrops.filled = true;
+    document.getElementById('cdEnabled').checked = s.enabled;
+    document.querySelectorAll('.cd-channel').forEach((el) => (el.checked = s.channelIds.includes(el.value)));
+    for (const [id, v] of [['cdMinXp', s.minXp], ['cdMaxXp', s.maxXp], ['cdMinMin', s.minMinutes], ['cdMaxMin', s.maxMinutes], ['cdActivity', s.minActivity], ['cdClaim', s.claimSeconds]]) {
+      document.getElementById(id).value = v;
+    }
+  }
+  const active = Object.entries(data.activity || {})
+    .map(([id, count]) => `${esc(channelLabel(id))}: ${count} msg${count === 1 ? '' : 's'}`)
+    .join(' · ');
+  status.innerHTML = [
+    !data.levelingEnabled ? '⚠️ Leveling is off, so no drops will happen.' : '',
+    s.enabled
+      ? `🟢 On · next drop ${s.nextDropAt ? fromNow(new Date(s.nextDropAt).getTime()) : 'soon'} <span class="muted">(or as soon as a channel is active after that)</span>`
+      : '⚪ Off',
+    s.enabled && active ? `<span style="font-size:0.82rem;">Last 10 min — ${active} (needs ${s.minActivity})</span>` : '',
+    s.lastDropAt ? `Last drop ${fromNow(new Date(s.lastDropAt).getTime())}` : ''
+  ]
+    .filter(Boolean)
+    .join('<br>');
+  document.getElementById('cdRecent').innerHTML = data.recent.length
+    ? data.recent
+        .map(
+          (d) =>
+            `<div style="font-size:0.84rem; padding:0.3rem 0; border-bottom:1px solid var(--border-card);">🎁 <strong>${fmt(d.amount)} XP</strong>${d.winners > 1 ? ` ×${d.winners}` : ''} in ${esc(channelLabel(d.channelId))} · ${fromNow(new Date(d.createdAt).getTime())}${d.manual ? ' · manual' : ''}<br><span class="muted">${
+              d.claimedBy.length ? `→ ${d.claimedBy.map((w) => esc(w.name || w.id)).join(', ')}` : d.status === 'open' ? 'open now' : 'nobody claimed it'
+            }</span></div>`
+        )
+        .join('')
+    : 'No drops yet.';
+}
+
+async function saveChatDrops() {
+  const body = readChatDrops();
+  if (body.enabled && !body.channelIds.length) throw new Error('Chat drops: pick at least one channel.');
+  await manageApi('POST', 'levels/chatdrops', body);
+  loadChatDrops();
+}
+
+async function dropNow(btn) {
+  const channelId = document.getElementById('cdNowChannel').value;
+  if (!channelId) return showToast('❌ Pick a channel to drop in.');
+  const data = await withButton(btn, () => manageApi('POST', 'levels/chatdrops/now', { channelId }), (d) => `🎁 Dropped ${fmt(d.amount)} XP (${d.winners} winner${d.winners === 1 ? '' : 's'}).`);
+  if (data) setTimeout(loadChatDrops, 800);
+}
+
+/* ------------------------------------------------------------------ Gambling stats */
+
+const GAME_ICON = { coinflip: '🪙', dice: '🎲', limbo: '🚀', mines: '💣', highlow: '🃏', blackjack: '🂡' };
+
+async function loadGambleStats() {
+  const table = document.getElementById('gStatsTable');
+  if (!table) return;
+  let data;
+  try {
+    data = await manageApi('GET', 'gambling/stats');
+  } catch (err) {
+    table.innerHTML = `<tr><td class="muted">⚠️ ${esc(err.message)}</td></tr>`;
+    return;
+  }
+  const t = data.totals;
+  const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${fmt(Math.abs(n))}`;
+  document.getElementById('gStatsTotals').textContent = t.games
+    ? `${fmt(t.games)} games · ${fmt(t.players)} players · ${fmt(t.wagered)} XP wagered · players ${signed(t.net)} XP overall`
+    : '';
+  table.innerHTML = data.top.length
+    ? '<tr><th>#</th><th>Member</th><th>Games</th><th>Win rate</th><th>Biggest win</th><th style="text-align:right;">Net XP</th></tr>' +
+      data.top
+        .map(
+          (p, i) => `<tr><td>${i + 1}</td><td>${esc(p.name)}</td><td>${fmt(p.games)}</td><td>${p.games ? Math.round((p.wins / p.games) * 100) : 0}%</td>
+            <td class="muted">${p.biggestWin > 0 ? `+${fmt(p.biggestWin)} ${GAME_ICON[p.biggestWinGame] || ''}` : '—'}</td>
+            <td style="color:${p.net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'};">${signed(p.net)}</td></tr>`
+        )
+        .join('')
+    : '<tr><td class="muted">Nobody has gambled yet.</td></tr>';
+}

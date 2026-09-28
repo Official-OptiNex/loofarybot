@@ -166,6 +166,10 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - **Daily limit:** members can play **10 games a day** by default (resets at midnight UTC). Every
   result shows how many plays are left. Change it (0 = unlimited) with `/gamble config
   daily_limit:` or the dashboard. A game that fails to start doesn't use a play.
+- **`/gamble stats`** shows games played, W/L, win rate, XP wagered, net XP, biggest single win
+  (game and multiplier), current, best and worst streaks, and a per-game breakdown — for you or any
+  member. `/gamble stats server:true` shows server totals and the top players. The dashboard's
+  Gambling page has a Top gamblers table. Refunded games aren't counted.
 - **Daily win limit** (default **+1,000 XP** a day, `/gamble config daily_win_cap:` or the dashboard;
   0 = off): the most XP a member can come out ahead from gambling each day, counting wins minus
   losses. A game never pays past what's left of it; mines and high-low cash out automatically when
@@ -314,6 +318,19 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   never announces its old videos, and at most 3 new videos are posted per check.
 - Alerts in announcement channels are auto-published to followers.
 
+### Chat drops (`/xpdrop …` or dashboard **Leveling → Chat drops**)
+- Fully automatic: every 30–90 minutes (random, configurable) LoofaryBot posts **🎁 XP Drop!** with a
+  **Claim** button in one of your chosen channels. The first to click wins a random **50–250 XP**
+  (configurable, rounded to 5).
+- Usually one winner; sometimes 2 (22%) or 3 (8%). Each winner gets the full amount.
+- When it's claimed, the drop closes and a one-line congrats is posted in the same channel without
+  pinging anyone. Drops nobody claims within the window (default 2 minutes) are deleted quietly.
+- Drops only land in channels people are actually chatting in (default: 3+ messages in the last 10
+  minutes, bots don't count). Quiet channels wait until someone talks.
+- Only one drop is open at a time, claims are atomic (a click race gives exactly the right number of
+  winners), and drops survive restarts. Nothing happens while leveling is off.
+- `/xpdrop setup` (channels, XP range, timing, activity, claim window) · `now` · `status` · `toggle`.
+
 ### Booster perks (`/perks` or dashboard **Leveling → Booster perks**)
 Server boosters get, by default:
 - 🎲 **+5 gambles a day** on top of the daily gamble limit.
@@ -394,7 +411,21 @@ amount, the announcement channel, or turns them off.
   - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,
     or copy any message in the server into the editor.
 
-## 7. Notes & Limitations
+## 7. Tests
+
+```bash
+npm install
+npm test                # every test file (about 40 seconds)
+npm test -- tickets     # only files whose name contains "tickets"
+```
+
+The tests in `test/` run each feature's real code against stubbed Discord objects and an in-memory
+stand-in for MongoDB, so they need no bot token, database or network. MongoDB update pipelines are
+evaluated with [mingo](https://github.com/kofrasa/mingo) (a dev dependency), so the actual `$cond`,
+`$ifNull`, `$max`… operators are exercised. Each file runs in its own process; any database call a
+test didn't stub fails immediately instead of hanging.
+
+## 8. Notes & Limitations
 
 - Dashboard logins are stored in MongoDB (`web_sessions`), so they survive redeploys. Keep
   `SESSION_SECRET` set to the same long random value — changing it logs everyone out.

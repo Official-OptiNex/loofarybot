@@ -1,0 +1,23 @@
+process.env.TOKEN='x';process.env.CLIENT_ID='123';process.env.MONGODB_URI='mongodb://x';
+const root=require('path').join(__dirname,'..')+'/'; const assert=require('assert');
+const UserLevel=require(root+'src/database/models/UserLevel');
+const rows=[...Array(25)].map((_,i)=>({guildId:'g',userId:'u'+i,xp:1000-i*10,level:5}));
+const q=(arr)=>{const o={sort(s){arr=[...arr].sort((a,b)=>b.xp-a.xp);return o;},skip(n){arr=arr.slice(n);return o;},limit(n){arr=arr.slice(0,n);return o;},lean(){return Promise.resolve(arr);},then(r,j){return Promise.resolve(arr).then(r,j);}};return o;};
+UserLevel.find=(f)=>q(rows.filter(r=>!f.userId||f.userId.$in.includes(r.userId)));
+UserLevel.countDocuments=async(f)=>rows.filter(r=>!f.xp||r.xp>f.xp.$gt).length;
+const router=require(root+'src/web/routes/api');
+const layer=router.stack.find(l=>l.route&&l.route.path==='/guilds/:guildId/leaderboard');
+const handler=layer.route.stack[layer.route.stack.length-1].handle;
+const cache=new Map(); const mk=(id)=>({id,displayName:'Name '+id,displayAvatarURL:()=>'a.png'});
+cache.set('u0',mk('u0'));
+let fetched=null;
+const guild={id:'g',members:{cache,fetch:async({user})=>{fetched=user;user.forEach(id=>cache.set(id,mk(id)));},search:async({query})=>new Map([['u12',mk('u12')],['u99',mk('u99')]])}};
+const call=(query)=>new Promise((res)=>handler({guild,query},{json:res,status:()=>({json:res})}));
+(async()=>{
+  const p2=await call({page:'2'});
+  assert.equal(p2.entries[0].rank,11); assert.equal(p2.entries[0].name,'Name u10'); assert.equal(p2.totalPages,3);
+  assert.deepEqual(fetched,['u10','u11','u12','u13','u14','u15','u16','u17','u18','u19']);
+  fetched=null; const p1=await call({}); assert.equal(p1.entries[0].rank,1); assert.ok(!fetched.includes('u0'));
+  const s=await call({q:'u12'}); assert.equal(s.entries.length,1); assert.equal(s.entries[0].rank,13); assert.equal(s.search,'u12');
+  console.log('✓ leaderboard: pages fetch only uncached members on the page; search returns real ranks');
+})().catch(e=>{console.error(e);process.exit(1);});

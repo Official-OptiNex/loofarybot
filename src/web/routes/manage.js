@@ -97,6 +97,7 @@ function serializeGiveaway(g, guild) {
     hostName: host ? host.displayName : null,
     requirements: { roleId: req.roleId || null, minDaysInServer: req.minDaysInServer || null, minLevel: req.minLevel || null },
     bonusEntries: (g.bonusEntries || []).map((b) => ({ roleId: b.roleId, extra: b.extra })),
+    boosterEntries: typeof g.boosterEntries === 'number' ? g.boosterEntries : null,
     winners: (g.winners || []).map((id) => ({ id, name: guild.members.cache.get(id)?.displayName || null })),
     ended: !!g.ended,
     url: messageUrl(g.guildId, g.channelId, g.messageId)

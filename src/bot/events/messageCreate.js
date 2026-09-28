@@ -1,6 +1,7 @@
 const { handleMessageXp } = require('../cogs/modules/leveling');
 const { handleHoneypotMessage } = require('../cogs/modules/honeypot');
 const { handleMediaOnly } = require('../cogs/modules/mediaOnly');
+const { noteActivity } = require('../cogs/modules/chatDrops');
 const GuildConfig = require('../../database/models/GuildConfig');
 const { reportError } = require('../utils/errorReporter');
 
@@ -16,6 +17,7 @@ module.exports = function registerMessageCreateEvent(client) {
         }
         // Text-only posts in a media-only channel are removed and don't earn XP.
         if (await handleMediaOnly(message, guildConfig)) return;
+        noteActivity(message); // chat drops only land in channels people are talking in
       }
       await handleMessageXp(message);
     } catch (err) {

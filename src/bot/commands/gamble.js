@@ -2,6 +2,72 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = 
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
 const { resendControls, getGamblingSettings, minesMultiplier, minesLadder, playCoinflip, playDice, playLimbo, diceChance, diceMultiplier, limboChance, DICE_MIN_CHANCE, DICE_MAX_CHANCE, LIMBO_MIN, LIMBO_MAX, startMines, startHighLow, startBlackjack, syncGames, dailyLimitFor } = require('../cogs/modules/gambling');
 const UserLevel = require('../../database/models/UserLevel');
+const GambleStats = require('../../database/models/GambleStats');
+
+const GAME_LABEL = { coinflip: '🪙 Coinflip', dice: '🎲 Dice', limbo: '🚀 Limbo', mines: '💣 Mines', highlow: '🃏 High-Low', blackjack: '🂡 Blackjack' };
+const n0 = (x) => Number(x || 0).toLocaleString('en-US');
+const signed = (x) => `${x > 0 ? '+' : x < 0 ? '−' : '±'}${n0(Math.abs(x || 0))}`;
+const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+const byGameEntries = (st) => Object.entries(st.byGame instanceof Map ? Object.fromEntries(st.byGame) : st.byGame || {});
+
+function streakText(st) {
+  if (st.streak > 1) return `🔥 ${st.streak} wins in a row`;
+  if (st.streak < -1) return `🥶 ${-st.streak} losses in a row`;
+  return st.streak === 1 ? 'Won the last game' : st.streak === -1 ? 'Lost the last game' : '—';
+}
+
+async function statsEmbed(interaction, user) {
+  const st = await GambleStats.findOne({ guildId: interaction.guildId, userId: user.id }).lean();
+  if (!st || !st.games) {
+    return new EmbedBuilder().setColor('#4E5058').setTitle(`🎰 ${user.username}'s gambling stats`).setDescription(`${user.id === interaction.user.id ? "You haven't" : "They haven't"} played any games yet. Try \`/gamble coinflip\`!`);
+  }
+  const games = byGameEntries(st).sort((a, b) => b[1].games - a[1].games);
+  const embed = new EmbedBuilder()
+    .setColor(st.net >= 0 ? '#57F287' : '#ED4245')
+    .setAuthor({ name: `${user.username}'s gambling stats`, iconURL: user.displayAvatarURL?.({ size: 64 }) })
+    .addFields(
+      { name: 'Games', value: `**${n0(st.games)}** · ${n0(st.wins)}W ${n0(st.losses)}L${st.pushes ? ` ${n0(st.pushes)}P` : ''}`, inline: true },
+      { name: 'Win rate', value: pct(st.wins, st.games), inline: true },
+      { name: 'Net', value: `**${signed(st.net)} XP**`, inline: true },
+      { name: 'Wagered', value: `${n0(st.wagered)} XP${st.freePlays ? ` (+${n0(st.freePlays)} free play${st.freePlays === 1 ? '' : 's'})` : ''}`, inline: true },
+      {
+        name: 'Biggest win',
+        value: st.biggestWin > 0 ? `**+${n0(st.biggestWin)} XP** · ${GAME_LABEL[st.biggestWinGame] || st.biggestWinGame} ${Number(st.biggestWinMultiplier || 0).toFixed(2)}x${st.biggestWinAt ? ` · <t:${Math.floor(new Date(st.biggestWinAt).getTime() / 1000)}:R>` : ''}` : '—',
+        inline: true
+      },
+      { name: 'Streak', value: `${streakText(st)}\nBest: ${st.bestStreak || 0}W · Worst: ${st.worstStreak || 0}L`, inline: true },
+      {
+        name: 'By game',
+        value: games.map(([k, g]) => `${GAME_LABEL[k] || k} — ${n0(g.games)} game${g.games === 1 ? '' : 's'} · ${pct(g.wins, g.games)} won · ${signed(g.net)} XP`).join('\n') || '—'
+      }
+    );
+  if (st.lastPlayedAt) embed.setFooter({ text: 'Last played' }).setTimestamp(new Date(st.lastPlayedAt));
+  return embed;
+}
+
+async function serverStatsEmbed(interaction) {
+  const guildId = interaction.guildId;
+  const [totals] = await GambleStats.aggregate([
+    { $match: { guildId } },
+    { $group: { _id: null, players: { $sum: 1 }, games: { $sum: '$games' }, wagered: { $sum: '$wagered' }, net: { $sum: '$net' } } }
+  ]);
+  if (!totals || !totals.games) return new EmbedBuilder().setColor('#4E5058').setTitle('🎰 Server gambling stats').setDescription('Nobody has gambled yet.');
+  const [top, biggest, busiest] = await Promise.all([
+    GambleStats.find({ guildId, games: { $gt: 0 } }).sort({ net: -1 }).limit(5).lean(),
+    GambleStats.find({ guildId, biggestWin: { $gt: 0 } }).sort({ biggestWin: -1 }).limit(5).lean(),
+    GambleStats.find({ guildId }).sort({ games: -1 }).limit(5).lean()
+  ]);
+  const medal = (i) => ['🥇', '🥈', '🥉', '4.', '5.'][i];
+  return new EmbedBuilder()
+    .setColor('#5865F2')
+    .setTitle('🎰 Server gambling stats')
+    .setDescription(`**${n0(totals.games)}** games by **${n0(totals.players)}** players · **${n0(totals.wagered)} XP** wagered · players are **${signed(totals.net)} XP** overall`)
+    .addFields(
+      { name: '📈 Most XP won', value: top.map((t, i) => `${medal(i)} <@${t.userId}> ${signed(t.net)} XP`).join('\n') || '—', inline: true },
+      { name: '💥 Biggest single wins', value: biggest.map((t, i) => `${medal(i)} <@${t.userId}> +${n0(t.biggestWin)} (${GAME_LABEL[t.biggestWinGame] || t.biggestWinGame})`).join('\n') || '—', inline: true },
+      { name: '🎲 Most games', value: busiest.map((t, i) => `${medal(i)} <@${t.userId}> ${n0(t.games)}`).join('\n') || '—', inline: true }
+    );
+}
 
 const betOption = (opt) => opt.setName('bet').setDescription('How much XP to bet').setMinValue(1).setRequired(true);
 
@@ -66,6 +132,13 @@ const data = new SlashCommandBuilder()
     sub.setName('blackjack').setDescription('Beat the dealer to 21 — hit, stand or double down').addIntegerOption(betOption)
   )
   .addSubcommand((sub) => sub.setName('info').setDescription('Show payouts, the house edge, and bet limits'))
+  .addSubcommand((sub) =>
+    sub
+      .setName('stats')
+      .setDescription('Gambling stats: games, win rate, net XP, biggest win, streaks')
+      .addUserOption((opt) => opt.setName('user').setDescription('Whose stats (default: you)'))
+      .addBooleanOption((opt) => opt.setName('server').setDescription('Show the whole server’s stats and top players instead'))
+  )
   .addSubcommand((sub) => sub.setName('resume').setDescription('Get your game buttons back (if you dismissed them)'))
   .addSubcommand((sub) =>
     sub
@@ -155,6 +228,13 @@ async function execute(interaction) {
         : `✅ Nothing was stuck${everyone ? ' in this server' : ' — you can start a new game'}.`,
       allowedMentions: { parse: [] }
     });
+  }
+
+  if (sub === 'stats') {
+    const embed = interaction.options.getBoolean('server')
+      ? await serverStatsEmbed(interaction)
+      : await statsEmbed(interaction, interaction.options.getUser('user') || interaction.user);
+    return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
   }
 
   if (sub === 'info') {

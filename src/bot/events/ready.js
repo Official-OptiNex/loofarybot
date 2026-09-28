@@ -43,6 +43,7 @@ const { commands: modActionCommands } = require('../commands/modActions');
 const { commands: greetingCommands } = require('../commands/greetings');
 const perksCommand = require('../commands/perks');
 const ticketCommand = require('../commands/ticket');
+const xpdropCommand = require('../commands/xpdrop');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -67,7 +68,8 @@ const ALL_COMMANDS = [
   ...modActionCommands,
   ...greetingCommands,
   perksCommand,
-  ticketCommand
+  ticketCommand,
+  xpdropCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -124,5 +126,8 @@ module.exports = function registerReadyEvent(client) {
 
     // Daily XP drop for server boosters.
     require('../cogs/modules/boosterPerks').startBoosterDrops(client);
+
+    // Random XP drops in active chat channels.
+    require('../cogs/modules/chatDrops').startChatDrops(client);
   });
 };
