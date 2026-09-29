@@ -22,6 +22,17 @@ for (const [config, welcome] of [[{}, new WelcomeConfig({guildId:'1'}).toObject(
   console.log('engagement tab rendered; booster role pickable for requirements but not for roles the bot hands out');
   fs.writeFileSync(require('os').tmpdir()+'/loofary-render-guild'+scripts.push(1)+'.html', html);
 }
+// Every feature switched on and set up (Overview cards only fill in their details when a feature is
+// on, so a mistake there only breaks servers that use it).
+{
+  const on=new GuildConfig({guildId:'1',logChannelId:'c1',shopEnabled:true,
+    automod:{enabled:true},xpPot:{enabled:true,channelId:'c1'},birthdays:{enabled:true,channelId:'c1'},
+    counting:{enabled:true,channelId:'c1'},starboard:{enabled:true,channelId:'c1'},chatDrops:{enabled:true,channelIds:['c1','gone']}});
+  const html=ejs.render(tpl,{...base,config:on,welcome:new WelcomeConfig({guildId:'1'}).toObject(),gambling:getGamblingSettings(on)},{filename:root+'src/web/views/guild.ejs'});
+  new Function(html.slice(html.lastIndexOf('<script>')+8, html.lastIndexOf('</script>')));
+  if (!/XP every 30–90 min in #general</.test(html)) throw new Error('chat drops overview card missing its channel');
+  console.log('guild ok with every feature on');
+}
 {
   const modPages=new Set(['leaderboard','commands','logviewer','welcome']);
   const html=ejs.render(tpl,{...base,config:{},welcome:new WelcomeConfig({guildId:'1'}).toObject(),gambling:getGamblingSettings({}),access:{level:'mod',pages:[...modPages]},can:(p)=>p!=='settings'&&modPages.has(p)},{filename:root+'src/web/views/guild.ejs'});
