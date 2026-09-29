@@ -60,6 +60,9 @@ module.exports = [
     blurb: 'Bet XP on games of chance. Every game shows your updated balance.',
     tab: 'gambling',
     commands: [
+      { usage: '/pot view · history', perm: null, description: "The Daily XP Pot: today's gambling losses, the top contributors, the draw time and recent winners." },
+      { usage: '/pot setup · look · toggle', perm: 'Manage Server', description: 'Where and when the pot is drawn, who counts as active, and how its embed looks.' },
+      { usage: '/pot draw · preview', perm: 'Manage Server', description: "Post today's pot now and draw it after the countdown, or preview the embed." },
       { usage: '/gamble coinflip', perm: null, description: 'Heads or tails — win about double your bet.' },
       { usage: '/gamble dice', perm: null, description: 'Roll 0–100 under or over a target you pick — lower chance, bigger payout.' },
       { usage: '/gamble limbo', perm: null, description: 'Pick a target multiplier (1.01x–1000x); win it if the result reaches it.' },

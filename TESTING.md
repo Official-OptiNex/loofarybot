@@ -8,7 +8,7 @@ staff roles, because staff skip auto-mod and can see everything.
 - [ ] Render shows the deploy as **Live**, and the logs show `LoofaryBot logged in as …` and
       `Successfully registered slash commands.`
 - [ ] Discord shows the new commands. If one is missing, restart Discord (Ctrl+R).
-      New: `/automod`, `/shop`, `/birthday`, `/counting`, `/starboard`.
+      New: `/automod`, `/shop`, `/pot`, `/birthday`, `/counting`, `/starboard`.
 - [ ] **Role position:** in Server Settings → Roles, drag LoofaryBot's role **above** every role it
       hands out (level rewards, auto-role, birthday role, shop roles, reaction roles) and above
       members it should moderate. Administrator gives the bot every *permission*, but Discord still
@@ -86,7 +86,28 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
       both work.
 - [ ] Dashboard: **Recent purchases** lists what was bought, and Logs has *XP shop purchases*.
 
-## 6. Birthdays / Counting / Starboard (dashboard **Engagement**)
+## 6. Daily XP Pot (`/pot`, dashboard **Gambling → 💰 Daily XP Pot**)
+- [ ] `/pot setup channel:#gambling` (or on the dashboard) → "Daily XP Pot is on", with the next
+      draw time.
+- [ ] 👤 Lose a few `/gamble` games → `/pot view` shows the pot growing, and you in **Top pot
+      contributors**. Win a game → the pot doesn't change.
+- [ ] Dashboard: change the title, color and text (try `{pot}` and `{draw}`), add a banner image →
+      the preview updates as you type. Save, then run `/pot preview` → Discord shows the same.
+- [ ] **Test the draw without waiting until midnight:** have 👤 and a friend each send **3+ messages
+      at least 20 seconds apart**. Then run `/pot draw` (or dashboard **⏱️ Post & draw now**):
+  - [ ] The pot posts in the channel with your ping role, "How to win", the pot amount, a live
+        countdown ("in 10 minutes"), "Entered so far" and the top 3 contributors.
+  - [ ] 👤 Lose another game during the countdown → within ~30s the posted pot shows the higher
+        amount.
+  - [ ] When the countdown ends, the post changes to "we have a winner!" and a message pings the
+        winner. Their XP goes up by the pot amount (check `/levels rank`).
+  - [ ] `/pot history` and the dashboard's **Recent pots** list the winner.
+- [ ] **Rollover:** run `/pot draw` when nobody has chatted for an hour → the post says "rolled
+      over", and tomorrow's pot starts with that XP ("incl. … rolled over").
+- [ ] The real thing: leave it on overnight. It posts at 23:50 UTC and draws at 00:00 UTC. A pot
+      under 100 XP isn't posted at all and rolls over quietly.
+
+## 7. Birthdays / Counting / Starboard (dashboard **Engagement**)
 - [ ] `/birthday setup channel:#general` (optionally a role and an XP gift).
       `/birthday set` with **today's** date and an hour that has already passed today (UTC) → the post
       appears within ~5 minutes, and the role/XP is given.
@@ -95,7 +116,7 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the
       author) → it's reposted in #starboard, and the count updates as stars change.
 
-## 7. Free-tier health (check every week or two)
+## 8. Free-tier health (check every week or two)
 - [ ] Logs → Settings → Storage: **Database** well under 75% of 512 MB, **Bot memory** under ~80% of
       512 MB.
 - [ ] If the database ever passes 75%, the bot trims old data automatically, only keeps moderation

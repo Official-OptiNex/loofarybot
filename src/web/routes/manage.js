@@ -23,6 +23,7 @@ const levelColors = require('../../bot/cogs/modules/levelColors');
 const birthdays = require('../../bot/cogs/modules/birthdays');
 const automod = require('../../bot/cogs/modules/automod');
 const shop = require('../../bot/cogs/modules/shop');
+const xpPot = require('../../bot/cogs/modules/xpPot');
 const ShopItem = require('../../database/models/ShopItem');
 const ShopOwnership = require('../../database/models/ShopOwnership');
 const LogEntry = require('../../database/models/LogEntry');
@@ -1050,6 +1051,40 @@ router.delete('/guilds/:guildId/shop/owned/:id', ...guard('shop'), async (req, r
   if (result.error) return bad(res, result.error, 404);
   res.locals.audit = { section: 'XP Shop', action: `Took “${result.item?.name || 'an item'}” from a member`, detail: '' };
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------- Daily XP Pot (Gambling page)
+
+router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, res) => {
+  const guild = req.guild;
+  const cur = await xpPot.currentPot(guild);
+  const name = (id) => guild.members.cache.get(id)?.displayName || null;
+  const past = await xpPot.recentPots(guild.id, 7);
+  res.json({
+    settings: cur.settings,
+    defaultDescription: xpPot.DEFAULT_DESCRIPTION,
+    pot: { amount: cur.pot.amount || 0, rolledOver: cur.pot.rolledOver || 0, status: cur.pot.status || 'collecting', drawAt: cur.drawAt },
+    entrants: cur.entrants,
+    top: cur.top.map(([id, amount]) => ({ id, name: name(id), amount })),
+    history: past.map((p) => ({ day: p.day, status: p.status, amount: p.amount, won: p.won, entrants: p.entrants, winnerId: p.winnerId, winnerName: p.winnerId ? name(p.winnerId) : null }))
+  });
+});
+
+router.post('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, res) => {
+  const b = req.body || {};
+  const input = {};
+  for (const k of ['enabled', 'channelId', 'drawHour', 'countdownMinutes', 'windowMinutes', 'minMessages', 'sharePercent', 'minPot', 'pingRoleId', 'embed', 'winMessage']) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await xpPot.saveSettings(req.guild, input);
+  if (saved.error) return bad(res, saved.error);
+  res.locals.audit = { section: 'Gambling', action: 'Updated the Daily XP Pot', detail: `${saved.settings.enabled ? 'On' : 'Off'} · draw ${String(saved.settings.drawHour).padStart(2, '0')}:00 UTC` };
+  res.json({ ok: true, settings: saved.settings });
+});
+
+router.post('/guilds/:guildId/gambling/pot/draw', ...guard('gambling'), async (req, res) => {
+  const result = await xpPot.startNow(req.guild);
+  if (result.error) return bad(res, result.error);
+  res.locals.audit = { section: 'Gambling', action: 'Started the Daily XP Pot draw early', detail: '' };
+  res.json({ ok: true, drawAt: result.drawAt });
 });
 
 module.exports = router;

@@ -37,7 +37,7 @@ const M=(n)=>require(root+'src/database/models/'+n);
   console.log('✓ chat XP skips the "has a record?" query for members it has seen, and forgets them when records are deleted');
 
   // ================================================================ Log cap + watchdog
-  const rows={}; for (const n of ['LogEntry','ChatDrop','Poll','Giveaway','Ticket']) rows[n]=store(M(n));
+  const rows={}; for (const n of ['LogEntry','ChatDrop','Poll','Giveaway','Ticket','XpPot']) rows[n]=store(M(n));
   rows.GuildConfig=store(GuildConfig);
   const St=require(root+'src/bot/cogs/modules/storage');
   const now=Date.now();

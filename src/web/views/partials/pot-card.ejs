@@ -1,0 +1,91 @@
+      <!-- DAILY XP POT (same as /pot) -->
+      <div class="card" id="potCard" style="margin-top:1.25rem;">
+        <div class="list-toolbar" style="margin-bottom:0.4rem;">
+          <h3 style="margin:0;">💰 Daily XP Pot</h3>
+          <span class="hero-status" id="potStatus" style="margin:0;"></span>
+        </div>
+        <p class="muted" style="font-size:0.84rem; margin-top:0;">Every XP lost in <code>/gamble</code> goes into today’s pot, and it keeps growing until the draw. A few minutes before the end of the day it’s posted with a live countdown. Everyone who chatted in the last hour is entered automatically, and one wins it all. Same as <code>/pot</code>.</p>
+        <div class="split">
+          <div class="settings-card" style="padding:0;">
+            <div class="setting-row">
+              <div><div class="setting-title">Daily XP Pot</div><div class="setting-help">Off by default.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="potEnabled"><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Post in</div></div>
+              <div class="setting-control"><select id="potChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Draw time</div><div class="setting-help">UTC. 00:00 = the end of the day. <span id="potLocal"></span></div></div>
+              <div class="setting-control"><select id="potHour"><% for (let h = 0; h < 24; h++) { %><option value="<%= h %>"><%= String(h).padStart(2, '0') %>:00 UTC</option><% } %></select></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Live countdown</div><div class="setting-help">Minutes before the draw that the pot is posted.</div></div>
+              <div class="setting-control"><input type="number" id="potCountdown" min="1" max="60"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Who's “active”</div><div class="setting-help">Messages (at least 20s apart, so spamming doesn't help) in the minutes before the draw.</div></div>
+              <div class="setting-control"><input type="number" id="potMsgs" min="1" max="50" style="flex:0 0 64px; min-width:64px;" aria-label="Messages"><span class="muted">in the last</span><input type="number" id="potWindow" min="10" max="240" style="flex:0 0 70px; min-width:70px;" aria-label="Minutes"><span class="muted">min</span></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Share of losses</div><div class="setting-help">% of each gambling loss that goes into the pot.</div></div>
+              <div class="setting-control"><input type="number" id="potShare" min="1" max="100"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Minimum pot</div><div class="setting-help">Smaller pots quietly roll over to tomorrow.</div></div>
+              <div class="setting-control"><input type="number" id="potMin" min="0" max="1000000" step="50"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Ping</div><div class="setting-help">When the countdown starts.</div></div>
+              <div class="setting-control"><select id="potPing"><option value="">No ping</option><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></div>
+            </div>
+            <h3 class="section-label" style="margin:1rem 0 0.2rem;">Embed</h3>
+            <div class="setting-row">
+              <div class="setting-title">Title & color</div>
+              <div class="setting-control"><input id="potTitle" maxlength="256" placeholder="💰 Daily XP Pot"><input type="color" id="potColor" value="#F1C40F" style="flex:0 0 56px; min-width:56px;" aria-label="Color"></div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Text</div><div class="setting-help">Leave empty for the built-in “how it works”. Placeholders: <code>{pot}</code> <code>{draw}</code> <code>{time}</code> <code>{min}</code> <code>{window}</code></div></div>
+              <textarea id="potDesc" rows="4" maxlength="3000"></textarea>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Images</div><div class="setting-help">Thumbnail (small, top right) and banner (image links).</div></div>
+              <div class="setting-control"><input id="potThumb" maxlength="500" placeholder="Thumbnail https://…"><input id="potImage" maxlength="500" placeholder="Banner https://…"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-title">Footer</div>
+              <div class="setting-control"><input id="potFooter" maxlength="200"></div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Winner message</div><div class="setting-help"><code>{winner}</code> <code>{pot}</code> <code>{entrants}</code> <code>{contributors}</code> (the top 3)</div></div>
+              <input id="potWin" maxlength="1500">
+            </div>
+            <div class="savebar" style="position:static;">
+              <button class="btn secondary" id="potDrawBtn" onclick="potDrawNow()" title="Posts today's pot now and draws it after the countdown">⏱️ Post & draw now</button>
+              <button class="btn" id="potSaveBtn" onclick="savePot()">Save pot settings</button>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-top:0;">Preview</h3>
+            <div class="discord-chat">
+              <div class="discord-message-preview">
+                <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                <div class="discord-message-body">
+                  <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span></div>
+                  <div class="discord-embed-preview tk-embed" id="potpEmbed" style="margin-top:0.4rem;">
+                    <div class="tk-embed-body">
+                      <div><div class="title" id="potpTitle"></div><div class="desc" id="potpDesc"></div></div>
+                      <img id="potpThumb" class="tk-thumb" alt="" style="display:none;">
+                    </div>
+                    <div class="pot-fields" id="potpFields"></div>
+                    <img id="potpImage" alt="" style="display:none;">
+                    <div class="embed-footer" id="potpFooter"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <h3 style="margin:1rem 0 0.4rem;">Recent pots</h3>
+            <div id="potHistory"><p class="muted">Loading…</p></div>
+          </div>
+        </div>
+      </div>

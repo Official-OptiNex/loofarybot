@@ -145,7 +145,10 @@ function onManageTabShown(tab) {
   }
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
   if (tab === 'leveling') loadChatDrops();
-  if (tab === 'gambling') loadGambleStats();
+  if (tab === 'gambling') {
+    loadGambleStats();
+    loadPot();
+  }
   if (tab === 'engagement') loadEngagement();
   if (tab === 'shop') {
     loadShop();
@@ -2122,4 +2125,123 @@ async function removeShopOwned(id, btn) {
   if (!dialog) return;
   document.getElementById('shType').addEventListener('change', shopEditorShowFields);
   dialog.querySelectorAll('input, textarea, select').forEach((el) => el.addEventListener('input', renderShopPreview));
+})();
+
+/* ------------------------------------------------------------------ Daily XP Pot (Gambling tab) */
+
+const potState = { loaded: false, data: null };
+
+function fillPot(s) {
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  document.getElementById('potEnabled').checked = !!s.enabled;
+  v('potChannel', s.channelId || '');
+  v('potHour', s.drawHour);
+  v('potCountdown', s.countdownMinutes);
+  v('potMsgs', s.minMessages);
+  v('potWindow', s.windowMinutes);
+  v('potShare', s.sharePercent);
+  v('potMin', s.minPot);
+  v('potPing', s.pingRoleId || '');
+  v('potTitle', s.embed.title);
+  v('potColor', s.embed.color);
+  v('potDesc', s.embed.description || '');
+  v('potThumb', s.embed.thumbnailUrl || '');
+  v('potImage', s.embed.imageUrl || '');
+  v('potFooter', s.embed.footer || '');
+  v('potWin', s.winMessage);
+}
+
+function readPot() {
+  const v = (id) => document.getElementById(id).value;
+  return {
+    enabled: document.getElementById('potEnabled').checked,
+    channelId: v('potChannel') || null,
+    drawHour: v('potHour'),
+    countdownMinutes: v('potCountdown'),
+    minMessages: v('potMsgs'),
+    windowMinutes: v('potWindow'),
+    sharePercent: v('potShare'),
+    minPot: v('potMin'),
+    pingRoleId: v('potPing') || null,
+    embed: { title: v('potTitle'), color: v('potColor'), description: v('potDesc'), thumbnailUrl: v('potThumb'), imageUrl: v('potImage'), footer: v('potFooter') },
+    winMessage: v('potWin')
+  };
+}
+
+function renderPotPreview() {
+  const d = potState.data;
+  if (!d) return;
+  const f = readPot();
+  const drawAt = new Date(d.pot.drawAt);
+  // Same default text and placeholders as the bot.
+  const vars = { pot: fmt(d.pot.amount), draw: fromNow(drawAt.getTime()), time: drawAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), min: f.minMessages, window: f.windowMinutes, entrants: fmt(d.entrants) };
+  const text = (f.embed.description.trim() || d.defaultDescription).replace(/\{(\w+)\}/g, (m, k) => (vars[k] !== undefined ? vars[k] : m));
+  document.getElementById('potpEmbed').style.borderLeftColor = f.embed.color;
+  document.getElementById('potpTitle').textContent = f.embed.title || '💰 Daily XP Pot';
+  document.getElementById('potpDesc').innerHTML = discordText(text);
+  const medals = ['🥇', '🥈', '🥉'];
+  const top = d.top.length ? d.top.map((t, i) => `${medals[i]} ${pill('@' + (t.name || t.id))} — ${fmt(t.amount)} XP`).join('<br>') : 'Nobody has lost any XP yet… 👀';
+  document.getElementById('potpFields').innerHTML = `
+    <div><div class="f-name">💰 Pot</div><strong>${fmt(d.pot.amount)} XP</strong>${d.pot.rolledOver ? `<div class="muted" style="font-size:0.75rem;">incl. ${fmt(d.pot.rolledOver)} rolled over</div>` : ''}</div>
+    <div><div class="f-name">⏳ Draw</div>${esc(fromNow(drawAt.getTime()))}</div>
+    <div><div class="f-name">🎟️ Entered so far</div>${fmt(d.entrants)}</div>
+    <div class="f-full"><div class="f-name">📉 Top pot contributors</div>${top}</div>`;
+  const img = (id, url) => {
+    const el = document.getElementById(id);
+    el.style.display = url ? '' : 'none';
+    if (url) el.src = url;
+  };
+  img('potpThumb', f.embed.thumbnailUrl);
+  img('potpImage', f.embed.imageUrl);
+  document.getElementById('potpFooter').textContent = f.embed.footer || '';
+  const h = Number(f.drawHour) || 0;
+  document.getElementById('potLocal').textContent = `That's ${new Date(Date.UTC(2000, 0, 1, h)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} your time.`;
+}
+
+async function loadPot() {
+  if (!document.getElementById('potCard')) return;
+  let d;
+  try {
+    d = await manageApi('GET', 'gambling/pot');
+  } catch (err) {
+    document.getElementById('potHistory').innerHTML = `<p class="muted">❌ ${esc(err.message)}</p>`;
+    return;
+  }
+  potState.data = d;
+  if (!potState.loaded) fillPot(d.settings);
+  potState.loaded = true;
+  const s = d.settings;
+  document.getElementById('potStatus').innerHTML = [
+    `<span class="status-chip ${s.enabled ? 'good' : 'off'}"><span class="dot"></span>${s.enabled ? 'On' : 'Off'}</span>`,
+    `<span class="status-chip"><span class="dot"></span>💰 ${fmt(d.pot.amount)} XP in today’s pot</span>`,
+    s.enabled ? `<span class="status-chip"><span class="dot"></span>${d.pot.status === 'posted' ? '⏱️ counting down now' : `drawn ${esc(fromNow(new Date(d.pot.drawAt).getTime()))}`}</span>` : ''
+  ].join('');
+  document.getElementById('potHistory').innerHTML = d.history.length
+    ? d.history
+        .map((p) => `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);"><strong>${esc(p.day)}</strong> · ${p.status === 'done' ? `🏆 ${esc(p.winnerName || p.winnerId)} won <strong>${fmt(p.won)} XP</strong> <span class="muted">(${fmt(p.entrants)} entered)</span>` : `🔁 ${fmt(p.amount)} XP rolled over`}</div>`)
+        .join('')
+    : '<p class="muted" style="margin:0;">No pots drawn yet.</p>';
+  renderPotPreview();
+}
+
+async function savePot() {
+  const body = readPot();
+  if (body.enabled && !body.channelId) return showToast('❌ Pick a channel for the pot first.');
+  const data = await withButton(document.getElementById('potSaveBtn'), () => manageApi('POST', 'gambling/pot', body), '💰 Daily XP Pot saved.');
+  if (data) loadPot();
+}
+
+async function potDrawNow() {
+  if (!confirm("Post today's pot now and draw it after the countdown? Members chatting in the last hour are entered.")) return;
+  const data = await withButton(document.getElementById('potDrawBtn'), () => manageApi('POST', 'gambling/pot/draw'), (d) => `⏱️ Posted — drawn ${fromNow(new Date(d.drawAt).getTime())}.`);
+  if (data) loadPot();
+}
+
+(function initPotUi() {
+  const card = document.getElementById('potCard');
+  if (!card) return;
+  card.querySelectorAll('input, textarea, select').forEach((el) => {
+    el.addEventListener('input', renderPotPreview);
+    el.addEventListener('change', renderPotPreview);
+  });
 })();

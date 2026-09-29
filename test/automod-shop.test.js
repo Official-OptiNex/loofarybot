@@ -4,7 +4,7 @@ const root=require('path').join(__dirname,'..')+'/'; const assert=require('asser
 const { PermissionsBitField, PermissionFlagsBits, Collection } = require(root+'node_modules/discord.js');
 const { store } = require('./helpers/memstore');
 const M=(n)=>require(root+'src/database/models/'+n);
-const rows={}; for (const n of ['GuildConfig','ModCase','LogEntry','ShopItem','ShopOwnership','UserLevel','ChatDrop','Poll','Giveaway','Ticket']) rows[n]=store(M(n));
+const rows={}; for (const n of ['GuildConfig','ModCase','LogEntry','ShopItem','ShopOwnership','UserLevel','ChatDrop','Poll','Giveaway','Ticket','XpPot']) rows[n]=store(M(n));
 const logs=[]; const Logging=require(root+'src/bot/cogs/modules/logging');
 const realSendLog=Logging.sendLog;
 const LC=require(root+'src/bot/cogs/modules/levelColors'); LC.onLevelChange=async()=>{};

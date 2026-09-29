@@ -166,6 +166,28 @@ const GuildConfigSchema = new mongoose.Schema(
       selfStar: { type: Boolean, default: false },
       ignoredChannelIds: { type: [String], default: [] }
     },
+    // Daily XP Pot (/pot, dashboard Gambling → Daily XP Pot): gambling losses fill a pot that one
+    // member who chatted in the last hour before the draw wins.
+    xpPot: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      drawHour: { type: Number, default: 0 }, // UTC hour the pot is drawn (0 = midnight, the end of the day)
+      countdownMinutes: { type: Number, default: 10 }, // the pot is posted this long before the draw
+      windowMinutes: { type: Number, default: 60 }, // "active" = chatted in this window before the draw
+      minMessages: { type: Number, default: 3 },
+      sharePercent: { type: Number, default: 100 }, // share of each gambling loss that goes into the pot
+      minPot: { type: Number, default: 100 }, // smaller pots roll over to tomorrow
+      pingRoleId: { type: String, default: null },
+      embed: {
+        title: { type: String, default: '💰 Daily XP Pot' },
+        description: { type: String, default: null }, // null = the built-in "how it works" text
+        color: { type: String, default: '#F1C40F' },
+        thumbnailUrl: { type: String, default: null },
+        imageUrl: { type: String, default: null },
+        footer: { type: String, default: 'Losses today = someone’s win tonight' }
+      },
+      winMessage: { type: String, default: '🎉 {winner} won the **Daily XP Pot** — **{pot} XP**! 💰' }
+    },
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
     gamblingFreePlayEnabled: { type: Boolean, default: true },

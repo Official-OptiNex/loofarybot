@@ -49,6 +49,7 @@ const countingCommand = require('../commands/counting');
 const starboardCommand = require('../commands/starboard');
 const automodCommand = require('../commands/automod');
 const shopCommand = require('../commands/shop');
+const potCommand = require('../commands/pot');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -79,7 +80,8 @@ const ALL_COMMANDS = [
   countingCommand,
   starboardCommand,
   automodCommand,
-  shopCommand
+  shopCommand,
+  potCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -142,6 +144,9 @@ module.exports = function registerReadyEvent(client) {
 
     // Daily birthday posts (and taking the birthday role back the next day).
     require('../cogs/modules/birthdays').startBirthdays(client);
+
+    // Daily XP Pot: gambling losses, drawn at the end of the day among active chatters.
+    require('../cogs/modules/xpPot').startXpPot(client);
 
     // XP shop: end expired boosts and temporary roles.
     require('../cogs/modules/shop').startShop(client);

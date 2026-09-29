@@ -13,6 +13,7 @@ const ChatDrop = require('../../../database/models/ChatDrop');
 const Poll = require('../../../database/models/Poll');
 const Giveaway = require('../../../database/models/Giveaway');
 const Ticket = require('../../../database/models/Ticket');
+const XpPot = require('../../../database/models/XpPot');
 
 const DAY = 86400000;
 const MB = 1024 * 1024;
@@ -97,18 +98,21 @@ async function pruneLogs(now = Date.now(), guildId = null, { maxDays = null, cap
 async function pruneOther(now = Date.now(), guildId = null, keep = KEEP) {
   const scope = guildId ? { guildId } : {};
   const before = (days) => new Date(now - days * DAY);
-  const [drops, polls, giveaways, transcripts] = await Promise.all([
+  const [drops, polls, giveaways, transcripts, pots] = await Promise.all([
     ChatDrop.deleteMany({ ...scope, status: 'closed', createdAt: { $lt: before(keep.chatDropsDays) } }),
     Poll.deleteMany({ ...scope, ended: true, endTimestamp: { $lt: now - keep.pollsDays * DAY } }),
     Giveaway.deleteMany({ ...scope, ended: true, endTimestamp: { $lt: now - keep.giveawaysDays * DAY } }),
     // Closed tickets stay in History; only the old transcript text is dropped.
-    Ticket.updateMany({ ...scope, status: 'CLOSED', closedAt: { $lt: before(keep.transcriptsDays) }, 'transcript.0': { $exists: true } }, { $set: { transcript: [] } })
+    Ticket.updateMany({ ...scope, status: 'CLOSED', closedAt: { $lt: before(keep.transcriptsDays) }, 'transcript.0': { $exists: true } }, { $set: { transcript: [] } }),
+    // Past Daily XP Pots (winners/rollovers) — only the recent ones are shown anywhere.
+    XpPot.deleteMany({ ...scope, status: { $in: ['done', 'rolled'] }, drawAt: { $lt: before(90) } })
   ]);
   return {
     chatDrops: drops.deletedCount || 0,
     polls: polls.deletedCount || 0,
     giveaways: giveaways.deletedCount || 0,
-    transcripts: transcripts.modifiedCount || 0
+    transcripts: transcripts.modifiedCount || 0,
+    pots: pots.deletedCount || 0
   };
 }
 

@@ -142,6 +142,35 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - `/levels card` — members customize their rank card (accent color, background image, tagline).
   `/levels cardaccess boosters_only:true` makes it a booster perk.
 
+### Daily XP Pot (`/pot …` or dashboard **Gambling → 💰 Daily XP Pot**, off until set up)
+- **Filling:** every XP lost in `/gamble` goes into today's pot (100% by default, adjustable). It
+  keeps collecting right up to the draw, including during the countdown. Wins and free plays add
+  nothing.
+- **Countdown:** 10 minutes before the draw (default **00:00 UTC**, the end of the day), the pot is
+  posted in your channel with an optional ping. The embed explains how it works and shows:
+  - the pot
+  - a live countdown
+  - how many members are entered so far
+  - the **top 3 pot contributors** (the day's biggest losers)
+
+  It refreshes every 30 seconds.
+- **Who's entered:** everyone who chatted in the last hour, with no button to press. By default
+  that's 3+ messages in the last 60 minutes, and messages must be at least 20 seconds apart, so
+  spamming doesn't help. Bots never count. After a restart it falls back to members who earned
+  chat XP in that hour.
+- **The draw:** one random active member wins the whole pot. The post turns into the result, and
+  a winner message pings them.
+- **Rollovers:** if nobody's active, the pot rolls over to tomorrow. A pot under the minimum
+  (default 100 XP) rolls over quietly without being posted, so quiet days stay quiet. A draw missed
+  by 12+ hours (bot offline) also rolls over.
+- **Commands:** `/pot view` and `/pot history` for everyone. For staff:
+  - `/pot setup` (channel, draw hour, countdown, messages needed, minimum pot, share, ping)
+  - `/pot look` (title, text with `{pot}` `{draw}` `{min}` `{window}`, color, images, footer,
+    winner message)
+  - `/pot draw` (post now and draw after the countdown, handy for testing)
+  - `/pot preview`, `/pot toggle`
+- The dashboard has the same settings, a live embed preview, the current pot and recent winners.
+
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.
 - `coinflip` — 50/50, pays `2 × (1 − edge)`.

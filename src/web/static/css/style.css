@@ -1089,3 +1089,8 @@ kbd { font-family: inherit; font-size: 0.75rem; padding: 1px 6px; border-radius:
 
 /* XP shop: hidden items */
 .item-card.muted-card { opacity: 0.6; }
+
+/* Daily XP Pot preview fields */
+.pot-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem 0.8rem; margin: 0.6rem 0 0.3rem; font-size: 0.85rem; }
+.pot-fields .f-name { font-weight: 700; font-size: 0.78rem; margin-bottom: 0.1rem; }
+.pot-fields .f-full { grid-column: 1 / -1; }

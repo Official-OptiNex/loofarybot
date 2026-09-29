@@ -958,6 +958,7 @@
         <table class="payout-table" id="gStatsTable"><tr><td class="muted">Loading…</td></tr></table>
         <p class="muted" style="font-size:0.78rem; margin:0.5rem 0 0;">Members see their own with <code>/gamble stats</code>, or the server's with <code>/gamble stats server:true</code>. Refunded games aren't counted.</p>
       </div>
+      <%- include('partials/pot-card', { channelOptions, roles, bot }) %>
       <div class="savebar"><button class="btn" onclick="saveGambling()">Save changes</button></div>
     </div>
 
@@ -967,7 +968,7 @@
         <div class="hero-icon">📋</div>
         <div>
           <h1>Server Logs</h1>
-          <p>Edits, deletes, joins, leaves, voice and role changes — kept for 30 days and searchable here.</p>
+          <p>Messages, members, bans, channels, roles, voice, commands and more — searchable here and kept as long as you choose (30 days by default).</p>
           <div class="hero-status"><%- channelName(config.logChannelId) ? chip('good', 'Also posting to ' + esc(channelName(config.logChannelId))) : chip('', 'Dashboard only (no Discord channel)') %></div>
         </div>
         <% if (can('logs')) { %><div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('logs', config.logsEnabled !== false, null) %></div><% } %>
