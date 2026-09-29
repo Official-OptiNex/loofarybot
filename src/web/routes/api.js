@@ -24,7 +24,10 @@ const router = express.Router();
 
 // Maps each API route to the dashboard page it belongs to, so moderators can only use the pages
 // they've been given. null = available to anyone with dashboard access.
-const MODULE_PAGES = { tickets: 'tickets', welcome: 'welcome', honeypot: 'honeypot', leveling: 'leveling', autorole: 'autorole', gambling: 'gambling', logs: 'logs', alerts: 'alerts' };
+const MODULE_PAGES = {
+  tickets: 'tickets', welcome: 'welcome', honeypot: 'honeypot', leveling: 'leveling', autorole: 'autorole', gambling: 'gambling', logs: 'logs', alerts: 'alerts', shop: 'shop',
+  automod: 'moderation', xpPot: 'gambling', birthdays: 'engagement', counting: 'engagement', starboard: 'engagement', chatdrops: 'leveling'
+};
 function pageFor(req) {
   const tail = (req.route?.path || '').replace('/guilds/:guildId', '').replace(/^\//, '');
   const first = tail.split('/')[0];
@@ -72,7 +75,7 @@ router.get('/guilds/:guildId/mentionable', requireAuth, requireGuildAccess, guar
       .map((c) => ({ id: c.id, name: c.name }));
 
     const roles = req.guild.roles.cache
-      .filter((r) => r.name !== '@everyone' && !r.managed)
+      .filter((r) => r.name !== '@everyone' && !r.tags?.botId)
       .map((r) => ({ id: r.id, name: r.name }));
 
     const emojis = req.guild.emojis.cache.map((e) => ({
@@ -93,16 +96,23 @@ router.get('/guilds/:guildId/mentionable', requireAuth, requireGuildAccess, guar
 router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
     const q = String(req.query.q || '').trim().slice(0, 32);
+    let flair = new Map(); // XP shop badges and collectibles, filled in per page below
     const describe = (r, rank) => {
       const member = req.guild.members.cache.get(r.userId);
+      const f = flair.get(r.userId);
       return {
         rank,
         userId: r.userId,
         name: member ? member.displayName : `Unknown User (${r.userId})`,
         avatarUrl: member ? member.displayAvatarURL({ size: 64 }) : null,
         level: r.level,
-        xp: r.xp
+        xp: r.xp,
+        badge: f?.badge || null,
+        collectibles: (f?.collectibles || []).map((c) => c.emoji)
       };
+    };
+    const loadFlair = async (ids) => {
+      flair = await require('../../bot/cogs/modules/shop').flair(req.guild.id, ids).catch(() => new Map());
     };
 
     // Search: find members by name (Discord's member search), then show each one's real rank.
@@ -110,6 +120,7 @@ router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, guar
       const found = await req.guild.members.search({ query: q, limit: 25 }).catch(() => null);
       const ids = found ? [...found.keys()] : [];
       const records = ids.length ? await UserLevel.find({ guildId: req.guild.id, userId: { $in: ids } }).sort({ xp: -1 }).limit(25).lean() : [];
+      await loadFlair(records.map((r) => r.userId));
       const entries = await Promise.all(
         records.map(async (r) => describe(r, (await UserLevel.countDocuments({ guildId: req.guild.id, xp: { $gt: r.xp } })) + 1))
       );
@@ -122,6 +133,7 @@ router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, guar
     const missing = entries.map((r) => r.userId).filter((id) => !req.guild.members.cache.has(id));
     if (missing.length) await req.guild.members.fetch({ user: missing }).catch(() => null);
     const startRank = (page - 1) * 10;
+    await loadFlair(entries.map((r) => r.userId));
     res.json({ entries: entries.map((r, i) => describe(r, startRank + i + 1)), page, totalPages, total });
   } catch (err) {
     console.error('Failed to load leaderboard:', err);
@@ -190,7 +202,7 @@ router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, guardApi
     if (typeof enabled === 'boolean') config.levelingEnabled = enabled;
     if (Array.isArray(levelRoles)) {
       config.levelRoles = levelRoles
-        .filter((lr) => lr.level && lr.roleId)
+        .filter((lr) => lr.level && lr.roleId && !req.guild.roles.cache.get(String(lr.roleId))?.managed)
         .map((lr) => ({ level: Number(lr.level), roleId: String(lr.roleId) }));
     }
     if (Array.isArray(xpMultipliers)) {
@@ -607,6 +619,12 @@ router.post('/guilds/:guildId/logs', requireAuth, requireGuildAccess, guardApi, 
     }
     const config = await getOrCreateConfig(req.guild.id);
     config.logChannelId = channelId || null;
+    if (req.body.retentionDays !== undefined) {
+      const { RETENTION_CHOICES } = require('../../bot/cogs/modules/storage');
+      const days = Number(req.body.retentionDays);
+      if (!RETENTION_CHOICES.includes(days)) return res.status(400).json({ ok: false, error: `Keep logs for ${RETENTION_CHOICES.join(', ')} days.` });
+      config.logRetentionDays = days;
+    }
     if (events && typeof events === 'object') {
       for (const key of Object.keys(LOG_EVENTS)) {
         if (typeof events[key] === 'boolean') config.set(`logEvents.${key}`, events[key]);
@@ -620,6 +638,19 @@ router.post('/guilds/:guildId/logs', requireAuth, requireGuildAccess, guardApi, 
   }
 });
 
+// Log storage: how much is kept, and a manual clean-up (Logs → Settings → Storage).
+router.get('/guilds/:guildId/logs/storage', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const storage = require('../../bot/cogs/modules/storage');
+  res.json(await storage.storageStats(req.guild.id));
+});
+
+router.post('/guilds/:guildId/logs/cleanup', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const storage = require('../../bot/cogs/modules/storage');
+  const removed = await storage.runCleanup({ guildId: req.guild.id });
+  res.locals.audit = { section: 'Logs', action: 'Cleaned up old logs', detail: `${removed.logs} log entries removed` };
+  res.json({ ok: true, removed });
+});
+
 // --- Module on/off switches (sidebar, overview cards and each module page header) ---
 
 const MODULE_FIELDS = {
@@ -628,8 +659,11 @@ const MODULE_FIELDS = {
   autorole: 'autoRoleEnabled',
   gambling: 'gamblingEnabled',
   logs: 'logsEnabled',
-  alerts: 'socialAlertsEnabled'
+  alerts: 'socialAlertsEnabled',
+  shop: 'shopEnabled'
 };
+// module key -> the bot module whose saveSettings({ enabled }) handles the switch.
+const OWN_SETTINGS_MODULES = { automod: 'automod', xpPot: 'xpPot', birthdays: 'birthdays', counting: 'counting', starboard: 'starboard', chatdrops: 'chatDrops' };
 
 router.post('/guilds/:guildId/modules/:module', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {
@@ -648,6 +682,17 @@ router.post('/guilds/:guildId/modules/:module', requireAuth, requireGuildAccess,
     if (module === 'tickets') {
       const s = await require('../../bot/cogs/modules/tickets').saveSettings(req.guild.id, { enabled });
       return res.json({ ok: true, enabled, note: enabled && !s.panelMessageId ? 'Post the ticket panel on the Tickets page so members can open tickets.' : null });
+    }
+
+    // Features with their own settings rules (e.g. a channel is needed before turning them on).
+    if (OWN_SETTINGS_MODULES[module]) {
+      if (module === 'chatdrops' && enabled) {
+        const cfg = await getOrCreateConfig(req.guild.id);
+        if (!(cfg.chatDrops?.channelIds || []).length) return res.status(400).json({ ok: false, error: 'Pick at least one channel for drops first (Leveling → Chat drops).' });
+      }
+      const saved = await require(`../../bot/cogs/modules/${OWN_SETTINGS_MODULES[module]}`).saveSettings(req.guild, { enabled });
+      if (saved.error) return res.status(400).json({ ok: false, error: `${saved.error} (set it up on its page first)` });
+      return res.json({ ok: true, enabled: !!saved.settings.enabled });
     }
 
     const field = MODULE_FIELDS[module];
@@ -963,6 +1008,9 @@ router.post('/guilds/:guildId/autorole', requireAuth, requireGuildAccess, guardA
   try {
     const { roleId, enabled } = req.body;
     const config = await getOrCreateConfig(req.guild.id);
+    if (roleId && req.guild.roles.cache.get(String(roleId))?.managed) {
+      return res.status(400).json({ ok: false, error: 'That role is managed by Discord or an integration (like Server Booster) — the bot can’t hand it out.' });
+    }
     if (roleId !== undefined) config.autoRoleId = roleId || null;
     if (typeof enabled === 'boolean') config.autoRoleEnabled = enabled;
     await config.save();

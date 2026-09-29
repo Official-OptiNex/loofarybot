@@ -125,6 +125,11 @@ function attachMemberPicker(input, { onPick = null } = {}) {
   LoofMentions.load(guildId);
 }
 
+// A feature's page was saved: keep its on/off switch in the sidebar (and Overview) in step.
+function syncModuleSwitch(module, on) {
+  document.querySelectorAll(`.module-toggle[data-module="${module}"]`).forEach((el) => (el.checked = !!on));
+}
+
 // Called by showTab() whenever a page opens.
 function onManageTabShown(tab) {
   if (tab === 'giveaways') {
@@ -138,13 +143,22 @@ function onManageTabShown(tab) {
   }
   if (tab === 'moderation') {
     loadModeration();
+    loadAutomod();
     loadMediaOnly();
     initCases();
     attachMemberPicker(document.getElementById('pgUser'));
   }
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
   if (tab === 'leveling') loadChatDrops();
-  if (tab === 'gambling') loadGambleStats();
+  if (tab === 'gambling') {
+    loadGambleStats();
+    loadPot();
+  }
+  if (tab === 'engagement') loadEngagement();
+  if (tab === 'shop') {
+    loadShop();
+    attachMemberPicker(document.getElementById('shMember'), { onPick: (u) => loadShopMember(u.id) });
+  }
   if (tab === 'tickets') {
     loadTickets();
     loadTicketHistory(tkState.page || 1);
@@ -422,7 +436,7 @@ function renderEntrants() {
             ${e.avatarUrl ? `<img src="${esc(e.avatarUrl)}" alt="">` : '<span class="entrant-avatar"></span>'}
             <div style="flex:1; min-width:0;"><strong>${esc(e.name || 'Left the server')}</strong> <span class="muted" style="font-size:0.78rem;">${esc(e.username ? '@' + e.username : e.id)}</span></div>
             ${e.won ? '<span class="status-chip good"><span class="dot"></span>Winner</span>' : ''}
-            ${e.tickets > 1 ? `<span class="status-chip"><span class="dot"></span>${e.tickets} tickets</span>` : ''}
+            ${e.tickets > 1 ? `<span class="status-chip"><span class="dot"></span>${e.tickets} tickets${e.why ? ` · ${esc(e.why)}` : ''}</span>` : ''}
             ${entrantState.ended ? '' : `<button class="btn secondary small" onclick="removeEntrant('${e.id}', this)">Remove</button>`}
           </div>`
         )
@@ -541,6 +555,7 @@ function panelRoleOptions(selectedId) {
   return (
     '<option value="">— Pick a role —</option>' +
     roles
+      .filter((r) => !r.managed)
       .map((r) => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''} ${r.assignable ? '' : 'disabled'}>@${esc(r.name)}${r.assignable ? '' : ' ⚠️'}</option>`)
       .join('')
   );
@@ -1592,6 +1607,7 @@ async function saveChatDrops() {
   const body = readChatDrops();
   if (body.enabled && !body.channelIds.length) throw new Error('Chat drops: pick at least one channel.');
   await manageApi('POST', 'levels/chatdrops', body);
+  syncModuleSwitch('chatdrops', body.enabled);
   loadChatDrops();
 }
 
@@ -1632,3 +1648,613 @@ async function loadGambleStats() {
         .join('')
     : '<tr><td class="muted">Nobody has gambled yet.</td></tr>';
 }
+
+/* ------------------------------------------------------------------ Engagement: birthdays, counting, starboard */
+
+const enState = { loaded: false, data: null };
+
+function fillEngagementForms(d) {
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  const c = (id, val) => (document.getElementById(id).checked = !!val);
+  const b = d.birthdays.settings;
+  c('bdEnabled', b.enabled);
+  v('bdChannel', b.channelId || '');
+  v('bdHour', b.announceHour);
+  v('bdRole', b.roleId || '');
+  v('bdXp', b.xpGift);
+  v('bdMessage', b.message);
+  const ct = d.counting.settings;
+  c('ctEnabled', ct.enabled);
+  v('ctChannel', ct.channelId || '');
+  c('ctTurns', !ct.allowSameUser);
+  c('ctMath', ct.mathAllowed);
+  const sb = d.starboard.settings;
+  c('sbEnabled', sb.enabled);
+  v('sbChannel', sb.channelId || '');
+  v('sbThreshold', sb.threshold);
+  v('sbEmoji', sb.emoji);
+  c('sbSelf', sb.selfStar);
+  document.querySelectorAll('.sb-ignore').forEach((el) => (el.checked = sb.ignoredChannelIds.includes(el.value)));
+  renderBirthdayPreview();
+}
+
+function renderEngagementStatus(d) {
+  const chip = (on, text) => `<span class="status-chip ${on ? 'good' : 'off'}"><span class="dot"></span>${text}</span>`;
+  document.getElementById('enStatus').innerHTML = [
+    chip(d.birthdays.settings.enabled, `🎂 Birthdays ${d.birthdays.settings.enabled ? 'on' : 'off'}`),
+    chip(d.counting.settings.enabled, `🔢 Counting ${d.counting.settings.enabled ? `on · next ${fmt(d.counting.settings.current + 1)}` : 'off'}`),
+    chip(d.starboard.settings.enabled, `⭐ Starboard ${d.starboard.settings.enabled ? 'on' : 'off'}`)
+  ].join('');
+
+  const warn = (id, items, what) => {
+    const el = document.getElementById(id);
+    el.style.display = items.length ? '' : 'none';
+    el.innerHTML = items.length ? `⚠️ For ${what}, LoofaryBot needs <strong>${items.map(esc).join(', ')}</strong>.` : '';
+  };
+  warn('bdWarn', d.birthdays.missingPerms, 'birthdays');
+  warn('sbWarn', d.starboard.missingPerms, 'the starboard');
+
+  const bd = d.birthdays;
+  document.getElementById('bdCount').textContent = `· ${fmt(bd.saved)} saved`;
+  const when = (n) => (n === 0 ? '<strong>today 🎉</strong>' : n === 1 ? 'tomorrow' : `in ${n} days`);
+  document.getElementById('bdUpcoming').innerHTML = bd.upcoming.length
+    ? `<div class="payout-table-wrap"><table class="payout-table"><tbody>${bd.upcoming
+        .map((u) => `<tr><td>${esc(u.name || u.userId)}</td><td class="muted">${esc(u.date)}</td><td>${when(u.daysUntil)}</td></tr>`)
+        .join('')}</tbody></table></div>`
+    : '<p class="muted" style="margin:0;">Nobody has saved a birthday yet. Members add theirs with <code>/birthday set</code>.</p>';
+
+  const ct = d.counting.settings;
+  const stat = (value, label) => `<div class="mini-stat"><div class="value">${value}</div><div class="label">${label}</div></div>`;
+  document.getElementById('ctStats').innerHTML = [
+    stat(fmt(ct.current + 1), 'Next number'),
+    stat(fmt(ct.record), 'Best run'),
+    stat(fmt(ct.resets), 'Resets'),
+    stat(esc(ct.lastUserName || (ct.lastUserId ? 'someone' : '—')), 'Last counted by')
+  ].join('');
+
+  const top = d.starboard.top;
+  document.getElementById('sbTop').innerHTML = top.length
+    ? top
+        .map(
+          (p) => `<div class="list-row" style="display:flex; justify-content:space-between; gap:0.5rem; padding:0.4rem 0; border-top:1px solid var(--border-card);">
+            <span><strong>${fmt(p.stars)}</strong> ${esc(d.starboard.settings.emoji)} · ${esc(p.authorName || 'someone')} <span class="muted">in #${esc((channels.find((c) => c.id === p.channelId) || {}).name || 'channel')}</span></span>
+            <a href="${esc(p.url)}" target="_blank" rel="noopener">Jump ↗</a></div>`
+        )
+        .join('')
+    : '<p class="muted" style="margin:0;">Nothing has reached the starboard yet.</p>';
+}
+
+async function loadEngagement() {
+  let d;
+  try {
+    d = await manageApi('GET', 'engagement');
+  } catch (err) {
+    showToast(`⚠️ ${err.message}`);
+    return;
+  }
+  enState.data = d;
+  if (!enState.loaded) fillEngagementForms(d);
+  enState.loaded = true;
+  renderEngagementStatus(d);
+}
+
+function readEngagement(section) {
+  const v = (id) => document.getElementById(id).value;
+  const c = (id) => document.getElementById(id).checked;
+  if (section === 'birthdays') {
+    return { enabled: c('bdEnabled'), channelId: v('bdChannel') || null, announceHour: v('bdHour'), roleId: v('bdRole') || null, xpGift: v('bdXp') || 0, message: v('bdMessage') };
+  }
+  if (section === 'counting') return { enabled: c('ctEnabled'), channelId: v('ctChannel') || null, allowSameUser: !c('ctTurns'), mathAllowed: c('ctMath') };
+  return {
+    enabled: c('sbEnabled'),
+    channelId: v('sbChannel') || null,
+    threshold: v('sbThreshold'),
+    emoji: v('sbEmoji').trim() || '⭐',
+    selfStar: c('sbSelf'),
+    ignoredChannelIds: [...document.querySelectorAll('.sb-ignore:checked')].map((el) => el.value)
+  };
+}
+
+const EN_LABELS = { birthdays: '🎂 Birthday settings saved.', counting: '🔢 Counting settings saved.', starboard: '⭐ Starboard settings saved.' };
+const EN_BUTTONS = { birthdays: 'bdSave', counting: 'ctSave', starboard: 'sbSave' };
+
+async function saveEngagement(section) {
+  const body = readEngagement(section);
+  if (body.enabled && !body.channelId) return showToast('❌ Pick a channel first.');
+  const data = await withButton(document.getElementById(EN_BUTTONS[section]), () => manageApi('POST', `engagement/${section}`, body), EN_LABELS[section]);
+  if (data) {
+    syncModuleSwitch(section, data.settings.enabled);
+    loadEngagement();
+  }
+}
+
+async function setCount() {
+  const input = document.getElementById('ctSetTo');
+  if (input.value === '' || Number(input.value) < 0) return showToast('❌ Enter the last number counted (0 or more).');
+  const data = await withButton(document.getElementById('ctSetBtn'), () => manageApi('POST', 'engagement/counting', { current: input.value }), (d) => `✅ Count set — next is ${fmt(d.settings.current + 1)}.`);
+  if (data) {
+    input.value = '';
+    loadEngagement();
+  }
+}
+
+function renderBirthdayPreview() {
+  const text = document.getElementById('bdMessage').value.trim() || '🎂 Happy birthday {users}! Have an amazing day! 🎉';
+  const who = `<span class="mention-pill">@${esc(viewer.username)}</span>`;
+  const extras = [];
+  const xp = Number(document.getElementById('bdXp').value) || 0;
+  if (xp > 0) extras.push(`🎁 <strong>+${fmt(xp)} XP</strong> birthday gift`);
+  const roleId = document.getElementById('bdRole').value;
+  const role = roles.find((r) => r.id === roleId);
+  if (role) extras.push(`<span class="mention-pill">@${esc(role.name)}</span> for the day`);
+  document.getElementById('bdpText').innerHTML =
+    esc(text).replaceAll('{users}', who).replaceAll('{user}', who).replaceAll('{count}', '1').replaceAll('{server}', esc(guildName)).replace(/\n/g, '<br>') +
+    (extras.length ? `<div class="muted" style="font-size:0.78rem; margin-top:0.35rem;">${extras.join(' · ')}</div>` : '');
+  const h = Number(document.getElementById('bdHour').value) || 0;
+  document.getElementById('bdpTime').textContent = `Today at ${String(h).padStart(2, '0')}:00 UTC`;
+  const local = new Date(Date.UTC(2000, 0, 1, h));
+  document.getElementById('bdLocalTime').textContent = `That's ${local.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} your time.`;
+}
+
+(function initEngagementUi() {
+  const panel = document.getElementById('tab-engagement');
+  if (!panel) return;
+  ['bdMessage', 'bdXp', 'bdRole', 'bdHour'].forEach((id) => {
+    document.getElementById(id).addEventListener('input', renderBirthdayPreview);
+    document.getElementById(id).addEventListener('change', renderBirthdayPreview);
+  });
+  panel.querySelectorAll('[data-sb-emoji]').forEach((b) =>
+    b.addEventListener('click', () => {
+      document.getElementById('sbEmoji').value = b.dataset.sbEmoji;
+      if (typeof setUnsaved === 'function') setUnsaved(true);
+    })
+  );
+  document.getElementById('sbIgnoreSearch').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    panel.querySelectorAll('#sbIgnored .check-pill').forEach((p) => (p.style.display = !q || p.dataset.name.includes(q) ? '' : 'none'));
+  });
+})();
+
+/* ------------------------------------------------------------------ Auto-mod (Moderation tab) */
+
+const amState = { loaded: false };
+const AM_RULES = ['flood', 'duplicates', 'walls', 'mentions', 'invites', 'links', 'caps'];
+
+function fillAutomod(s) {
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  const c = (id, val) => (document.getElementById(id).checked = !!val);
+  c('amEnabled', s.enabled);
+  AM_RULES.forEach((r) => c(`am_${r}`, s[r].enabled));
+  c('am_everyone', s.mentions.everyone);
+  v('amFloodMsgs', s.flood.messages);
+  v('amFloodSecs', s.flood.seconds);
+  v('amDupCount', s.duplicates.count);
+  v('amDupSecs', s.duplicates.seconds);
+  v('amWallLines', s.walls.maxLines);
+  v('amMentionMax', s.mentions.max);
+  v('amLinkMax', s.links.max);
+  v('amCapsPct', s.caps.percent);
+  v('amWarnings', s.warnings);
+  v('amMute', s.muteMinutes);
+  v('amReset', s.strikeResetHours);
+  c('amNotify', s.notify);
+  document.querySelectorAll('.am-role').forEach((el) => (el.checked = s.exemptRoleIds.includes(el.value)));
+  document.querySelectorAll('.am-channel').forEach((el) => (el.checked = s.exemptChannelIds.includes(el.value)));
+}
+
+function renderAutomodRecent(recent) {
+  document.getElementById('amRecent').innerHTML = recent.length
+    ? recent
+        .map(
+          (c) => `<div style="font-size:0.84rem; padding:0.45rem 0; border-top:1px solid var(--border-card);">
+            ${c.type === 'timeout' ? '⏳' : '⚠️'} <strong>${esc(c.name)}</strong> <span class="muted">· ${fromNow(new Date(c.createdAt).getTime())} · case #${c.caseId}</span><br>
+            <span class="muted">${esc(String(c.reason || '').replace(/^Auto-mod: /, ''))}</span></div>`
+        )
+        .join('')
+    : '<p class="muted" style="margin:0;">Nothing caught yet.</p>';
+}
+
+async function loadAutomod() {
+  if (!document.getElementById('amEnabled')) return;
+  let d;
+  try {
+    d = await manageApi('GET', 'moderation/automod');
+  } catch (err) {
+    document.getElementById('amRecent').innerHTML = emptyCard('⚠️', esc(err.message));
+    return;
+  }
+  if (!amState.loaded) fillAutomod(d.settings);
+  amState.loaded = true;
+  const warn = document.getElementById('amWarn');
+  warn.style.display = d.missingPerms.length ? '' : 'none';
+  warn.innerHTML = d.missingPerms.length ? `⚠️ Auto-mod needs LoofaryBot to have <strong>${d.missingPerms.map(esc).join(', ')}</strong>.` : '';
+  renderAutomodRecent(d.recent);
+}
+
+function readAutomod() {
+  const v = (id) => document.getElementById(id).value;
+  const c = (id) => document.getElementById(id).checked;
+  const rules = Object.fromEntries(AM_RULES.map((r) => [r, { enabled: c(`am_${r}`) }]));
+  Object.assign(rules.flood, { messages: v('amFloodMsgs'), seconds: v('amFloodSecs') });
+  Object.assign(rules.duplicates, { count: v('amDupCount'), seconds: v('amDupSecs') });
+  rules.walls.maxLines = v('amWallLines');
+  Object.assign(rules.mentions, { max: v('amMentionMax'), everyone: c('am_everyone') });
+  rules.links.max = v('amLinkMax');
+  rules.caps.percent = v('amCapsPct');
+  return {
+    enabled: c('amEnabled'),
+    rules,
+    warnings: v('amWarnings'),
+    muteMinutes: v('amMute'),
+    strikeResetHours: v('amReset'),
+    notify: c('amNotify'),
+    exemptRoleIds: [...document.querySelectorAll('.am-role:checked')].map((el) => el.value),
+    exemptChannelIds: [...document.querySelectorAll('.am-channel:checked')].map((el) => el.value)
+  };
+}
+
+async function saveAutomod() {
+  const data = await withButton(document.getElementById('amSave'), () => manageApi('POST', 'moderation/automod', readAutomod()), '🛡️ Auto-mod saved.');
+  if (data) {
+    syncModuleSwitch('automod', data.settings.enabled);
+    fillAutomod(data.settings);
+    loadAutomod();
+  }
+}
+
+/* ------------------------------------------------------------------ XP shop */
+
+const shState = { items: [], types: {}, editing: null, memberId: null, loaded: false };
+
+function shopItemMeta(i) {
+  const t = shState.types[i.type] || {};
+  const bits = [t.label || i.type];
+  if (i.type === 'xpBoost') bits.push(`×${i.config.multiplier || 1.5} for ${i.config.durationHours || 24}h`);
+  if (i.type === 'extraGambles') bits.push(`+${i.config.plays || 3} plays`);
+  if (i.type === 'role') bits.push(`${roleLabel(i.config.roleId)}${i.config.durationHours ? ` for ${i.config.durationHours}h` : ''}`);
+  if (i.stock !== null) bits.push(i.sold >= i.stock ? 'sold out' : `${fmt(i.stock - i.sold)} of ${fmt(i.stock)} left`);
+  if (i.minLevel) bits.push(`level ${i.minLevel}+`);
+  if (i.maxPerUser === 0) bits.push('buy any number');
+  return bits.join(' · ');
+}
+
+function renderShop() {
+  const list = document.getElementById('shItems');
+  if (!shState.items.length) {
+    list.innerHTML = emptyCard('🛍️', 'No items yet. Add one, or restore the starter items.');
+    return;
+  }
+  list.innerHTML = shState.items
+    .map(
+      (i, idx) => `<div class="card item-card${i.enabled ? '' : ' muted-card'}">
+        <span style="font-size:1.6rem; width:2.2rem; text-align:center;">${esc(i.emoji)}</span>
+        <div class="item-main">
+          <div class="item-title">${esc(i.name)} <span class="status-chip ${i.enabled ? 'good' : 'off'}"><span class="dot"></span>${i.enabled ? `${fmt(i.price)} XP` : 'hidden'}</span></div>
+          <div class="item-meta">${esc(shopItemMeta(i))}</div>
+          <div class="item-meta">${i.owners ? `${fmt(i.owners)} owner${i.owners === 1 ? '' : 's'}${shState.types[i.type]?.toggle ? ` (${fmt(i.active)} using it)` : ''} · ${fmt(i.spent)} XP spent` : 'Nobody has bought it yet'}</div>
+        </div>
+        <span class="item-actions">
+          <button class="btn secondary small" title="Move up" onclick="moveShopItem(${idx}, -1)" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn secondary small" title="Move down" onclick="moveShopItem(${idx}, 1)" ${idx === shState.items.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="btn secondary small" onclick="openShopEditor('${i.id}')">Edit</button>
+        </span>
+      </div>`
+    )
+    .join('');
+}
+
+async function loadShop() {
+  let d;
+  try {
+    d = await manageApi('GET', 'shop');
+  } catch (err) {
+    document.getElementById('shItems').innerHTML = emptyCard('⚠️', esc(err.message));
+    return;
+  }
+  shState.items = d.items;
+  shState.types = d.types;
+  if (!shState.loaded) {
+    document.getElementById('shType').innerHTML = Object.entries(d.types)
+      .map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`)
+      .join('');
+  }
+  shState.loaded = true;
+  document.getElementById('shStatus').innerHTML = [
+    `<span class="status-chip ${d.enabled ? 'good' : 'off'}"><span class="dot"></span>${d.enabled ? 'Open' : 'Closed'}</span>`,
+    `<span class="status-chip"><span class="dot"></span>${fmt(d.items.filter((i) => i.enabled).length)} items</span>`,
+    `<span class="status-chip"><span class="dot"></span>${fmt(d.totals.spent)} XP spent by ${fmt(d.totals.buyers)} member${d.totals.buyers === 1 ? '' : 's'}</span>`,
+    d.levelingEnabled ? '' : '<span class="status-chip warn"><span class="dot"></span>Leveling is off — nobody can buy</span>'
+  ].join('');
+  document.getElementById('shSummary').textContent = `${d.items.length} item${d.items.length === 1 ? '' : 's'} · members see them in this order`;
+  document.getElementById('shRecent').innerHTML = d.recent.length
+    ? d.recent.map((r) => `<div style="font-size:0.86rem; padding:0.45rem 0; border-top:1px solid var(--border-card);"><strong>${esc(r.userTag || r.userId)}</strong> ${esc(r.summary)} <span class="muted">· ${fromNow(new Date(r.at).getTime())}</span></div>`).join('')
+    : '<p class="muted" style="margin:0;">No purchases yet.</p>';
+  renderShop();
+}
+
+function shopEditorShowFields() {
+  const type = document.getElementById('shType').value;
+  document.querySelectorAll('#shEditor [data-sh-for]').forEach((row) => (row.style.display = row.dataset.shFor.split(' ').includes(type) ? '' : 'none'));
+  document.getElementById('shTypeHelp').textContent = shState.types[type]?.help || '';
+  document.getElementById('shDurationHelp').textContent = type === 'role' ? 'Hours. 0 = keeps it forever.' : 'Hours. Buying again adds more time.';
+  renderShopPreview();
+}
+
+function openShopEditor(id = null) {
+  const item = id ? shState.items.find((i) => i.id === id) : null;
+  shState.editing = item;
+  const defaults = { type: 'collectible', name: '', emoji: '🛍️', description: '', price: 1000, stock: null, maxPerUser: 1, minLevel: 0, enabled: true, config: {} };
+  const i = item || defaults;
+  const v = (el, val) => (document.getElementById(el).value = val ?? '');
+  document.getElementById('shEditorTitle').textContent = item ? `Edit ${item.name}` : 'Add item';
+  v('shType', i.type);
+  document.getElementById('shType').disabled = !!item; // the kind is fixed once it exists
+  v('shName', i.name);
+  v('shEmoji', i.emoji);
+  v('shDesc', i.description);
+  v('shPrice', i.price);
+  v('shStock', i.stock);
+  v('shMax', i.maxPerUser);
+  v('shMinLevel', i.minLevel);
+  document.getElementById('shItemEnabled').checked = i.enabled;
+  v('shRole', i.config.roleId || '');
+  v('shDuration', i.config.durationHours ?? (i.type === 'xpBoost' ? 24 : 0));
+  v('shMult', i.config.multiplier ?? 1.5);
+  v('shPlays', i.config.plays ?? 3);
+  v('shReactEmoji', i.config.reactEmoji || '');
+  v('shCooldown', i.config.cooldownSeconds ?? 45);
+  v('shBadgeText', i.config.defaultText || '');
+  document.getElementById('shDeleteBtn').style.display = item ? '' : 'none';
+  shopEditorShowFields();
+  document.getElementById('shEditor').showModal();
+}
+
+function closeShopEditor() {
+  document.getElementById('shEditor').close();
+  if (typeof markSaved === 'function') markSaved();
+}
+
+function readShopEditor() {
+  const v = (id) => document.getElementById(id).value;
+  const type = v('shType');
+  const config = {};
+  if (type === 'role') Object.assign(config, { roleId: v('shRole'), durationHours: v('shDuration') });
+  if (type === 'xpBoost') Object.assign(config, { multiplier: v('shMult'), durationHours: v('shDuration') });
+  if (type === 'extraGambles') config.plays = v('shPlays');
+  if (type === 'autoReact') Object.assign(config, { reactEmoji: v('shReactEmoji'), cooldownSeconds: v('shCooldown') });
+  if (type === 'nickTag') config.reactEmoji = v('shReactEmoji');
+  if (type === 'badge') config.defaultText = v('shBadgeText');
+  return {
+    type,
+    name: v('shName').trim(),
+    emoji: v('shEmoji').trim(),
+    description: v('shDesc').trim(),
+    price: v('shPrice'),
+    stock: v('shStock'),
+    maxPerUser: v('shMax'),
+    minLevel: v('shMinLevel'),
+    enabled: document.getElementById('shItemEnabled').checked,
+    config
+  };
+}
+
+function renderShopPreview() {
+  const f = readShopEditor();
+  const bits = [`<strong>${fmt(Number(f.price) || 0)} XP</strong>`];
+  if (f.stock !== '') bits.push(`${fmt(Number(f.stock))} left`);
+  if (Number(f.minLevel)) bits.push(`level ${Number(f.minLevel)}+`);
+  document.getElementById('shPreview').innerHTML = `${esc(f.emoji || '🛍️')} <strong>${esc(f.name || 'Item name')}</strong> · ${bits.join(' · ')}<br>${esc(f.description || shState.types[f.type]?.help || '')}${f.enabled ? '' : '<br><em class="muted">Hidden from the shop</em>'}`;
+}
+
+async function saveShopItem() {
+  const body = readShopEditor();
+  if (!body.name) return showToast('❌ Give the item a name.');
+  const id = shState.editing?.id;
+  const data = await withButton(document.getElementById('shSaveBtn'), () => manageApi('POST', id ? `shop/items/${id}` : 'shop/items', body), id ? '✅ Item saved.' : '✅ Item added to the shop.');
+  if (data) {
+    closeShopEditor();
+    loadShop();
+  }
+}
+
+async function deleteShopItem() {
+  const item = shState.editing;
+  if (!item) return;
+  if (!confirm(`Delete “${item.name}”?${item.owners ? ` ${item.owners} member(s) own it and will lose it (no refund).` : ''}`)) return;
+  const data = await withButton(document.getElementById('shDeleteBtn'), () => manageApi('DELETE', `shop/items/${item.id}`), '🗑️ Item deleted.');
+  if (data) {
+    closeShopEditor();
+    loadShop();
+  }
+}
+
+async function moveShopItem(idx, dir) {
+  const items = shState.items;
+  const j = idx + dir;
+  if (j < 0 || j >= items.length) return;
+  [items[idx], items[j]] = [items[j], items[idx]];
+  renderShop();
+  await manageApi('POST', 'shop/order', { ids: items.map((i) => i.id) }).catch((err) => showToast(`❌ ${err.message}`));
+}
+
+async function restoreShopDefaults() {
+  const data = await withButton(null, () => manageApi('POST', 'shop/restore'), (d) => (d.added ? `↺ Put back ${d.added} starter item${d.added === 1 ? '' : 's'}.` : '✨ All starter items are already there.'));
+  if (data) loadShop();
+}
+
+async function loadShopMember(userId) {
+  shState.memberId = userId;
+  const box = document.getElementById('shMemberBox');
+  let d;
+  try {
+    d = await manageApi('GET', `shop/member/${userId}`);
+  } catch (err) {
+    box.innerHTML = `<p class="muted">❌ ${esc(err.message)}</p>`;
+    return;
+  }
+  const m = d.member;
+  const giveable = shState.items; // staff can give hidden items too
+  box.innerHTML = `
+    <div style="display:flex; align-items:center; gap:0.7rem; margin-bottom:0.8rem;"><img src="${esc(m.avatarUrl)}" alt="" style="width:36px; height:36px; border-radius:50%;"><div><strong>${esc(m.name)}</strong><div class="muted" style="font-size:0.8rem;">Level ${fmt(m.level)} · ${fmt(m.xp)} XP</div></div></div>
+    ${
+      d.owned.length
+        ? d.owned
+            .map(
+              (o) => `<div class="locked-row"><span>${esc(o.emoji)} <strong>${esc(o.name)}</strong> <span class="muted" style="font-size:0.8rem;">${shState.types[o.type]?.toggle ? (o.active ? '· on' : '· off') : ''}${o.quantity > 1 ? ` · ×${o.quantity}` : ''}${o.expiresAt ? ` · until ${new Date(o.expiresAt).toLocaleString()}` : ''}${o.custom?.text ? ` · “${esc(o.custom.text)}”` : ''}${o.custom?.emoji && shState.types[o.type]?.custom.includes('emoji') ? ` · ${esc(o.custom.emoji)}` : ''} · paid ${fmt(o.spent)} XP</span></span>
+              <button class="btn secondary small" onclick="removeShopOwned('${o.id}', this)">Take away</button></div>`
+            )
+            .join('')
+        : '<p class="muted" style="margin:0 0 0.6rem;">Doesn’t own anything yet.</p>'
+    }
+    <div style="display:flex; gap:0.5rem; margin-top:0.8rem; flex-wrap:wrap;">
+      <select id="shGiveItem" style="max-width:320px;">${giveable.map((i) => `<option value="${i.id}">${esc(i.emoji)} ${esc(i.name)}</option>`).join('')}</select>
+      <button class="btn small" id="shGiveBtn" onclick="giveShopItem()">🎁 Give for free</button>
+    </div>`;
+}
+
+async function giveShopItem() {
+  const itemId = document.getElementById('shGiveItem').value;
+  const data = await withButton(document.getElementById('shGiveBtn'), () => manageApi('POST', `shop/member/${shState.memberId}/give`, { itemId }), '🎁 Given!');
+  if (data) {
+    loadShopMember(shState.memberId);
+    loadShop();
+  }
+}
+
+async function removeShopOwned(id, btn) {
+  if (!confirm('Take this item away? Its effect is switched off and nothing is refunded.')) return;
+  const data = await withButton(btn, () => manageApi('DELETE', `shop/owned/${id}`), '🗑️ Taken away.');
+  if (data) {
+    loadShopMember(shState.memberId);
+    loadShop();
+  }
+}
+
+(function initShopUi() {
+  const dialog = document.getElementById('shEditor');
+  if (!dialog) return;
+  document.getElementById('shType').addEventListener('change', shopEditorShowFields);
+  dialog.querySelectorAll('input, textarea, select').forEach((el) => el.addEventListener('input', renderShopPreview));
+})();
+
+/* ------------------------------------------------------------------ Daily XP Pot (Gambling tab) */
+
+const potState = { loaded: false, data: null };
+
+function fillPot(s) {
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  document.getElementById('potEnabled').checked = !!s.enabled;
+  v('potChannel', s.channelId || '');
+  v('potHour', s.drawHour);
+  v('potCountdown', s.countdownMinutes);
+  v('potMsgs', s.minMessages);
+  v('potWindow', s.windowMinutes);
+  v('potShare', s.sharePercent);
+  v('potMin', s.minPot);
+  v('potPing', s.pingRoleId || '');
+  v('potTitle', s.embed.title);
+  v('potColor', s.embed.color);
+  v('potDesc', s.embed.description || '');
+  v('potThumb', s.embed.thumbnailUrl || '');
+  v('potImage', s.embed.imageUrl || '');
+  v('potFooter', s.embed.footer || '');
+  v('potWin', s.winMessage);
+}
+
+function readPot() {
+  const v = (id) => document.getElementById(id).value;
+  return {
+    enabled: document.getElementById('potEnabled').checked,
+    channelId: v('potChannel') || null,
+    drawHour: v('potHour'),
+    countdownMinutes: v('potCountdown'),
+    minMessages: v('potMsgs'),
+    windowMinutes: v('potWindow'),
+    sharePercent: v('potShare'),
+    minPot: v('potMin'),
+    pingRoleId: v('potPing') || null,
+    embed: { title: v('potTitle'), color: v('potColor'), description: v('potDesc'), thumbnailUrl: v('potThumb'), imageUrl: v('potImage'), footer: v('potFooter') },
+    winMessage: v('potWin')
+  };
+}
+
+function renderPotPreview() {
+  const d = potState.data;
+  if (!d) return;
+  const f = readPot();
+  const drawAt = new Date(d.pot.drawAt);
+  // Same default text and placeholders as the bot.
+  const vars = { pot: fmt(d.pot.amount), draw: fromNow(drawAt.getTime()), time: drawAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), min: f.minMessages, window: f.windowMinutes, entrants: fmt(d.entrants) };
+  const text = (f.embed.description.trim() || d.defaultDescription).replace(/\{(\w+)\}/g, (m, k) => (vars[k] !== undefined ? vars[k] : m));
+  document.getElementById('potpEmbed').style.borderLeftColor = f.embed.color;
+  document.getElementById('potpTitle').textContent = f.embed.title || '💰 Daily XP Pot';
+  document.getElementById('potpDesc').innerHTML = discordText(text);
+  const medals = ['🥇', '🥈', '🥉'];
+  const top = d.top.length ? d.top.map((t, i) => `${medals[i]} ${pill('@' + (t.name || t.id))} — ${fmt(t.amount)} XP`).join('<br>') : 'Nobody has lost any XP yet… 👀';
+  document.getElementById('potpFields').innerHTML = `
+    <div><div class="f-name">💰 Pot</div><strong>${fmt(d.pot.amount)} XP</strong>${d.pot.rolledOver ? `<div class="muted" style="font-size:0.75rem;">incl. ${fmt(d.pot.rolledOver)} rolled over</div>` : ''}</div>
+    <div><div class="f-name">⏳ Draw</div>${esc(fromNow(drawAt.getTime()))}</div>
+    <div><div class="f-name">🎟️ Entered so far</div>${fmt(d.entrants)}</div>
+    <div class="f-full"><div class="f-name">📉 Top pot contributors</div>${top}</div>`;
+  const img = (id, url) => {
+    const el = document.getElementById(id);
+    el.style.display = url ? '' : 'none';
+    if (url) el.src = url;
+  };
+  img('potpThumb', f.embed.thumbnailUrl);
+  img('potpImage', f.embed.imageUrl);
+  document.getElementById('potpFooter').textContent = f.embed.footer || '';
+  const h = Number(f.drawHour) || 0;
+  document.getElementById('potLocal').textContent = `That's ${new Date(Date.UTC(2000, 0, 1, h)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} your time.`;
+}
+
+async function loadPot() {
+  if (!document.getElementById('potCard')) return;
+  let d;
+  try {
+    d = await manageApi('GET', 'gambling/pot');
+  } catch (err) {
+    document.getElementById('potHistory').innerHTML = `<p class="muted">❌ ${esc(err.message)}</p>`;
+    return;
+  }
+  potState.data = d;
+  if (!potState.loaded) fillPot(d.settings);
+  potState.loaded = true;
+  const s = d.settings;
+  document.getElementById('potStatus').innerHTML = [
+    `<span class="status-chip ${s.enabled ? 'good' : 'off'}"><span class="dot"></span>${s.enabled ? 'On' : 'Off'}</span>`,
+    `<span class="status-chip"><span class="dot"></span>💰 ${fmt(d.pot.amount)} XP in today’s pot</span>`,
+    s.enabled ? `<span class="status-chip"><span class="dot"></span>${d.pot.status === 'posted' ? '⏱️ counting down now' : `drawn ${esc(fromNow(new Date(d.pot.drawAt).getTime()))}`}</span>` : ''
+  ].join('');
+  document.getElementById('potHistory').innerHTML = d.history.length
+    ? d.history
+        .map((p) => `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);"><strong>${esc(p.day)}</strong> · ${p.status === 'done' ? `🏆 ${esc(p.winnerName || p.winnerId)} won <strong>${fmt(p.won)} XP</strong> <span class="muted">(${fmt(p.entrants)} entered)</span>` : `🔁 ${fmt(p.amount)} XP rolled over`}</div>`)
+        .join('')
+    : '<p class="muted" style="margin:0;">No pots drawn yet.</p>';
+  renderPotPreview();
+}
+
+async function savePot() {
+  const body = readPot();
+  if (body.enabled && !body.channelId) return showToast('❌ Pick a channel for the pot first.');
+  const data = await withButton(document.getElementById('potSaveBtn'), () => manageApi('POST', 'gambling/pot', body), '💰 Daily XP Pot saved.');
+  if (data) {
+    syncModuleSwitch('xpPot', data.settings.enabled);
+    loadPot();
+  }
+}
+
+async function potDrawNow() {
+  if (!confirm("Post today's pot now and draw it after the countdown? Members chatting in the last hour are entered.")) return;
+  const data = await withButton(document.getElementById('potDrawBtn'), () => manageApi('POST', 'gambling/pot/draw'), (d) => `⏱️ Posted — drawn ${fromNow(new Date(d.drawAt).getTime())}.`);
+  if (data) loadPot();
+}
+
+(function initPotUi() {
+  const card = document.getElementById('potCard');
+  if (!card) return;
+  card.querySelectorAll('input, textarea, select').forEach((el) => {
+    el.addEventListener('input', renderPotPreview);
+    el.addEventListener('change', renderPotPreview);
+  });
+})();

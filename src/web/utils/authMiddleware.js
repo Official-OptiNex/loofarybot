@@ -21,6 +21,8 @@ const MOD_PAGES = {
   community: 'Polls & Reminders',
   moderation: 'Moderation (lockdown, purge)',
   tickets: 'Tickets',
+  engagement: 'Birthdays, Counting & Starboard',
+  shop: 'XP Shop',
   embed: 'Embed Builder'
 };
 const DEFAULT_MOD_PAGES = ['leaderboard', 'commands', 'logviewer'];

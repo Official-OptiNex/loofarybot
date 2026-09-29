@@ -79,8 +79,11 @@ No manual schema setup needed — Mongoose creates collections automatically on 
 2. **Bot** tab → enable **Message Content Intent** and **Server Members Intent** (both are
    required: message content for the honeypot/leveling message listener, members for
    kick/ban/role actions and join/leave logs).
-   The bot needs **Manage Roles** for reaction roles, level rewards and `/lockdown`, and
-   **View Audit Log** if you want role-change logs to say who made the change.
+   The bot needs **Manage Roles** for reaction roles, level rewards and `/lockdown`,
+   **Timeout Members** for `/timeout` and auto-mod, **Manage Nicknames** for the XP shop's
+   nickname tags, and **View Audit Log** so logs can say who made a change. The invite link on
+   the home page asks for all of them. The other gateway intents the bot uses (reactions, bans,
+   invites, emoji) don't need switching on.
 3. **OAuth2** tab → copy the **Client Secret** into `CLIENT_SECRET`.
 4. **OAuth2 → Redirects** → add `https://your-app.onrender.com/auth/discord/callback` (and a
    `http://localhost:3000/auth/discord/callback` entry too if testing locally), matching
@@ -138,6 +141,35 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   color from their current level; **Delete auto roles** removes the bot-created ones.
 - `/levels card` — members customize their rank card (accent color, background image, tagline).
   `/levels cardaccess boosters_only:true` makes it a booster perk.
+
+### Daily XP Pot (`/pot …` or dashboard **Gambling → 💰 Daily XP Pot**, off until set up)
+- **Filling:** every XP lost in `/gamble` goes into today's pot (100% by default, adjustable). It
+  keeps collecting right up to the draw, including during the countdown. Wins and free plays add
+  nothing.
+- **Countdown:** 10 minutes before the draw (default **00:00 UTC**, the end of the day), the pot is
+  posted in your channel with an optional ping. The embed explains how it works and shows:
+  - the pot
+  - a live countdown
+  - how many members are entered so far
+  - the **top 3 pot contributors** (the day's biggest losers)
+
+  It refreshes every 30 seconds.
+- **Who's entered:** everyone who chatted in the last hour, with no button to press. By default
+  that's 3+ messages in the last 60 minutes, and messages must be at least 20 seconds apart, so
+  spamming doesn't help. Bots never count. After a restart it falls back to members who earned
+  chat XP in that hour.
+- **The draw:** one random active member wins the whole pot. The post turns into the result, and
+  a winner message pings them.
+- **Rollovers:** if nobody's active, the pot rolls over to tomorrow. A pot under the minimum
+  (default 100 XP) rolls over quietly without being posted, so quiet days stay quiet. A draw missed
+  by 12+ hours (bot offline) also rolls over.
+- **Commands:** `/pot view` and `/pot history` for everyone. For staff:
+  - `/pot setup` (channel, draw hour, countdown, messages needed, minimum pot, share, ping)
+  - `/pot look` (title, text with `{pot}` `{draw}` `{min}` `{window}`, color, images, footer,
+    winner message)
+  - `/pot draw` (post now and draw after the countdown, handy for testing)
+  - `/pot preview`, `/pot toggle`
+- The dashboard has the same settings, a live embed preview, the current pot and recent winners.
 
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.
@@ -208,6 +240,12 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - `/loof edit` changes the prize, winners, end time (`ends_in`), description, color or emoji.
   `/loof requirements` adds, changes or clears requirements. Entrants who no longer qualify are
   skipped at the draw.
+- Members who don't meet the requirements can't enter. Clicking **Enter** (or **Claim!**) shows them a
+  private ✅/❌ checklist of every requirement, e.g. "❌ Be **Level 5+** (you're Level 3)".
+- Discord-managed roles such as **Server Booster** can be picked as a required role, a bonus-entry
+  role, an XP-multiplier role or a ping. They're left out of role pickers where the bot would have
+  to hand the role out (level rewards, auto-role, reaction roles, birthday role), because Discord
+  doesn't allow that.
 - Every `message_id` option autocompletes — start typing the prize. Duration options suggest
   common values and show what you typed (e.g. `90m (1h 30m)`).
 - `/loof drop` posts a **Claim!** button; the first N members to click win instantly.
@@ -233,8 +271,48 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - `/slowmode interval:30s` (or `off`) for a channel.
 - Dashboard **Moderation** page: a *Cases* tab to take action and search, revoke, edit or delete
   cases; plus *Lockdown & purge*, *Media-only* and *Escalation & DMs* tabs.
-- Logs are stored for 30 days and shown in the dashboard's **Log viewer** (search by user, text or
-  channel, filter by event type). Posting to a Discord channel is optional.
+- **Auto-mod** (`/automod` or dashboard **Moderation → Auto-mod**, off until you turn it on). It
+  catches spam without punishing fast typers:
+  - 🌊 **Message spam:** 7+ messages in 5 seconds.
+  - 🔁 **Repeated messages:** the same text 4 times in 30 seconds, ignoring case and spaces.
+  - 🧱 **Text walls:** the same line or word over and over, "aaaaaa…", or 30+ lines. Code blocks are fine.
+  - 📣 **Mention spam:** 5+ people or roles in one message, or trying @everyone/@here without
+    permission.
+  - 🔗 **Invites to other servers.** Invites to your own server are fine.
+  - 🌐 **Link spam** and 🔠 **caps spam:** optional, off by default.
+
+  Offending messages are deleted and the member gets a strike. By default that's **2 warnings,
+  then a 1 hour timeout**, and a short notice ("Warning 1/2") deletes itself after 8 seconds.
+  - One burst of spam counts as one strike.
+  - Strikes are forgotten after 24 hours, and a mute starts the count over.
+  - Staff (Manage Messages) and exempt roles or channels are never checked.
+  - Every catch is a numbered case and is logged.
+
+  All thresholds, the number of warnings and the mute length can be changed.
+- **Logs cover everything** (each type can be switched off):
+  - message edits, deletes and purges (with a transcript)
+  - joins and leaves
+  - voice activity
+  - role changes
+  - nicknames, timeouts, boosts and server avatars
+  - bans and unbans made anywhere
+  - channels, server roles (with permission changes) and threads
+  - invites, and emoji and stickers
+  - server settings
+  - slash commands used
+  - moderator actions, auto-mod catches and shop purchases
+
+  When the bot has View Audit Log, entries say who made the change.
+- **Storage:** the dashboard's **Log viewer** keeps history for 30 days by default (7, 14, 30, 60 or
+  90 under **Logs → Settings → Storage**). A server also keeps at most **20,000 entries**, the newest,
+  so a busy day can't flood the database. Older entries are deleted every hour, or right away with
+  **Clean up now**. Also cleaned automatically:
+  - finished chat drops after 30 days
+  - ended polls after 90 days
+  - ended giveaways after 180 days
+  - ticket transcripts 180 days after the ticket closes (the ticket stays in History)
+
+  Posting logs to a Discord channel is optional.
 - Message edit/delete logs include a **Jump to message** button, and edits highlight exactly what
   changed (~~removed~~ words struck through, added words in bold).
 - `/logs set #channel` — logs message edits/deletes, member joins/leaves, voice joins/leaves/moves,
@@ -331,6 +409,60 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   winners), and drops survive restarts. Nothing happens while leveling is off.
 - `/xpdrop setup` (channels, XP range, timing, activity, claim window) · `now` · `status` · `toggle`.
 
+### XP Shop (`/shop …` or the dashboard's **XP Shop** page)
+Members spend XP on fun extras. The shop is open by default and comes with starter items:
+
+| Item | Price | What it does |
+| --- | --- | --- |
+| ✨ Auto-react | 2,500 XP | LoofaryBot reacts to your messages (at most every 45s) with **your** emoji. Toggle it on/off. |
+| ⚡ XP Boost (24h) | 1,500 XP | +50% chat XP for 24 hours. Buying again adds another 24 hours. |
+| 🎲 +3 Gambles | 800 XP | Three extra `/gamble` plays today. |
+| 🏷️ Nickname tag | 1,200 XP | An emoji of your choice in front of your name. Toggle it off and your old nickname comes back. |
+| 🎖️ Custom badge | 3,000 XP | Fully yours: your **title, emoji and color** on `/levels rank` and the leaderboard. |
+| 🏆 Golden Loofa | 10,000 XP | A collectible trophy for your rank card. Only 10 exist. |
+
+- **Using the shop:** `/shop view` shows the shop with a buy menu. `/shop buy`, `/shop inventory`,
+  `/shop toggle` and `/shop customize` (emoji, badge title, badge color) cover the rest.
+- **Safe payments:** XP is taken atomically, so a member can't overspend, and limited stock can't
+  oversell. If an item can't be delivered (for example a role above the bot), the XP is refunded.
+- **Dashboard:** edit, hide, reorder or delete any item, or add your own of any kind. Each item can
+  have:
+  - a **role** (optionally temporary, e.g. VIP for 24h)
+  - collectibles, boosts with any multiplier and length, or extra gambles
+  - stock, a limit per member and a minimum level
+
+  Roles with Administrator or Manage Server can't be sold. The **Member items** tab shows what
+  someone owns, and lets you **give** items for free or **take one away**. **Recent purchases** and
+  totals are shown too, and every purchase is logged.
+- Spending XP lowers XP (and possibly level), just like gambling. Role rewards already earned are kept.
+
+### Birthdays (`/birthday …` or dashboard **Engagement → Birthdays**)
+- Members save their birthday with `/birthday set` (month and day only, no year).
+- Once a day, at the hour you pick (UTC, default 14:00), LoofaryBot posts **one** message wishing
+  everyone whose birthday it is. The message is customizable with `{users}`, `{count}` and `{server}`.
+- Optional extras: a **birthday role** for the day (taken back after 24 hours) and an **XP gift**.
+- Feb 29 birthdays are celebrated on Feb 28 in other years. Members who left and bots are skipped,
+  and the post never repeats on the same day, even after a restart.
+- `/birthday upcoming` and the dashboard list the next birthdays.
+
+### Counting (`/counting …` or dashboard **Engagement → Counting**)
+- Members count up one number at a time in a counting channel. Right numbers get ✅, every 100 gets
+  💯, and the number that beats the best run gets 🏆.
+- A wrong number, or counting twice in a row (with **take turns** on), resets the count to 0 with a
+  short message. If two people send the same right number at the same moment, the slower one gets 👀
+  instead of a reset.
+- Sums like `3*4` count when **allow sums** is on. Messages that don't start with a number are
+  ignored, so people can still chat. If someone deletes the latest count, the bot posts the next number.
+- `/counting set` (or the dashboard) fixes the count after an unfair reset.
+
+### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)
+- Messages with enough ⭐ (default 3, or your own emoji) are reposted in the starboard channel with
+  the text, the first image and a jump link.
+- The star count on the post keeps updating (🌟 at 10+, 💫 at 25+). If stars drop below the
+  threshold the post is removed, and deleting the original removes the copy too.
+- Stars from the author (unless allowed) and bots don't count. NSFW channels never feed a non-NSFW
+  starboard, and you can ignore channels. Threads follow their parent channel.
+
 ### Booster perks (`/perks` or dashboard **Leveling → Booster perks**)
 Server boosters get, by default:
 - 🎲 **+5 gambles a day** on top of the daily gamble limit.
@@ -411,7 +543,38 @@ amount, the announcement channel, or turns them off.
   - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,
     or copy any message in the server into the editor.
 
-## 7. Tests
+## 7. Staying inside the free tiers
+
+LoofaryBot is built to run for a long time on **MongoDB Atlas M0** (512 MB storage, ~100
+operations/second) and **Render's free web service** (512 MB RAM):
+- **Database size:**
+  - Log history has a time limit *and* a per-server entry cap (above).
+  - Finished drops, polls, giveaways and old ticket transcripts are cleaned up.
+  - Old backups are pruned (7 daily and 10 others per server).
+  - Dashboard change history expires after 180 days.
+  - An hourly **watchdog** checks the database size. Past **75% of 512 MB** it trims harder, stores
+    only moderation logs until there's room again (the Discord log channel still gets everything),
+    and posts one alert a day in the bot-alerts channel.
+  - **Logs → Settings → Storage** shows the database and memory usage against the free limits.
+- **Database load:**
+  - Server settings are cached for up to 30 seconds on the chat path. Any change from the dashboard
+    or a command clears the cache immediately.
+  - Chat XP skips re-reading records it just wrote.
+  - Together these take a chat message from ~5 database operations to ~2.
+  - The connection pool is capped at 10.
+- **Memory:**
+  - Discord's message cache is limited to 100 messages per channel, and messages older than 6 hours
+    are swept hourly.
+  - Presences aren't cached.
+  - All in-memory helpers (spam tracking, cooldowns, caches) are size-limited and cleaned up.
+- **Uptime:** keep UptimeRobot pinging `/health` so the free instance doesn't sleep. One service
+  running 24/7 uses ~744 of Render's 750 free hours a month, so don't run a second free service on
+  the same account.
+- **If you upgrade:** set `DB_STORAGE_LIMIT_MB`, `RAM_LIMIT_MB` or `LOG_MAX_ENTRIES` to match the new plan.
+
+See **[TESTING.md](TESTING.md)** for a step-by-step checklist to verify everything after deploying.
+
+## 8. Tests
 
 ```bash
 npm install
@@ -425,7 +588,7 @@ evaluated with [mingo](https://github.com/kofrasa/mingo) (a dev dependency), so 
 `$ifNull`, `$max`… operators are exercised. Each file runs in its own process; any database call a
 test didn't stub fails immediately instead of hanging.
 
-## 8. Notes & Limitations
+## 9. Notes & Limitations
 
 - Dashboard logins are stored in MongoDB (`web_sessions`), so they survive redeploys. Keep
   `SESSION_SECRET` set to the same long random value — changing it logs everyone out.

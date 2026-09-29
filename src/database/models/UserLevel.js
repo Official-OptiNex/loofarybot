@@ -33,4 +33,14 @@ const UserLevelSchema = new mongoose.Schema(
 
 UserLevelSchema.index({ guildId: 1, userId: 1 }, { unique: true });
 
+// Deleting or replacing records clears chat XP's "already has a record" memory (database/knownMembers.js).
+const knownMembers = require('../knownMembers');
+for (const op of ['deleteOne', 'deleteMany', 'findOneAndDelete', 'replaceOne']) {
+  UserLevelSchema.pre(op, function forgetKnownMembers() {
+    knownMembers.forget(this.getFilter?.());
+  });
+}
+UserLevelSchema.pre('bulkWrite', () => knownMembers.forget(null));
+UserLevelSchema.pre('insertMany', () => knownMembers.forget(null));
+
 module.exports = mongoose.model('UserLevel', UserLevelSchema);

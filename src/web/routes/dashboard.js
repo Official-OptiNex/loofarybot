@@ -76,8 +76,16 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
 
   const botHighestPosition = guild.members.me?.roles.highest.position ?? 0;
   const roles = guild.roles.cache
-    .filter((r) => r.name !== '@everyone' && !r.managed)
-    .map((r) => ({ id: r.id, name: r.name, assignable: r.position < botHighestPosition }))
+    // Managed roles (Server Booster, Twitch subs…) can't be handed out by the bot, but they're still
+    // useful for requirements, bonus entries, multipliers and pings. Other bots' own roles are just noise.
+    .filter((r) => r.name !== '@everyone' && !r.tags?.botId)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      managed: r.managed,
+      booster: !!r.tags?.premiumSubscriberRole,
+      assignable: !r.managed && r.position < botHighestPosition
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const effectiveXp = configDoc

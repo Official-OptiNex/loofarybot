@@ -17,6 +17,7 @@ function routeButton(interaction) {
   if (id.startsWith('rr:')) return handleRoleButton(interaction);
   if (id.startsWith('poll:')) return handleVote(interaction);
   if (id.startsWith('tk:')) return handleTicketButton(interaction); // support tickets
+  if (id.startsWith('shop:')) return require('../cogs/modules/shop').handleShopInteraction(interaction); // XP shop
   if (id.startsWith('xpd:')) return handleDropButton(interaction); // chat XP drops
   if (id.startsWith('gwd:')) return giveawayForm.handleDraftButton(interaction, interaction.client); // /loof create form
   return handleButtonInteraction(interaction); // giveaways & drops
@@ -32,6 +33,7 @@ module.exports = function registerInteractionCreateEvent(client) {
       if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'rrsel') return await handleRoleSelect(interaction);
         if (interaction.customId === 'help_cat') return await handleHelpSelect(interaction);
+        if (interaction.customId.startsWith('shop:')) return await require('../cogs/modules/shop').handleShopInteraction(interaction);
         return;
       }
 
@@ -54,6 +56,7 @@ module.exports = function registerInteractionCreateEvent(client) {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
 
+      require('../cogs/modules/serverLogs').logCommand(interaction).catch(() => null); // Logs → Slash commands used
       await command.execute(interaction, client);
     } catch (err) {
       const label = interaction.isChatInputCommand?.()

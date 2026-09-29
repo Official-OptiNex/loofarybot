@@ -132,6 +132,62 @@ const GuildConfigSchema = new mongoose.Schema(
       nextDropAt: { type: Date, default: null },
       lastDropAt: { type: Date, default: null }
     },
+    // Birthdays (/birthday, dashboard Engagement → Birthdays): one post a day, at announceHour UTC.
+    birthdays: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      roleId: { type: String, default: null }, // given for the day, removed the next day
+      xpGift: { type: Number, default: 0 },
+      announceHour: { type: Number, default: 14 }, // UTC
+      message: { type: String, default: '🎂 Happy birthday {users}! Have an amazing day! 🎉' },
+      lastRunDay: { type: String, default: null } // 'YYYY-MM-DD' of the last announcement (so restarts don't repeat it)
+    },
+    // Counting game (/counting, dashboard Engagement → Counting).
+    counting: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      current: { type: Number, default: 0 },
+      lastUserId: { type: String, default: null },
+      lastMessageId: { type: String, default: null },
+      lastCountAt: { type: Date, default: null },
+      record: { type: Number, default: 0 },
+      bestBefore: { type: Number, default: 0 }, // best run before the current one (for the 🏆 when it's beaten)
+      allowSameUser: { type: Boolean, default: false }, // false = people have to take turns
+      mathAllowed: { type: Boolean, default: true }, // "2*5" counts as 10
+      resets: { type: Number, default: 0 },
+      lastResetBy: { type: String, default: null }
+    },
+    // Starboard (/starboard, dashboard Engagement → Starboard).
+    starboard: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      emoji: { type: String, default: '⭐' },
+      threshold: { type: Number, default: 3 },
+      selfStar: { type: Boolean, default: false },
+      ignoredChannelIds: { type: [String], default: [] }
+    },
+    // Daily XP Pot (/pot, dashboard Gambling → Daily XP Pot): gambling losses fill a pot that one
+    // member who chatted in the last hour before the draw wins.
+    xpPot: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      drawHour: { type: Number, default: 0 }, // UTC hour the pot is drawn (0 = midnight, the end of the day)
+      countdownMinutes: { type: Number, default: 10 }, // the pot is posted this long before the draw
+      windowMinutes: { type: Number, default: 60 }, // "active" = chatted in this window before the draw
+      minMessages: { type: Number, default: 3 },
+      sharePercent: { type: Number, default: 100 }, // share of each gambling loss that goes into the pot
+      minPot: { type: Number, default: 100 }, // smaller pots roll over to tomorrow
+      pingRoleId: { type: String, default: null },
+      embed: {
+        title: { type: String, default: '💰 Daily XP Pot' },
+        description: { type: String, default: null }, // null = the built-in "how it works" text
+        color: { type: String, default: '#F1C40F' },
+        thumbnailUrl: { type: String, default: null },
+        imageUrl: { type: String, default: null },
+        footer: { type: String, default: 'Losses today = someone’s win tonight' }
+      },
+      winMessage: { type: String, default: '🎉 {winner} won the **Daily XP Pot** — **{pot} XP**! 💰' }
+    },
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
     gamblingFreePlayEnabled: { type: Boolean, default: true },
@@ -151,6 +207,27 @@ const GuildConfigSchema = new mongoose.Schema(
       modRoleIds: { type: [String], default: [] },
       modPages: { type: [String], default: ['leaderboard', 'commands', 'logviewer'] }
     },
+    // Auto-mod (Moderation → Auto-mod, /automod). Each rule deletes the messages and gives a strike:
+    // strikes 1..warnings are warnings, the next one is a timeout.
+    automod: {
+      enabled: { type: Boolean, default: false },
+      flood: { enabled: { type: Boolean, default: true }, messages: { type: Number, default: 7 }, seconds: { type: Number, default: 5 } },
+      duplicates: { enabled: { type: Boolean, default: true }, count: { type: Number, default: 4 }, seconds: { type: Number, default: 30 } },
+      walls: { enabled: { type: Boolean, default: true }, maxLines: { type: Number, default: 30 } },
+      mentions: { enabled: { type: Boolean, default: true }, max: { type: Number, default: 5 }, everyone: { type: Boolean, default: true } },
+      invites: { enabled: { type: Boolean, default: true } },
+      links: { enabled: { type: Boolean, default: false }, max: { type: Number, default: 4 } },
+      caps: { enabled: { type: Boolean, default: false }, percent: { type: Number, default: 80 }, minLength: { type: Number, default: 15 } },
+      warnings: { type: Number, default: 2 }, // warnings before the timeout
+      muteMinutes: { type: Number, default: 60 },
+      strikeResetHours: { type: Number, default: 24 }, // strikes older than this are forgotten
+      notify: { type: Boolean, default: true }, // short in-channel notice (deleted after a few seconds)
+      exemptRoleIds: { type: [String], default: [] },
+      exemptChannelIds: { type: [String], default: [] }
+    },
+    logRetentionDays: { type: Number, default: 30 }, // dashboard log viewer history
+    shopEnabled: { type: Boolean, default: true }, // XP shop (/shop, dashboard XP Shop)
+    shopSeeded: { type: Boolean, default: false }, // the starter items were added once
     logChannelId: { type: String, default: null },
     logEvents: {
       messageEdit: { type: Boolean, default: true },
@@ -159,7 +236,19 @@ const GuildConfigSchema = new mongoose.Schema(
       memberLeave: { type: Boolean, default: true },
       voice: { type: Boolean, default: true },
       roles: { type: Boolean, default: true },
-      modActions: { type: Boolean, default: true }
+      modActions: { type: Boolean, default: true },
+      automod: { type: Boolean, default: true },
+      bulkDelete: { type: Boolean, default: true },
+      members: { type: Boolean, default: true },
+      bans: { type: Boolean, default: true },
+      channels: { type: Boolean, default: true },
+      serverRoles: { type: Boolean, default: true },
+      threads: { type: Boolean, default: true },
+      invites: { type: Boolean, default: true },
+      emojis: { type: Boolean, default: true },
+      server: { type: Boolean, default: true },
+      commands: { type: Boolean, default: true },
+      shop: { type: Boolean, default: true }
     },
 
     // --- Moderation cases ---
@@ -205,5 +294,17 @@ const GuildConfigSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Any write clears the short settings cache for that server (database/configCache.js).
+const { invalidate } = require('../configCache');
+GuildConfigSchema.post('save', (doc) => invalidate(doc.guildId));
+for (const op of ['updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'deleteOne', 'deleteMany', 'findOneAndDelete']) {
+  GuildConfigSchema.pre(op, function clearConfigCache() {
+    invalidate(this.getFilter?.().guildId);
+  });
+  GuildConfigSchema.post(op, function clearConfigCacheAfter() {
+    invalidate(this.getFilter?.().guildId); // again, in case a read refilled it mid-write
+  });
+}
 
 module.exports = mongoose.model('GuildConfig', GuildConfigSchema);

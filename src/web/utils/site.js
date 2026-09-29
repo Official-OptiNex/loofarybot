@@ -20,6 +20,8 @@ const INVITE_PERMISSIONS = new PermissionsBitField([
   PermissionFlagsBits.ManageChannels,
   PermissionFlagsBits.KickMembers,
   PermissionFlagsBits.BanMembers,
+  PermissionFlagsBits.ModerateMembers, // timeouts (/timeout, auto-mod)
+  PermissionFlagsBits.ManageNicknames, // XP shop nickname tags
   PermissionFlagsBits.ViewAuditLog
 ]).bitfield.toString();
 

@@ -65,24 +65,55 @@ async function boosterExtraFor(guildId, g) {
   return perks.enabled ? perks.giveawayEntries : 0;
 }
 
+// Boosting right now: Discord's boost date, backed up by the server's booster role when there is one.
+function isBooster(member) {
+  if (!(member?.premiumSinceTimestamp ?? member?.premiumSince)) return false;
+  const boosterRole = member.guild?.roles?.premiumSubscriberRole;
+  return boosterRole ? !!member.roles?.cache?.has(boosterRole.id) : true;
+}
+
+/**
+ * Why a member has the tickets they have: every bonus that applies, and the one that counts.
+ * Bonuses don't add up — the best single one counts (1 ticket + best bonus).
+ */
+function ticketBreakdown(member, g, boosterExtra = 0) {
+  const options = [];
+  if (member) {
+    for (const b of g.bonusEntries || []) if (b.roleId && b.extra > 0 && member.roles?.cache?.has(b.roleId)) options.push({ kind: 'role', roleId: b.roleId, extra: b.extra });
+    if (boosterExtra > 0 && isBooster(member)) options.push({ kind: 'booster', extra: boosterExtra });
+  }
+  const best = options.reduce((a, o) => (!a || o.extra > a.extra ? o : a), null);
+  return { tickets: 1 + (best?.extra || 0), best, options };
+}
+
+function describeTickets(breakdown) {
+  const { tickets, best } = breakdown;
+  if (!best) return '1 entry';
+  const why = best.kind === 'booster' ? '💎 boosting' : `<@&${best.roleId}>`;
+  return `${tickets} entries (1 + ${best.extra} from ${why})`;
+}
+
 // Each entrant's number of tickets: 1, plus the best bonus they have (a bonus role, or boosting).
 function weightFor(member, g, boosterExtra = 0) {
-  if (!member) return 1;
-  const bonuses = (g.bonusEntries || []).filter((b) => member.roles?.cache?.has(b.roleId)).map((b) => b.extra);
-  if (boosterExtra > 0 && member.premiumSince) bonuses.push(boosterExtra);
-  return 1 + Math.max(0, ...bonuses);
+  return ticketBreakdown(member, g, boosterExtra).tickets;
+}
+
+/** Each entrant's ticket breakdown (see ticketBreakdown). Members who left count as 1 ticket. */
+async function entryBreakdowns(guild, g, userIds) {
+  const out = new Map(userIds.map((id) => [id, { tickets: 1, best: null, options: [] }]));
+  if (!guild) return out;
+  const boosterExtra = await boosterExtraFor(guild.id, g);
+  if (!(g.bonusEntries || []).length && !boosterExtra) return out;
+  for (let i = 0; i < userIds.length; i += 100) {
+    const members = await guild.members.fetch({ user: userIds.slice(i, i + 100) }).catch(() => null);
+    members?.forEach((m) => out.set(m.id, ticketBreakdown(m, g, boosterExtra)));
+  }
+  return out;
 }
 
 async function entryWeights(guild, g, userIds) {
-  const weights = new Map(userIds.map((id) => [id, 1]));
-  if (!guild) return weights;
-  const boosterExtra = await boosterExtraFor(guild.id, g);
-  if (!(g.bonusEntries || []).length && !boosterExtra) return weights;
-  for (let i = 0; i < userIds.length; i += 100) {
-    const members = await guild.members.fetch({ user: userIds.slice(i, i + 100) }).catch(() => null);
-    members?.forEach((m) => weights.set(m.id, weightFor(m, g, boosterExtra)));
-  }
-  return weights;
+  const breakdowns = await entryBreakdowns(guild, g, userIds);
+  return new Map([...breakdowns].map(([id, b]) => [id, b.tickets]));
 }
 
 // Fair random pick of `count` different people, each weighted by their tickets.
@@ -128,22 +159,26 @@ async function checkRequirements(member, g, levelsByUser = null) {
   if (!hasRequirements(req)) return null;
   if (!member) return 'You must be a member of this server.';
 
-  if (req.roleId && !member.roles.cache.has(req.roleId)) {
-    return `You need the <@&${req.roleId}> role to enter.`;
+  // Check every requirement so the member sees the whole list at once, not one miss at a time.
+  const checks = [];
+  if (req.roleId) {
+    checks.push({ ok: member.roles.cache.has(req.roleId), text: `Have the <@&${req.roleId}> role` });
   }
   if (req.minDaysInServer) {
     const days = member.joinedTimestamp ? (Date.now() - member.joinedTimestamp) / 86400000 : 0;
-    if (days < req.minDaysInServer) {
-      return `You need to have been in the server for **${req.minDaysInServer} day(s)** (you're at ${Math.floor(days)}).`;
-    }
+    checks.push({
+      ok: days >= req.minDaysInServer,
+      text: `Be in the server for **${req.minDaysInServer} day${req.minDaysInServer === 1 ? '' : 's'}** (you're at ${Math.floor(days)})`
+    });
   }
   if (req.minLevel) {
     let level;
     if (levelsByUser) level = levelsByUser.get(member.id) ?? 0;
     else level = (await UserLevel.findOne({ guildId: member.guild.id, userId: member.id }).lean())?.level ?? 0;
-    if (level < req.minLevel) return `You need to be **Level ${req.minLevel}** (you're Level ${level}).`;
+    checks.push({ ok: level >= req.minLevel, text: `Be **Level ${req.minLevel}+** (you're Level ${level})` });
   }
-  return null;
+  if (checks.every((c) => c.ok)) return null;
+  return `You don't meet the requirements for this giveaway:\n${checks.map((c) => `${c.ok ? '✅' : '❌'} ${c.text}`).join('\n')}`;
 }
 
 function buildEntryRow(emoji, disabled = false, type = 'timed') {
@@ -382,17 +417,19 @@ async function handleButtonInteraction(interaction) {
   }
 
   const reason = await checkRequirements(interaction.member, g);
-  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true });
+  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true, allowedMentions: { parse: [] } });
 
   const updated = await Giveaway.findOneAndUpdate({ _id: g._id, ended: false }, { $addToSet: { entries: userId } }, { new: true });
   if (!updated) return interaction.reply({ content: '❌ This giveaway has ended.', ephemeral: true });
   await updateEmbedEntries(interaction.message, updated);
   const boosterExtra = await boosterExtraFor(interaction.guildId, updated);
-  const tickets = weightFor(interaction.member, updated, boosterExtra);
-  const why = boosterExtra && interaction.member?.premiumSince && tickets === 1 + boosterExtra ? '💎 booster bonus' : 'role bonus';
+  const breakdown = ticketBreakdown(interaction.member, updated, boosterExtra);
   return interaction.reply({
-    content: tickets > 1 ? `🎉 You entered the giveaway with **${tickets} entries** (${why})! Click again to leave.` : '🎉 You entered the giveaway! Click again to leave.',
-    ephemeral: true
+    content: breakdown.best
+      ? `🎉 You entered the giveaway with **${describeTickets(breakdown)}**! Click again to leave.\n-# Bonuses don't stack — your best one counts.`
+      : '🎉 You entered the giveaway! Click again to leave.',
+    ephemeral: true,
+    allowedMentions: { parse: [] }
   });
 }
 
@@ -404,7 +441,7 @@ async function handleDropClaim(interaction) {
   if (g.entries.includes(userId)) return interaction.reply({ content: "✅ You've already claimed this drop.", ephemeral: true });
 
   const reason = await checkRequirements(interaction.member, g);
-  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true });
+  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true, allowedMentions: { parse: [] } });
 
   // Single atomic update: only succeeds while there's still a free slot and the user hasn't claimed,
   // so simultaneous clicks can never hand out more prizes than winnerCount.
@@ -463,8 +500,12 @@ module.exports = {
   describeBonus,
   cleanBonus,
   entryWeights,
+  entryBreakdowns,
   boosterExtraFor,
   weightFor,
+  ticketBreakdown,
+  describeTickets,
+  isBooster,
   weightedPick,
   checkRequirements,
   replyOrEdit,

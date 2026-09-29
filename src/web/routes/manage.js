@@ -20,6 +20,15 @@ const ModCase = require('../../database/models/ModCase');
 const Ticket = require('../../database/models/Ticket');
 const tickets = require('../../bot/cogs/modules/tickets');
 const levelColors = require('../../bot/cogs/modules/levelColors');
+const birthdays = require('../../bot/cogs/modules/birthdays');
+const automod = require('../../bot/cogs/modules/automod');
+const shop = require('../../bot/cogs/modules/shop');
+const xpPot = require('../../bot/cogs/modules/xpPot');
+const ShopItem = require('../../database/models/ShopItem');
+const ShopOwnership = require('../../database/models/ShopOwnership');
+const LogEntry = require('../../database/models/LogEntry');
+const counting = require('../../bot/cogs/modules/counting');
+const starboard = require('../../bot/cogs/modules/starboard');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const { parseDuration } = require('../../bot/utils/duration');
 
@@ -192,10 +201,14 @@ router.post('/guilds/:guildId/giveaways/:messageId', ...guard('giveaways'), asyn
 router.get('/guilds/:guildId/giveaways/:messageId/entrants', ...guard('giveaways'), async (req, res) => {
   const g = await findGiveaway(req, res);
   if (!g) return;
-  const weights = await giveaways.entryWeights(req.guild, g, g.entries);
+  const breakdowns = await giveaways.entryBreakdowns(req.guild, g, g.entries);
+  const roleName = (id) => req.guild.roles.cache.get(id)?.name || 'deleted role';
   const entrants = g.entries.map((id) => {
     const m = req.guild.members.cache.get(id);
-    return { id, name: m?.displayName || null, username: m?.user.username || null, avatarUrl: m?.displayAvatarURL?.({ size: 64 }) || null, tickets: weights.get(id) || 1, won: (g.winners || []).includes(id) };
+    const b = breakdowns.get(id) || { tickets: 1, best: null };
+    // Why they have that many tickets, e.g. "+2 boosting" or "+1 @OG".
+    const why = b.best ? `+${b.best.extra} ${b.best.kind === 'booster' ? 'boosting' : `@${roleName(b.best.roleId)}`}` : null;
+    return { id, name: m?.displayName || null, username: m?.user.username || null, avatarUrl: m?.displayAvatarURL?.({ size: 64 }) || null, tickets: b.tickets, why, won: (g.winners || []).includes(id) };
   });
   res.json({ entrants, total: entrants.length, tickets: entrants.reduce((n, e) => n + e.tickets, 0) });
 });
@@ -466,6 +479,35 @@ router.get('/guilds/:guildId/moderation', ...guard('moderation'), async (req, re
   res.json({
     locked: lockedIds.map((id) => ({ id, name: req.guild.channels.cache.get(id)?.name || null })).filter((c) => c.name)
   });
+});
+
+// Auto-mod settings and recent catches (Moderation → Auto-mod). Same as /automod.
+router.get('/guilds/:guildId/moderation/automod', ...guard('moderation'), async (req, res) => {
+  const config = await getOrCreateConfig(req.guild.id);
+  const recent = await automod.recentActions(req.guild.id, 20);
+  res.json({
+    settings: automod.automodSettings(config),
+    missingPerms: automod.missingPermissions(req.guild),
+    recent: recent.map((c) => ({
+      caseId: c.caseId,
+      type: c.type,
+      userId: c.userId,
+      userTag: c.userTag,
+      name: req.guild.members.cache.get(c.userId)?.displayName || c.userTag || c.userId,
+      reason: c.reason,
+      createdAt: c.createdAt
+    }))
+  });
+});
+
+router.post('/guilds/:guildId/moderation/automod', ...guard('moderation'), async (req, res) => {
+  const b = req.body || {};
+  const input = {};
+  for (const k of ['enabled', 'rules', 'warnings', 'muteMinutes', 'strikeResetHours', 'notify', 'exemptRoleIds', 'exemptChannelIds']) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await automod.saveSettings(req.guild, input);
+  if (saved.error) return bad(res, saved.error);
+  res.locals.audit = { section: 'Moderation', action: 'Updated auto-mod', detail: `${saved.settings.enabled ? 'On' : 'Off'} · ${saved.settings.warnings} warning(s) → ${saved.settings.muteMinutes} min mute` };
+  res.json({ ok: true, settings: saved.settings });
 });
 
 router.post('/guilds/:guildId/moderation/lockdown', ...guard('moderation'), async (req, res) => {
@@ -822,6 +864,227 @@ router.post('/guilds/:guildId/tickets/:ticketId/close', ...guard('tickets'), asy
   if (result.error) return bad(res, result.error);
   res.locals.audit = { section: 'Tickets', action: `Closed ticket #${t.number}`, detail: str(req.body?.reason, 100) };
   res.json({ ok: true, ticket: serializeTicket(result.ticket, req.guild), dmSent: !!result.dmSent });
+});
+
+// ---------------------------------------------------------------- Engagement (birthdays, counting, starboard)
+
+router.get('/guilds/:guildId/engagement', ...guard('engagement'), async (req, res) => {
+  const guild = req.guild;
+  const config = await getOrCreateConfig(guild.id);
+  const name = (id) => guild.members.cache.get(id)?.displayName || null;
+  const [upcoming, savedCount, top] = await Promise.all([
+    birthdays.upcoming(guild.id, { limit: 15, guild }),
+    require('../../database/models/Birthday').countDocuments({ guildId: guild.id }),
+    starboard.topPosts(guild.id, 10)
+  ]);
+  const b = birthdays.birthdaySettings(config);
+  const c = counting.countingSettings(config);
+  const st = starboard.starboardSettings(config);
+  res.json({
+    levelingEnabled: config.levelingEnabled !== false,
+    birthdays: {
+      settings: { ...b, lastRunDay: undefined },
+      saved: savedCount,
+      missingPerms: birthdays.missingPermissions(guild, b),
+      upcoming: upcoming.map((x) => ({ ...x, name: name(x.userId), date: birthdays.formatDate(x.month, x.day) }))
+    },
+    counting: {
+      settings: { ...c, lastUserName: c.lastUserId ? name(c.lastUserId) : null, lastResetByName: c.lastResetBy ? name(c.lastResetBy) : null }
+    },
+    starboard: {
+      settings: st,
+      missingPerms: starboard.missingPermissions(guild, st),
+      top: top.map((p) => ({
+        stars: p.stars,
+        authorId: p.authorId,
+        authorName: name(p.authorId),
+        channelId: p.channelId,
+        url: messageUrl(guild.id, p.channelId, p.messageId),
+        at: p.createdAt
+      }))
+    }
+  });
+});
+
+const PICK = {
+  birthdays: ['enabled', 'channelId', 'roleId', 'xpGift', 'announceHour', 'message'],
+  counting: ['enabled', 'channelId', 'allowSameUser', 'mathAllowed', 'current'],
+  starboard: ['enabled', 'channelId', 'emoji', 'threshold', 'selfStar', 'ignoredChannelIds']
+};
+const MODULES = { birthdays, counting, starboard };
+
+router.post('/guilds/:guildId/engagement/:module', ...guard('engagement'), async (req, res) => {
+  const mod = MODULES[req.params.module];
+  if (!mod || !Object.hasOwn(MODULES, req.params.module)) return bad(res, 'Unknown section.', 404);
+  const b = req.body || {};
+  const input = {};
+  for (const k of PICK[req.params.module]) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await mod.saveSettings(req.guild, input);
+  if (saved.error) return bad(res, saved.error);
+  // A dashboard count change gets the same heads-up in the channel as /counting set.
+  if (req.params.module === 'counting' && input.current !== undefined && input.current !== '' && saved.settings.enabled && saved.settings.channelId) {
+    const next = (saved.settings.current + 1).toLocaleString('en-US');
+    await req.guild.channels.cache
+      .get(saved.settings.channelId)
+      ?.send({ content: `🛠️ A moderator set the count to **${saved.settings.current.toLocaleString('en-US')}**. The next number is **${next}**.`, allowedMentions: { parse: [] } })
+      .catch(() => null);
+  }
+  res.json({ ok: true, settings: saved.settings });
+});
+
+// ---------------------------------------------------------------- XP shop
+
+function serializeItem(i, stats = {}) {
+  return {
+    id: String(i._id),
+    key: i.key || null,
+    type: i.type,
+    name: i.name,
+    description: i.description || '',
+    emoji: i.emoji,
+    price: i.price,
+    enabled: i.enabled !== false,
+    order: i.order || 0,
+    stock: i.stock ?? null,
+    sold: i.sold || 0,
+    maxPerUser: i.maxPerUser ?? 1,
+    minLevel: i.minLevel || 0,
+    config: i.config || {},
+    owners: stats.owners || 0,
+    active: stats.active || 0,
+    spent: stats.spent || 0
+  };
+}
+
+router.get('/guilds/:guildId/shop', ...guard('shop'), async (req, res) => {
+  const guild = req.guild;
+  const config = await getOrCreateConfig(guild.id);
+  const [items, stats, recent] = await Promise.all([
+    shop.listItems(guild.id, { all: true }),
+    shop.shopStats(guild.id),
+    LogEntry.find({ guildId: guild.id, type: 'shop' }).sort({ createdAt: -1 }).limit(15).lean().catch(() => [])
+  ]);
+  const me = guild.members.me;
+  res.json({
+    enabled: config.shopEnabled !== false,
+    levelingEnabled: config.levelingEnabled !== false,
+    types: Object.fromEntries(Object.entries(shop.TYPES).map(([k, t]) => [k, { label: t.label, help: t.help, toggle: t.toggle, custom: t.custom }])),
+    items: items.map((i) => serializeItem(i, stats.perItem[String(i._id)])),
+    totals: { spent: stats.totalSpent, buyers: stats.buyers },
+    recent: recent.map((e) => ({ userTag: e.userTag, userId: e.userId, summary: e.summary, at: e.createdAt })),
+    botCan: {
+      manageRoles: !!me?.permissions.has(PermissionFlagsBits.ManageRoles),
+      manageNicknames: !!me?.permissions.has(PermissionFlagsBits.ManageNicknames),
+      highestRolePosition: me?.roles.highest.position ?? 0
+    }
+  });
+});
+
+router.post('/guilds/:guildId/shop/items', ...guard('shop'), async (req, res) => {
+  const { item, error } = shop.cleanItem(req.guild, req.body || {});
+  if (error) return bad(res, error);
+  const count = await ShopItem.countDocuments({ guildId: req.guild.id });
+  if (count >= 50) return bad(res, 'A shop can hold up to 50 items.');
+  const created = await ShopItem.create({ ...item, guildId: req.guild.id, order: count });
+  res.locals.audit = { section: 'XP Shop', action: `Added “${item.name}”`, detail: `${item.price} XP · ${shop.TYPES[item.type].label}` };
+  res.json({ ok: true, item: serializeItem(created.toObject ? created.toObject() : created) });
+});
+
+router.post('/guilds/:guildId/shop/items/:id', ...guard('shop'), async (req, res) => {
+  const existing = await ShopItem.findOne({ _id: req.params.id, guildId: req.guild.id }).lean().catch(() => null);
+  if (!existing) return bad(res, 'That item no longer exists.', 404);
+  const { item, error } = shop.cleanItem(req.guild, { ...req.body, type: existing.type }); // the kind can't change once people own it
+  if (error) return bad(res, error);
+  if (item.stock !== null && item.stock < (existing.sold || 0)) return bad(res, `Stock can't go below the ${existing.sold} already sold.`);
+  await ShopItem.updateOne({ _id: existing._id }, { $set: item });
+  res.locals.audit = { section: 'XP Shop', action: `Edited “${item.name}”`, detail: `${item.price} XP${item.enabled ? '' : ' · hidden'}` };
+  const fresh = await ShopItem.findOne({ _id: existing._id }).lean();
+  res.json({ ok: true, item: serializeItem(fresh) });
+});
+
+router.delete('/guilds/:guildId/shop/items/:id', ...guard('shop'), async (req, res) => {
+  const existing = await ShopItem.findOne({ _id: req.params.id, guildId: req.guild.id }).lean().catch(() => null);
+  if (!existing) return bad(res, 'That item no longer exists.', 404);
+  // Switch owners' effects off (nickname tags, roles) before the item goes.
+  const owned = await ShopOwnership.find({ guildId: req.guild.id, itemId: String(existing._id) }).lean();
+  for (const o of owned) await shop.removeOwned(req.guild, o._id).catch(() => null);
+  await ShopItem.deleteOne({ _id: existing._id });
+  res.locals.audit = { section: 'XP Shop', action: `Deleted “${existing.name}”`, detail: owned.length ? `${owned.length} owner(s) lost it` : '' };
+  res.json({ ok: true, removedFrom: owned.length });
+});
+
+router.post('/guilds/:guildId/shop/order', ...guard('shop'), async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).slice(0, 50) : [];
+  for (const [i, id] of ids.entries()) await ShopItem.updateOne({ _id: id, guildId: req.guild.id }, { $set: { order: i } }).catch(() => null);
+  res.json({ ok: true });
+});
+
+router.post('/guilds/:guildId/shop/restore', ...guard('shop'), async (req, res) => {
+  const added = await shop.restoreDefaults(req.guild.id);
+  res.locals.audit = { section: 'XP Shop', action: 'Restored starter items', detail: `${added} added` };
+  res.json({ ok: true, added });
+});
+
+// A member's items, and staff gifting / removing them.
+router.get('/guilds/:guildId/shop/member/:userId', ...guard('shop'), async (req, res) => {
+  const member = await req.guild.members.fetch(String(req.params.userId)).catch(() => null);
+  if (!member) return bad(res, "That member isn't in the server.", 404);
+  const owned = await shop.inventory(req.guild.id, member.id);
+  const record = await UserLevel.findOne({ guildId: req.guild.id, userId: member.id }, { xp: 1, level: 1 }).lean();
+  res.json({
+    member: { id: member.id, name: member.displayName, avatarUrl: member.displayAvatarURL({ size: 64 }), xp: record?.xp || 0, level: record?.level || 0 },
+    owned: owned.map((o) => ({ id: String(o._id), itemId: String(o.itemId), name: o.item.name, emoji: o.item.emoji, type: o.item.type, active: o.active, quantity: o.quantity, spent: o.spent, expiresAt: o.expiresAt, custom: o.custom }))
+  });
+});
+
+router.post('/guilds/:guildId/shop/member/:userId/give', ...guard('shop'), async (req, res) => {
+  const member = await req.guild.members.fetch(String(req.params.userId)).catch(() => null);
+  if (!member) return bad(res, "That member isn't in the server.", 404);
+  const result = await shop.buy(req.guild, member, String(req.body?.itemId || ''), { free: true, by: `${req.session.user.global_name || req.session.user.username} (dashboard)` });
+  if (result.error) return bad(res, result.error.replace(/\*\*/g, ''));
+  res.locals.audit = { section: 'XP Shop', action: `Gave “${result.item.name}” to ${member.displayName}`, detail: '' };
+  res.json({ ok: true });
+});
+
+router.delete('/guilds/:guildId/shop/owned/:id', ...guard('shop'), async (req, res) => {
+  const result = await shop.removeOwned(req.guild, String(req.params.id));
+  if (result.error) return bad(res, result.error, 404);
+  res.locals.audit = { section: 'XP Shop', action: `Took “${result.item?.name || 'an item'}” from a member`, detail: '' };
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------- Daily XP Pot (Gambling page)
+
+router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, res) => {
+  const guild = req.guild;
+  const cur = await xpPot.currentPot(guild);
+  const name = (id) => guild.members.cache.get(id)?.displayName || null;
+  const past = await xpPot.recentPots(guild.id, 7);
+  res.json({
+    settings: cur.settings,
+    defaultDescription: xpPot.DEFAULT_DESCRIPTION,
+    pot: { amount: cur.pot.amount || 0, rolledOver: cur.pot.rolledOver || 0, status: cur.pot.status || 'collecting', drawAt: cur.drawAt },
+    entrants: cur.entrants,
+    top: cur.top.map(([id, amount]) => ({ id, name: name(id), amount })),
+    history: past.map((p) => ({ day: p.day, status: p.status, amount: p.amount, won: p.won, entrants: p.entrants, winnerId: p.winnerId, winnerName: p.winnerId ? name(p.winnerId) : null }))
+  });
+});
+
+router.post('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, res) => {
+  const b = req.body || {};
+  const input = {};
+  for (const k of ['enabled', 'channelId', 'drawHour', 'countdownMinutes', 'windowMinutes', 'minMessages', 'sharePercent', 'minPot', 'pingRoleId', 'embed', 'winMessage']) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await xpPot.saveSettings(req.guild, input);
+  if (saved.error) return bad(res, saved.error);
+  res.locals.audit = { section: 'Gambling', action: 'Updated the Daily XP Pot', detail: `${saved.settings.enabled ? 'On' : 'Off'} · draw ${String(saved.settings.drawHour).padStart(2, '0')}:00 UTC` };
+  res.json({ ok: true, settings: saved.settings });
+});
+
+router.post('/guilds/:guildId/gambling/pot/draw', ...guard('gambling'), async (req, res) => {
+  const result = await xpPot.startNow(req.guild);
+  if (result.error) return bad(res, result.error);
+  res.locals.audit = { section: 'Gambling', action: 'Started the Daily XP Pot draw early', detail: '' };
+  res.json({ ok: true, drawAt: result.drawAt });
 });
 
 module.exports = router;

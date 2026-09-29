@@ -19,7 +19,19 @@ const LOG_EVENTS = {
   memberLeave: 'Member leaves',
   voice: 'Voice channel activity',
   roles: 'Role changes',
-  modActions: 'Moderator actions (warns, timeouts, kicks, bans)'
+  modActions: 'Moderator actions (warns, timeouts, kicks, bans)',
+  automod: 'Auto-mod catches',
+  bulkDelete: 'Bulk deletes (purges)',
+  members: 'Nicknames, timeouts, boosts, server avatars',
+  bans: 'Bans & unbans (from anywhere)',
+  channels: 'Channels created, deleted, edited',
+  serverRoles: 'Server roles created, deleted, edited',
+  threads: 'Threads',
+  invites: 'Invites created & deleted',
+  emojis: 'Emoji & stickers',
+  server: 'Server settings',
+  commands: 'Slash commands used',
+  shop: 'XP shop purchases'
 };
 
 const truncate = (str, max = 1024) => (!str ? '*(empty)*' : str.length > max ? `${str.slice(0, max - 1)}…` : str);
@@ -67,7 +79,7 @@ function jumpRow(url, label = 'Jump to message') {
 
 async function getLogSettings(guild, eventKey) {
   if (!guild) return null;
-  const config = await GuildConfig.findOne({ guildId: guild.id }, { logChannelId: 1, logEvents: 1, logsEnabled: 1 }).lean();
+  const config = await require('../../../database/configCache').getCachedConfig(guild.id);
   if (!config || config.logsEnabled === false) return null;
   if (config.logEvents && config.logEvents[eventKey] === false) return null;
   return config;
@@ -91,9 +103,12 @@ async function sendLog(guild, eventKey, embed, { entry = {}, components = [] } =
   try {
     const config = await getLogSettings(guild, eventKey);
     if (!config) return;
-    await LogEntry.create({ guildId: guild.id, type: eventKey, ...entry }).catch((err) =>
-      console.error(`Failed to store ${eventKey} log:`, err.message)
-    );
+    // When the database is nearly full only moderation logs are stored (the log channel still gets all).
+    if (require('./storage').shouldStoreLog(eventKey)) {
+      await LogEntry.create({ guildId: guild.id, type: eventKey, ...entry }).catch((err) =>
+        console.error(`Failed to store ${eventKey} log:`, err.message)
+      );
+    }
     const channel = resolveLogChannel(guild, config.logChannelId);
     if (!channel) return;
     await channel.send({ embeds: [embed.setTimestamp()], components, allowedMentions: { parse: [] } });

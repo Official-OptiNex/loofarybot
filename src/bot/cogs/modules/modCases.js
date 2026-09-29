@@ -79,9 +79,9 @@ function caseEmbed(c) {
 /**
  * Performs a moderation action and records it. Returns { case, escalated } or { error }.
  * options: type, userId, moderator (User or {id, tag}), moderatorMember (null for automatic),
- *          reason, durationMs (timeout / temporary ban), deleteMessageSeconds (ban), auto.
+ *          reason, durationMs (timeout / temporary ban), deleteMessageSeconds (ban), auto, source ('automod').
  */
-async function performAction(guild, { type, userId, moderator, moderatorMember = null, reason = '', durationMs = null, deleteMessageSeconds = 0, auto = false }) {
+async function performAction(guild, { type, userId, moderator, moderatorMember = null, reason = '', durationMs = null, deleteMessageSeconds = 0, auto = false, source = null }) {
   if (!TYPES[type]) return { error: 'Unknown action.' };
   reason = String(reason || '').trim().slice(0, 500);
   const target = await guild.members.fetch(userId).catch(() => null);
@@ -106,7 +106,8 @@ async function performAction(guild, { type, userId, moderator, moderatorMember =
     reason,
     durationMs: ['timeout', 'ban'].includes(type) && durationMs ? durationMs : null,
     expiresAt: type === 'ban' && durationMs ? new Date(Date.now() + durationMs) : null,
-    auto
+    auto,
+    source
   };
   const auditReason = `${reason || 'No reason given'} — by ${draft.moderatorTag}`.slice(0, 512);
   const wantsDm = config?.modDmEnabled !== false && user && !user.bot && ['warn', 'timeout', 'kick', 'ban'].includes(type);

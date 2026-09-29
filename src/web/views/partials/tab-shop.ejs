@@ -1,0 +1,137 @@
+    <!-- XP SHOP (same as /shop) -->
+    <div class="tab-panel hidden" id="tab-shop">
+      <div class="module-hero">
+        <div class="hero-icon">🛍️</div>
+        <div>
+          <h1>XP Shop</h1>
+          <p>Members spend XP on fun extras with <code>/shop</code>. Edit the starter items or add your own, like roles, collectibles, boosts and more.</p>
+          <div class="hero-status" id="shStatus"></div>
+        </div>
+        <div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Open</span><%- moduleToggle('shop', shopEnabled, 'shEnabled') %></div>
+      </div>
+
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="sh-items">🛍️ Items</button>
+        <button data-sub="sh-members">🎒 Member items</button>
+        <button data-sub="sh-recent">🧾 Recent purchases</button>
+      </div>
+
+      <div class="subpage" data-page="sh-items">
+        <div class="list-toolbar">
+          <span class="muted" id="shSummary" style="font-size:0.85rem;"></span>
+          <span style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <button class="btn secondary small" onclick="restoreShopDefaults()">↺ Restore starter items</button>
+            <button class="btn small" onclick="openShopEditor()">➕ Add item</button>
+          </span>
+        </div>
+        <div id="shItems"><div class="card empty-state">Loading…</div></div>
+        <p class="muted" style="font-size:0.78rem;">Spending XP lowers a member's XP (and possibly their level), just like gambling. Role rewards they already earned are kept.</p>
+      </div>
+
+      <div class="subpage hidden" data-page="sh-members">
+        <div class="card">
+          <h3 style="margin-top:0;">🎒 A member's items</h3>
+          <div class="member-picker" style="max-width:420px;"><input type="search" id="shMember" placeholder="Search for a member…" autocomplete="off" aria-label="Member"></div>
+          <div id="shMemberBox" style="margin-top:1rem;"><p class="muted" style="margin:0;">Pick a member to see what they own, give them something, or take an item away.</p></div>
+        </div>
+      </div>
+
+      <div class="subpage hidden" data-page="sh-recent">
+        <div class="card">
+          <h3 style="margin-top:0;">🧾 Recent purchases</h3>
+          <div id="shRecent"><p class="muted">Loading…</p></div>
+        </div>
+      </div>
+
+      <dialog id="shEditor" class="eb-dialog">
+        <div class="eb-dialog-inner" style="max-width:720px;">
+          <div class="list-toolbar" style="margin-bottom:0.6rem;">
+            <h3 style="margin:0;" id="shEditorTitle">Add item</h3>
+            <button class="btn secondary small" onclick="closeShopEditor()">Close</button>
+          </div>
+          <div class="split" style="gap:1rem;">
+            <div class="settings-card" style="padding:0;">
+              <div class="setting-row">
+                <div><div class="setting-title">Kind</div><div class="setting-help" id="shTypeHelp"></div></div>
+                <div class="setting-control"><select id="shType"></select></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-title">Name & emoji</div>
+                <div class="setting-control"><input id="shEmoji" maxlength="64" placeholder="🛍️" style="flex:0 0 70px; min-width:70px;" aria-label="Emoji"><input id="shName" maxlength="60" placeholder="Item name" aria-label="Name"></div>
+              </div>
+              <div class="setting-row stack">
+                <div class="setting-title">Description</div>
+                <textarea id="shDesc" rows="2" maxlength="300"></textarea>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Price</div><div class="setting-help">In XP. 0 = free.</div></div>
+                <div class="setting-control"><input type="number" id="shPrice" min="0" max="10000000" step="50"></div>
+              </div>
+              <div class="setting-row" data-sh-for="role">
+                <div><div class="setting-title">Role</div><div class="setting-help">LoofaryBot's role must be above it. Roles with Administrator or Manage Server can't be sold.</div></div>
+                <div class="setting-control">
+                  <select id="shRole"><option value="">— Pick a role —</option><% roles.filter(r => !r.managed).forEach(r => { %><option value="<%= r.id %>"><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option><% }) %></select>
+                </div>
+              </div>
+              <div class="setting-row" data-sh-for="role xpBoost">
+                <div><div class="setting-title">Lasts for</div><div class="setting-help" id="shDurationHelp">Hours. For roles, 0 = forever.</div></div>
+                <div class="setting-control"><input type="number" id="shDuration" min="0" max="8760"></div>
+              </div>
+              <div class="setting-row" data-sh-for="xpBoost">
+                <div><div class="setting-title">XP multiplier</div><div class="setting-help">1.5 = +50% chat XP.</div></div>
+                <div class="setting-control"><input type="number" id="shMult" min="1.1" max="5" step="0.1"></div>
+              </div>
+              <div class="setting-row" data-sh-for="extraGambles">
+                <div><div class="setting-title">Extra plays</div><div class="setting-help">Added to today's /gamble limit.</div></div>
+                <div class="setting-control"><input type="number" id="shPlays" min="1" max="50"></div>
+              </div>
+              <div class="setting-row" data-sh-for="autoReact nickTag">
+                <div><div class="setting-title">Starting emoji</div><div class="setting-help">Owners can change it with <code>/shop customize</code>.</div></div>
+                <div class="setting-control"><input id="shReactEmoji" maxlength="64" placeholder="🔥"></div>
+              </div>
+              <div class="setting-row" data-sh-for="autoReact">
+                <div><div class="setting-title">React at most every</div><div class="setting-help">Seconds, so it doesn't react to every single message.</div></div>
+                <div class="setting-control"><input type="number" id="shCooldown" min="5" max="3600"></div>
+              </div>
+              <div class="setting-row" data-sh-for="badge">
+                <div><div class="setting-title">Starting title</div><div class="setting-help">Owners pick their own title, emoji and color.</div></div>
+                <div class="setting-control"><input id="shBadgeText" maxlength="24" placeholder="Supporter"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Stock</div><div class="setting-help">Empty = unlimited.</div></div>
+                <div class="setting-control"><input type="number" id="shStock" min="0" max="1000000" placeholder="∞"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Limit per member</div><div class="setting-help">0 = buy as often as they like.</div></div>
+                <div class="setting-control"><input type="number" id="shMax" min="0" max="1000"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Minimum level</div></div>
+                <div class="setting-control"><input type="number" id="shMinLevel" min="0" max="1000"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">In the shop</div><div class="setting-help">Off hides it. Owners keep it.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="shItemEnabled"><span class="track"></span></label></div>
+              </div>
+            </div>
+            <div>
+              <h3 style="margin-top:0;">Preview</h3>
+              <div class="discord-chat">
+                <div class="discord-message-preview">
+                  <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                  <div class="discord-message-body">
+                    <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span></div>
+                    <div class="discord-embed-preview" style="border-left-color:#EB459E; margin-top:0.4rem;"><div class="desc" id="shPreview"></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="savebar" style="position:static; margin-top:1rem;">
+            <button class="btn danger" id="shDeleteBtn" onclick="deleteShopItem()" style="display:none; margin-right:auto;">Delete</button>
+            <button class="btn secondary" onclick="closeShopEditor()">Cancel</button>
+            <button class="btn" id="shSaveBtn" onclick="saveShopItem()">Save item</button>
+          </div>
+        </div>
+      </dialog>
+    </div>

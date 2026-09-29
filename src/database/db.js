@@ -9,7 +9,11 @@ async function connectDB() {
   mongoose.set('strictQuery', true);
 
   await mongoose.connect(MONGODB_URI, {
-    serverSelectionTimeoutMS: 15000
+    serverSelectionTimeoutMS: 15000,
+    // One bot + dashboard doesn't need Mongoose's default 100 connections; 10 is plenty and keeps
+    // memory (Render: 512 MB) and Atlas M0's connection limit comfortable.
+    maxPoolSize: 10,
+    minPoolSize: 1
   });
 
   isConnected = true;

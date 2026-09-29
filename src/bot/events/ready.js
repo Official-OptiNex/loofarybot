@@ -44,6 +44,12 @@ const { commands: greetingCommands } = require('../commands/greetings');
 const perksCommand = require('../commands/perks');
 const ticketCommand = require('../commands/ticket');
 const xpdropCommand = require('../commands/xpdrop');
+const birthdayCommand = require('../commands/birthday');
+const countingCommand = require('../commands/counting');
+const starboardCommand = require('../commands/starboard');
+const automodCommand = require('../commands/automod');
+const shopCommand = require('../commands/shop');
+const potCommand = require('../commands/pot');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -69,7 +75,13 @@ const ALL_COMMANDS = [
   ...greetingCommands,
   perksCommand,
   ticketCommand,
-  xpdropCommand
+  xpdropCommand,
+  birthdayCommand,
+  countingCommand,
+  starboardCommand,
+  automodCommand,
+  shopCommand,
+  potCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -129,5 +141,17 @@ module.exports = function registerReadyEvent(client) {
 
     // Random XP drops in active chat channels.
     require('../cogs/modules/chatDrops').startChatDrops(client);
+
+    // Daily birthday posts (and taking the birthday role back the next day).
+    require('../cogs/modules/birthdays').startBirthdays(client);
+
+    // Daily XP Pot: gambling losses, drawn at the end of the day among active chatters.
+    require('../cogs/modules/xpPot').startXpPot(client);
+
+    // XP shop: end expired boosts and temporary roles.
+    require('../cogs/modules/shop').startShop(client);
+
+    // Delete old log history and other finished data so the database stays small.
+    require('../cogs/modules/storage').startStorageCleanup(client);
   });
 };

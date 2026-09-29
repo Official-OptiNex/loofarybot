@@ -26,6 +26,7 @@
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
     login: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l4-4-4-4M14 12H4"/>',
+    bag: '<path d="M5 8h14l-1 12.5H6z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
     star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
     target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
     curve: '<path d="M3 3v18h18"/><path d="M6.5 15c3-7 5.5-7 8 0 1.5 4 3 3.5 5-2"/>',
@@ -52,6 +53,8 @@
     ['community', 'chat', 'Polls & Reminders'],
     ['moderation', 'lock', 'Moderation'],
     ['tickets', 'ticket', 'Tickets'],
+    ['engagement', 'star', 'Engagement'],
+    ['shop', 'bag', 'XP Shop'],
     ['logs', 'file', 'Logs'],
     ['alerts', 'radio', 'Alerts'],
     ['leaderboard', 'trophy', 'Leaderboard'],
@@ -60,20 +63,33 @@
   ].filter(([tab]) => tab === 'overview' || (tab === 'logs' ? can('logs') || can('logviewer') : can(tab)));
   const isAdmin = access.level === 'admin';
   const logChannelSet = !!(config.logChannelId && channels.find(c => c.id === config.logChannelId));
-  // [tab, label, enabled flag] — the switches mirror each module's on/off setting.
+  // Which dashboard page (and sub-tab) each on/off switch belongs to — for links and moderator access.
+  const MODULE_HOME = {
+    automod: ['moderation', 'md-automod'], chatdrops: ['leveling', 'lv-drops'], xpPot: ['gambling', null],
+    birthdays: ['engagement', 'en-birthdays'], counting: ['engagement', 'en-counting'], starboard: ['engagement', 'en-starboard']
+  };
+  const pageOf = (key) => (MODULE_HOME[key] ? MODULE_HOME[key][0] : key);
+  // [key, label, enabled flag] — the switches mirror each module's on/off setting.
   const MODULES = [
     ['welcome', 'Welcome', !!welcome.enabled],
     ['honeypot', 'Honeypot', config.honeypotEnabled !== false],
     ['leveling', 'Leveling', config.levelingEnabled !== false],
+    ['chatdrops', 'Chat drops', !!(config.chatDrops && config.chatDrops.enabled)],
     ['autorole', 'Auto-Role', config.autoRoleEnabled !== false],
     ['gambling', 'Gambling', gambling.enabled],
+    ['xpPot', 'Daily XP Pot', !!(config.xpPot && config.xpPot.enabled)],
+    ['shop', 'XP Shop', config.shopEnabled !== false],
+    ['automod', 'Auto-mod', !!(config.automod && config.automod.enabled)],
     ['logs', 'Logs', config.logsEnabled !== false],
     ['alerts', 'Alerts', config.socialAlertsEnabled !== false],
-    ['tickets', 'Tickets', locals.ticketsEnabled !== false]
-  ].filter(([tab]) => can(tab) || (tab === 'logs' && can('logviewer')));
+    ['tickets', 'Tickets', locals.ticketsEnabled !== false],
+    ['birthdays', 'Birthdays', !!(config.birthdays && config.birthdays.enabled)],
+    ['counting', 'Counting', !!(config.counting && config.counting.enabled)],
+    ['starboard', 'Starboard', !!(config.starboard && config.starboard.enabled)]
+  ].filter(([key]) => can(pageOf(key)) || (key === 'logs' && can('logviewer')));
   // Moderators see module switches only for pages they're allowed to edit.
   const sideToggle = (key, on) =>
-    `<label class="switch sm" title="${can(key) ? `Turn ${key} on or off` : 'Only admins can change this'}"><input type="checkbox" class="module-toggle" data-module="${key}" ${on ? 'checked' : ''} ${can(key) ? '' : 'disabled'} aria-label="Enable ${key}"><span class="track"></span></label>`;
+    `<label class="switch sm" title="${can(pageOf(key)) ? `Turn ${key} on or off` : 'Only admins can change this'}"><input type="checkbox" class="module-toggle" data-module="${key}" ${on ? 'checked' : ''} ${can(pageOf(key)) ? '' : 'disabled'} aria-label="Enable ${key}"><span class="track"></span></label>`;
   const catches = (config.honeypotKicks || 0) + (config.honeypotSoftbans || 0) + (config.honeypotBans || 0);
   const pct = (cur, target) => Math.max(0, Math.min(100, target > 0 ? (cur / target) * 100 : 0));
 %>
@@ -103,7 +119,7 @@
     <div class="nav-section">
       <div class="nav-heading"><span class="ring-dot green"></span>Modules</div>
       <% MODULES.forEach(([tab, label, on]) => { %>
-        <div class="module-row"><button class="module-link" data-tab="<%= tab %>"><%= label %></button><%- sideToggle(tab, on) %></div>
+        <div class="module-row"><button class="module-link" data-tab="<%= pageOf(tab) %>" <% if (MODULE_HOME[tab] && MODULE_HOME[tab][1]) { %>data-sub-target="<%= MODULE_HOME[tab][1] %>"<% } %><% if (tab === 'xpPot') { %> data-scroll-to="potCard"<% } %>><%= label %></button><%- sideToggle(tab, on) %></div>
       <% }) %>
     </div>
 
@@ -286,6 +302,57 @@
           <h3>📋 Logs <%- sideToggle('logs', config.logsEnabled !== false) %></h3>
           <p class="muted"><%= logCh ? 'Also posting to #' + logCh.name : 'Viewable on the Logs page' %> · <a href="#logs" data-tab="logs">Open log viewer →</a></p>
         </div>
+        <%
+          const ovAm = config.automod || {}; const ovPot = config.xpPot || {}; const ovBd = config.birthdays || {};
+          const ovCt = config.counting || {}; const ovSb = config.starboard || {}; const ovCd = config.chatDrops || {};
+          const ovCh = (id) => { const c = id && channels.find(x => x.id === id); return c ? '#' + c.name : null; };
+          const ovLink = (key, text) => { const h = MODULE_HOME[key] || [key, null]; return `<a href="#${h[0]}" data-tab="${h[0]}"${h[1] ? ` data-sub-target="${h[1]}"` : ''}${key === 'xpPot' ? ' data-scroll-to="potCard"' : ''}>${text} →</a>`; };
+        %>
+        <% if (can('moderation')) { %>
+        <div class="card">
+          <h3>🛡️ Auto-mod <%- sideToggle('automod', !!ovAm.enabled) %></h3>
+          <p class="muted"><%= ovAm.enabled ? `Spam, repeats, text walls, mass mentions & invites · ${ovAm.warnings ?? 2} warning(s), then a ${ovAm.muteMinutes ?? 60} min mute` : 'Off — stops spam automatically when turned on.' %></p>
+          <p class="muted"><%- ovLink('automod', 'Rules & recent catches') %></p>
+        </div>
+        <% } %>
+        <% if (can('gambling')) { %>
+        <div class="card">
+          <h3>💰 Daily XP Pot <%- sideToggle('xpPot', !!ovPot.enabled) %></h3>
+          <p class="muted"><%= ovPot.enabled ? `Gambling losses → drawn at ${String(ovPot.drawHour ?? 0).padStart(2, '0')}:00 UTC in ${ovCh(ovPot.channelId) || 'no channel'} among members active in the last hour` : 'Off — gambling losses fill a pot one active chatter wins each night.' %></p>
+          <p class="muted"><%- ovLink('xpPot', 'Pot settings & winners') %></p>
+        </div>
+        <% } %>
+        <% if (can('shop')) { %>
+        <div class="card">
+          <h3>🛍️ XP Shop <%- sideToggle('shop', config.shopEnabled !== false) %></h3>
+          <p class="muted"><%= config.shopEnabled !== false ? 'Open — members spend XP with /shop.' : 'Closed.' %></p>
+          <p class="muted"><%- ovLink('shop', 'Items & purchases') %></p>
+        </div>
+        <% } %>
+        <% if (can('leveling')) { %>
+        <div class="card">
+          <h3>🎁 Chat drops <%- sideToggle('chatdrops', !!ovCd.enabled) %></h3>
+          <p class="muted"><%= ovCd.enabled ? `${ovCd.minXp ?? 50}–${ovCd.maxXp ?? 250} XP every ${ovCd.minMinutes ?? 30}–${ovCd.maxMinutes ?? 90} min in ${(ovCd.channelIds || []).map(chName).filter(Boolean).join(', ') || 'no channel'}` : 'Off — random XP drops in active chat.' %></p>
+          <p class="muted"><%- ovLink('chatdrops', 'Drop settings') %></p>
+        </div>
+        <% } %>
+        <% if (can('engagement')) { %>
+        <div class="card">
+          <h3>🎂 Birthdays <%- sideToggle('birthdays', !!ovBd.enabled) %></h3>
+          <p class="muted"><%= ovBd.enabled ? `Posting in ${ovCh(ovBd.channelId) || 'no channel'} at ${String(ovBd.announceHour ?? 14).padStart(2, '0')}:00 UTC` : 'Off — members save birthdays with /birthday set.' %></p>
+          <p class="muted"><%- ovLink('birthdays', 'Birthday settings') %></p>
+        </div>
+        <div class="card">
+          <h3>🔢 Counting <%- sideToggle('counting', !!ovCt.enabled) %></h3>
+          <p class="muted"><%= ovCt.enabled ? `${ovCh(ovCt.channelId) || 'no channel'} · next number ${(ovCt.current || 0) + 1} · best ${ovCt.record || 0}` : 'Off — a count-together channel.' %></p>
+          <p class="muted"><%- ovLink('counting', 'Counting settings') %></p>
+        </div>
+        <div class="card">
+          <h3>⭐ Starboard <%- sideToggle('starboard', !!ovSb.enabled) %></h3>
+          <p class="muted"><%= ovSb.enabled ? `${ovSb.threshold || 3}+ ${ovSb.emoji || '⭐'} → ${ovCh(ovSb.channelId) || 'no channel'}` : 'Off — repost the most-starred messages.' %></p>
+          <p class="muted"><%- ovLink('starboard', 'Starboard settings') %></p>
+        </div>
+        <% } %>
         <div class="card">
           <h3>🖌️ Quick Links</h3>
           <% if (can('embed')) { %><p class="muted"><a href="/dashboard/<%= guild.id %>/embed">Open the Embed Builder →</a></p><% } %>
@@ -626,7 +693,7 @@
               <div class="field-row level-role-row">
                 <input type="number" min="1" class="lr-level" value="<%= lr.level %>" placeholder="Level" style="flex:0 0 110px;">
                 <select class="lr-role">
-                  <% roles.forEach(r => { %>
+                  <% roles.filter(r => !r.managed).forEach(r => { %>
                     <option value="<%= r.id %>" <%= r.id === lr.roleId ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
                   <% }) %>
                 </select>
@@ -868,7 +935,7 @@
           <p class="muted" style="font-size:0.85rem;">LoofaryBot's own role must sit above this role in Server Settings → Roles.</p>
           <select id="arRole">
             <option value="">— None —</option>
-            <% roles.forEach(r => { %>
+            <% roles.filter(r => !r.managed).forEach(r => { %>
               <option value="<%= r.id %>" <%= config.autoRoleId === r.id ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
             <% }) %>
           </select>
@@ -954,6 +1021,7 @@
         <table class="payout-table" id="gStatsTable"><tr><td class="muted">Loading…</td></tr></table>
         <p class="muted" style="font-size:0.78rem; margin:0.5rem 0 0;">Members see their own with <code>/gamble stats</code>, or the server's with <code>/gamble stats server:true</code>. Refunded games aren't counted.</p>
       </div>
+      <%- include('partials/pot-card', { channelOptions, roles, bot }) %>
       <div class="savebar"><button class="btn" onclick="saveGambling()">Save changes</button></div>
     </div>
 
@@ -963,7 +1031,7 @@
         <div class="hero-icon">📋</div>
         <div>
           <h1>Server Logs</h1>
-          <p>Edits, deletes, joins, leaves, voice and role changes — kept for 30 days and searchable here.</p>
+          <p>Messages, members, bans, channels, roles, voice, commands and more — searchable here and kept as long as you choose (30 days by default).</p>
           <div class="hero-status"><%- channelName(config.logChannelId) ? chip('good', 'Also posting to ' + esc(channelName(config.logChannelId))) : chip('', 'Dashboard only (no Discord channel)') %></div>
         </div>
         <% if (can('logs')) { %><div class="hero-toggle"><span class="muted" style="font-size:0.85rem;">Enabled</span><%- moduleToggle('logs', config.logsEnabled !== false, null) %></div><% } %>
@@ -1005,6 +1073,26 @@
               <div class="setting-control"><label class="switch"><input type="checkbox" class="log-event" data-key="<%= key %>" <%= (config.logEvents && config.logEvents[key] === false) ? '' : 'checked' %>><span class="track"></span></label></div>
             </div>
           <% }) %>
+        </div>
+        <div class="card settings-card">
+          <h3 style="margin-top:0;">🗄️ Storage</h3>
+          <div class="setting-row">
+            <div><div class="setting-title">Keep log history for</div><div class="setting-help">Older entries in the log viewer are deleted automatically to save space. Messages already posted in your Discord log channel stay.</div></div>
+            <div class="setting-control">
+              <select id="logRetention">
+                <% [7, 14, 30, 60, 90].forEach(d => { %><option value="<%= d %>" <%= (config.logRetentionDays || 30) === d ? 'selected' : '' %>><%= d %> days</option><% }) %>
+              </select>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Stored right now</div><div class="setting-help" id="logStorageInfo">Loading…</div></div>
+            <div class="setting-control"><button class="btn secondary small" id="logCleanupBtn" onclick="runLogCleanup()">🧹 Clean up now</button></div>
+          </div>
+          <div class="setting-row stack">
+            <div><div class="setting-title">Free-tier usage</div><div class="setting-help">Past 75% the bot trims old data harder and only keeps moderation logs until there's room again — you'll get a bot alert.</div></div>
+            <div id="logResources"></div>
+          </div>
+          <p class="muted" style="font-size:0.78rem; margin:0.4rem 0 0;">Also cleaned automatically: finished chat drops after 30 days, ended polls after 90, ended giveaways after 180, and ticket transcripts 180 days after the ticket closes (the ticket stays in History).</p>
         </div>
         <div class="savebar"><button class="btn" onclick="saveLogs()">Save changes</button></div>
       </div>
@@ -1110,12 +1198,14 @@
       </div>
     </div>
 
-    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot, moduleToggle, ticketsEnabled: locals.ticketsEnabled !== false }; %>
+    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot, moduleToggle, ticketsEnabled: locals.ticketsEnabled !== false, shopEnabled: config.shopEnabled !== false }; %>
     <% if (can('giveaways')) { %><%- include('partials/tab-giveaways', partialLocals) %><% } %>
     <% if (can('reactionroles')) { %><%- include('partials/tab-reactionroles', partialLocals) %><% } %>
     <% if (can('community')) { %><%- include('partials/tab-community', partialLocals) %><% } %>
     <% if (can('moderation')) { %><%- include('partials/tab-moderation', partialLocals) %><% } %>
     <% if (can('tickets')) { %><%- include('partials/tab-tickets', partialLocals) %><% } %>
+    <% if (can('engagement')) { %><%- include('partials/tab-engagement', partialLocals) %><% } %>
+    <% if (can('shop')) { %><%- include('partials/tab-shop', partialLocals) %><% } %>
 
     <% if (isAdmin) { %>
     <!-- SETTINGS -->
@@ -1339,13 +1429,26 @@
       if (tab === 'logs' && !logState.loaded) {
         logState.loaded = true;
         loadLogs(1);
+        loadLogStorage();
       }
       if (tab === 'overview' && joinChart) joinChart.resize();
       history.replaceState(null, '', tab === 'overview' ? location.pathname : `#${tab}`);
       toggleSidebar(false);
       window.scrollTo({ top: 0 });
     }
-    document.querySelectorAll('[data-tab]').forEach((el) => el.addEventListener('click', () => showTab(el.dataset.tab)));
+    // Opens a sub-tab on the current page (e.g. Moderation → Auto-mod) by clicking its button.
+    function openSub(tab, sub) {
+      if (!sub) return;
+      const btn = document.querySelector(`#tab-${tab} [data-subtabs] [data-sub="${sub}"]`);
+      if (btn) btn.click();
+    }
+    document.querySelectorAll('[data-tab]').forEach((el) =>
+      el.addEventListener('click', () => {
+        showTab(el.dataset.tab);
+        openSub(el.dataset.tab, el.dataset.subTarget);
+        if (el.dataset.scrollTo) document.getElementById(el.dataset.scrollTo)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      })
+    );
 
     function toggleSidebar(open) {
       const shell = document.getElementById('appShell');
@@ -1370,8 +1473,26 @@
     const commandIndex = <%- JSON.stringify(commandReference.flatMap((g) => g.commands.map((c) => ({ label: c.usage, detail: c.description, group: g.group })))).replace(/</g, '\\u003c') %>;
     const searchIndex = [
       ...[...document.querySelectorAll('.nav-item')].map((b) => ({ label: b.textContent.trim(), kind: 'Page', tab: b.dataset.tab })),
-      ...commandIndex.map((c) => ({ label: c.label, kind: c.group, tab: 'commands', detail: c.detail }))
-    ];
+      ...commandIndex.map((c) => ({ label: c.label, kind: c.group, tab: 'commands', detail: c.detail })),
+      // Features that live on a sub-tab or card of a page.
+      ...[
+        ['Auto-mod', 'Moderation', 'moderation', 'md-automod', null, 'spam flood invites mentions text walls caps links warnings mute'],
+        ['Cases', 'Moderation', 'moderation', 'md-cases', null, 'warn timeout kick ban history'],
+        ['Daily XP Pot', 'Gambling', 'gambling', null, 'potCard', 'pot losses jackpot draw winner'],
+        ['Top gamblers', 'Gambling', 'gambling', null, 'gStatsTable', 'stats'],
+        ['Chat drops', 'Leveling', 'leveling', 'lv-drops', null, 'xp drop claim'],
+        ['Booster perks', 'Leveling', 'leveling', 'lv-boost', null, 'boost nitro'],
+        ['Level colors', 'Leveling', 'leveling', 'lv-colors', null, 'color roles'],
+        ['Role rewards', 'Leveling', 'leveling', 'lv-rewards', null, 'level roles'],
+        ['Birthdays', 'Engagement', 'engagement', 'en-birthdays', null, 'birthday'],
+        ['Counting', 'Engagement', 'engagement', 'en-counting', null, 'count numbers'],
+        ['Starboard', 'Engagement', 'engagement', 'en-starboard', null, 'stars star'],
+        ['Shop items', 'XP Shop', 'shop', 'sh-items', null, 'buy role badge auto-react boost'],
+        ['Give a shop item', 'XP Shop', 'shop', 'sh-members', null, 'member inventory gift'],
+        ['Log storage & retention', 'Logs', 'logs', 'lg-settings', 'logRetention', 'database memory free tier cleanup'],
+        ['Log settings', 'Logs', 'logs', 'lg-settings', null, 'events channel']
+      ].map(([label, kind, tab, sub, scroll, detail]) => ({ label, kind, tab, sub, scroll, detail }))
+    ].filter((i) => i.tab === 'commands' || document.getElementById(`tab-${i.tab}`));
     const searchInput = document.getElementById('globalSearch');
     const searchResults = document.getElementById('searchResults');
     let searchMatches = [];
@@ -1379,7 +1500,21 @@
 
     function renderSearch() {
       const q = searchInput.value.trim().toLowerCase();
-      searchMatches = q ? searchIndex.filter((i) => `${i.label} ${i.detail || ''}`.toLowerCase().includes(q)).slice(0, 8) : [];
+      // Best matches first: the name starts with it, then a word in the name does, then anywhere;
+      // pages and features before commands.
+      const score = (i) => {
+        const label = i.label.toLowerCase();
+        const base = label.startsWith(q) ? 0 : label.split(/[^a-z0-9]+/).some((w) => w.startsWith(q)) ? 1 : label.includes(q) ? 2 : 3;
+        return base * 2 + (i.tab === 'commands' ? 1 : 0);
+      };
+      searchMatches = q
+        ? searchIndex
+            .filter((i) => `${i.label} ${i.detail || ''}`.toLowerCase().includes(q))
+            .map((i, n) => ({ i, s: score(i), n }))
+            .sort((a, b) => a.s - b.s || a.n - b.n)
+            .slice(0, 8)
+            .map((x) => x.i)
+        : [];
       searchHighlight = 0;
       searchResults.innerHTML = searchMatches.length
         ? searchMatches.map((m, i) => `<button data-i="${i}" class="${i === 0 ? 'highlighted' : ''}"><span>${esc(m.label)}</span><span class="kind">${esc(m.kind)}</span></button>`).join('')
@@ -1392,6 +1527,8 @@
       searchInput.value = '';
       searchResults.classList.remove('visible');
       showTab(m.tab);
+      openSub(m.tab, m.sub);
+      if (m.scroll) document.getElementById(m.scroll)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       if (m.tab === 'commands') {
         const row = [...document.querySelectorAll('#tab-commands .cmd-row')].find((r) => r.querySelector('code').textContent === m.label);
         if (row) {
@@ -1465,7 +1602,7 @@
             <div class="leaderboard-row">
               <div class="leaderboard-rank ${e.rank <= 3 ? 'top3' : ''}">#${e.rank}</div>
               ${e.avatarUrl ? `<img class="leaderboard-avatar" src="${esc(e.avatarUrl)}" alt="">` : '<div class="leaderboard-avatar"></div>'}
-              <div class="leaderboard-name">${esc(e.name)}</div>
+              <div class="leaderboard-name">${esc(e.name)}${e.badge ? ` <span class="status-chip" style="${e.badge.color ? `border-color:${esc(e.badge.color)}; color:${esc(e.badge.color)};` : ''}" title="XP shop badge">${esc(e.badge.emoji)} ${esc(e.badge.text)}</span>` : ''}${e.collectibles?.length ? ` <span title="Collectibles">${e.collectibles.map(esc).join('')}</span>` : ''}</div>
               <div class="leaderboard-stats">Level ${e.level} · ${fmt(e.xp)} XP</div>
             </div>`
           )
@@ -1490,6 +1627,7 @@
 
     function roleOptionsHtml(selectedId) {
       return roles
+        .filter((r) => !r.managed)
         .map((r) => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}${r.assignable ? '' : ' ⚠️ (bot cannot assign this)'}</option>`)
         .join('');
     }
@@ -1508,7 +1646,7 @@
 
     // --- Unsaved changes: warn before leaving the page with edits that weren't saved ---
     let unsaved = false;
-    const IGNORE_DIRTY = 'input[type="search"], dialog *, .case-form *, .case-filters *, .list-toolbar *, .member-picker *, #cdNowChannel, #themeToggle, .module-toggle';
+    const IGNORE_DIRTY = 'input[type="search"], dialog *, .case-form *, .case-filters *, .list-toolbar *, .member-picker *, #cdNowChannel, #ctSetTo, #themeToggle, .module-toggle';
     function setUnsaved(on) {
       unsaved = on;
       document.body.classList.toggle('has-unsaved', on);
@@ -1658,7 +1796,48 @@
     function saveLogs() {
       const events = {};
       document.querySelectorAll('.log-event').forEach((el) => (events[el.dataset.key] = el.checked));
-      postJson('logs', { channelId: document.getElementById('logChannel').value, events }, '✅ Log settings saved.');
+      postJson('logs', { channelId: document.getElementById('logChannel').value, events, retentionDays: Number(document.getElementById('logRetention').value) }, '✅ Log settings saved.');
+    }
+
+    async function loadLogStorage() {
+      const el = document.getElementById('logStorageInfo');
+      if (!el) return;
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/logs/storage`);
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Failed to load.');
+        const top = Object.entries(d.byType).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t, n]) => `${LOG_LABELS[t] || t} ${fmt(n)}`).join(' · ');
+        el.textContent = d.logs ? `${fmt(d.logs)} log entries (max ${fmt(d.cap)}), oldest from ${new Date(d.oldest).toLocaleDateString()}${top ? ` — ${top}` : ''}.` : 'No log entries stored yet.';
+        const bar = (label, used, limit) => {
+          const pct = Math.min(100, Math.round((used / limit) * 100));
+          const tone = pct >= 75 ? 'var(--c-red, #ED4245)' : pct >= 50 ? 'var(--c-yellow, #F0B232)' : 'var(--c-green, #57F287)';
+          return `<div style="margin-top:0.45rem;"><div style="display:flex; justify-content:space-between; font-size:0.8rem;"><span>${label}</span><span class="muted">${fmt(used)} / ${fmt(limit)} MB · ${pct}%</span></div>
+            <div style="height:6px; border-radius:4px; background:var(--border-card); overflow:hidden;"><div style="height:100%; width:${pct}%; background:${tone};"></div></div></div>`;
+        };
+        document.getElementById('logResources').innerHTML =
+          (d.db ? bar('Database (MongoDB free tier)', d.db.usedMb, d.db.limitMb) : '<div class="muted" style="font-size:0.8rem;">Database size unavailable.</div>') +
+          bar('Bot memory (Render free tier)', d.memory.rssMb, d.memory.limitMb) +
+          (d.lowSpace ? '<p style="font-size:0.8rem; color:var(--c-red, #ED4245); margin:0.5rem 0 0;">⚠️ The database is nearly full — only moderation logs are being stored until space frees up.</p>' : '');
+      } catch (err) {
+        el.textContent = `❌ ${err.message}`;
+      }
+    }
+
+    async function runLogCleanup() {
+      const btn = document.getElementById('logCleanupBtn');
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/logs/cleanup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Failed.');
+        const n = d.removed.logs + d.removed.chatDrops + d.removed.polls + d.removed.giveaways + d.removed.transcripts;
+        showToast(n ? `🧹 Removed ${fmt(d.removed.logs)} old log entries${n > d.removed.logs ? ` and ${fmt(n - d.removed.logs)} other old items` : ''}.` : '✨ Nothing old enough to remove.');
+        loadLogStorage();
+      } catch (err) {
+        showToast(`❌ ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     // --- Join analytics chart ---
@@ -2260,7 +2439,7 @@
         const s = data.summary;
         box.innerHTML = `<div class="log-content">
           <strong>${esc(s.guildName)}</strong> · exported ${s.exportedAt ? esc(new Date(s.exportedAt).toLocaleString()) : 'unknown date'}<br>
-          <span class="muted">${[s.hasSettings && 'module settings', s.hasWelcome && 'welcome', s.hasTickets && 'tickets', s.alerts && `${s.alerts} alert(s)`, s.embedTemplates && `${s.embedTemplates} embed template(s)`, s.members && `${fmt(s.members)} members' XP`].filter(Boolean).join(' · ')}</span>
+          <span class="muted">${[s.hasSettings && 'module settings', s.hasWelcome && 'welcome', s.hasTickets && 'tickets', s.shopItems && `${s.shopItems} shop item(s)`, s.alerts && `${s.alerts} alert(s)`, s.embedTemplates && `${s.embedTemplates} embed template(s)`, s.members && `${fmt(s.members)} members' XP`].filter(Boolean).join(' · ')}</span>
           ${s.crossServer ? '<br><span style="color:var(--c-yellow);">⚠️ This file is from a different server — channel and role picks won\'t match here and will need re-selecting.</span>' : ''}
         </div>
         ${s.members ? '<label style="display:flex; align-items:center; gap:0.5rem; font-weight:500; color:var(--text-main);"><input type="checkbox" id="importXp" style="width:auto;"> Also import members\' XP (overwrites current XP)</label>' : ''}
@@ -2440,7 +2619,10 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || 'Failed to update.');
           all.forEach((el) => (el.checked = enabled));
-          const label = module.charAt(0).toUpperCase() + module.slice(1);
+          // Keep the same switch on the feature's own page in step.
+          const pageSwitch = { automod: 'amEnabled', xpPot: 'potEnabled', birthdays: 'bdEnabled', counting: 'ctEnabled', starboard: 'sbEnabled', chatdrops: 'cdEnabled' }[module];
+          if (pageSwitch && document.getElementById(pageSwitch)) document.getElementById(pageSwitch).checked = enabled;
+          const label = { xpPot: 'Daily XP Pot', automod: 'Auto-mod', chatdrops: 'Chat drops', shop: 'XP Shop' }[module] || module.charAt(0).toUpperCase() + module.slice(1);
           showToast(`${enabled ? '✅' : '⏸️'} ${label} ${enabled ? 'enabled' : 'disabled'}.${data.note ? ' ' + data.note : ''}`);
         } catch (err) {
           input.checked = !enabled;
@@ -2474,7 +2656,11 @@
 
     // --- Server log viewer ---
     const logState = { page: 1, totalPages: 1 };
-    const LOG_LABELS = { messageEdit: 'Edited', messageDelete: 'Deleted', memberJoin: 'Joined', memberLeave: 'Left', voice: 'Voice', roles: 'Roles' };
+    const LOG_LABELS = {
+      messageEdit: 'Edited', messageDelete: 'Deleted', memberJoin: 'Joined', memberLeave: 'Left', voice: 'Voice', roles: 'Roles',
+      modActions: 'Mod action', automod: 'Auto-mod', bulkDelete: 'Purge', members: 'Member', bans: 'Ban', channels: 'Channel',
+      serverRoles: 'Server role', threads: 'Thread', invites: 'Invite', emojis: 'Emoji', server: 'Server', commands: 'Command', shop: 'Shop'
+    };
 
     // Word diff (same algorithm as the bot's log embeds) for highlighting edits.
     function diffWords(a, b) {

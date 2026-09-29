@@ -8,7 +8,8 @@ const MODULE_NAMES = {
   gambling: 'Gambling',
   logs: 'Logs',
   alerts: 'Alerts',
-  tickets: 'Tickets'
+  tickets: 'Tickets',
+  shop: 'XP Shop'
 };
 
 // Field names that are noise in the "changed" summary.
@@ -36,6 +37,11 @@ function describe(req) {
     'levelcolors/remove-auto': ['Leveling', 'Deleted auto level color roles', ''],
     'levels/chatdrops': ['Leveling', 'Updated chat drops', `${b.enabled ? 'On' : 'Off'} · ${b.minXp}–${b.maxXp} XP every ${b.minMinutes}–${b.maxMinutes} min`],
     'levels/chatdrops/now': ['Leveling', 'Dropped XP in chat now', b.channelId ? `Channel: <#${b.channelId}>` : ''],
+    'engagement/:module': [
+      'Engagement',
+      `Updated ${{ birthdays: 'birthdays', counting: 'counting', starboard: 'starboard' }[req.params.module] || req.params.module}`,
+      b.current !== undefined && b.current !== '' ? `Set the count to ${b.current}` : b.enabled !== undefined ? (b.enabled ? 'On' : 'Off') : fieldSummary(b)
+    ],
     'levels/boosterperks': ['Leveling', 'Updated booster perks', `${b.enabled ? 'On' : 'Off'} · +${b.extraGambles} gambles · +${b.giveawayEntries} entries · ${b.dailyXp} XP/day · ${b.boostXp} XP on boost`],
     gambling: ['Gambling', 'Updated gambling settings', `Edge ${b.houseEdge}% · bets ${b.minBet}–${b.maxBet || '∞'} · win cap ${b.dailyWinCap || 'none'}`],
     logs: ['Logs', 'Updated log settings', fieldSummary(b)],
@@ -58,6 +64,7 @@ function describe(req) {
     backups: ['Backups', 'Created a manual backup', ''],
     'backups/:id/restore': ['Backups', `Restored a backup${b.includeXp ? ' (including XP)' : ''}`, ''],
     'import/preview': null,
+    'shop/order': ['XP Shop', 'Reordered the shop', ''],
     import: ['Backups', `Imported settings from a file${b.includeXp ? ' (including XP)' : ''}`, ''],
     'embed/send': ['Embed Builder', 'Sent an embed', b.channelId ? `Channel: <#${b.channelId}>` : '']
   };

@@ -138,6 +138,8 @@ async function recordNet(guildId, userId, net) {
  */
 async function recordStats({ guildId, userId, kind, bet, staked, returned }) {
   const profit = returned - staked;
+  // What they lost (of XP they actually paid) goes into the Daily XP Pot. Free plays cost nothing.
+  if (staked > returned) require('./xpPot').addLoss(guildId, userId, staked - returned).catch((err) => console.error('XP pot add failed:', err.message));
   const outcome = returned > bet ? 1 : returned < bet ? -1 : 0; // a free play that pays nothing is a loss
   const multiplier = bet > 0 ? returned / bet : 0;
   const n = (path) => ({ $ifNull: [`$${path}`, 0] });

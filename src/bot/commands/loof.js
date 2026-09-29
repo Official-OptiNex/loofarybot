@@ -16,7 +16,7 @@ const {
   rerollGiveaway,
   deleteGiveaway,
   replyOrEdit,
-  entryWeights,
+  entryBreakdowns,
   cleanBonus
 } = require('../cogs/modules/giveaways');
 
@@ -223,9 +223,10 @@ async function execute(interaction, client) {
   if (sub === 'entries') {
     if (!g) return replyOrEdit(interaction, { content: '❌ Giveaway not found.' });
     if (!g.entries.length) return replyOrEdit(interaction, { content: `Nobody has entered **${g.prize}** yet.` });
-    const weights = await entryWeights(interaction.guild, g, g.entries);
-    const tickets = [...weights.values()].reduce((a, b) => a + b, 0);
-    const shown = g.entries.slice(0, 60).map((id) => `<@${id}>${weights.get(id) > 1 ? ` ×${weights.get(id)}` : ''}${(g.winners || []).includes(id) ? ' 🏆' : ''}`);
+    const breakdowns = await entryBreakdowns(interaction.guild, g, g.entries);
+    const tickets = [...breakdowns.values()].reduce((a, b) => a + b.tickets, 0);
+    const why = (b) => (b.best ? ` ×${b.tickets} (${b.best.kind === 'booster' ? '💎' : `<@&${b.best.roleId}>`})` : '');
+    const shown = g.entries.slice(0, 60).map((id) => `<@${id}>${why(breakdowns.get(id) || {})}${(g.winners || []).includes(id) ? ' 🏆' : ''}`);
     return replyOrEdit(interaction, {
       content:
         `👥 **${g.prize}** — ${g.entries.length} ${g.type === 'drop' ? 'claim' : 'entr'}${g.entries.length === 1 ? (g.type === 'drop' ? '' : 'y') : g.type === 'drop' ? 's' : 'ies'}` +

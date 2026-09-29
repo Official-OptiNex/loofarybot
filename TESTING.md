@@ -1,0 +1,152 @@
+# LoofaryBot — what to test after deploying
+
+Work through this after merging and deploying. Each box is a quick check in Discord or on the dashboard.
+Use a **second account** (or a friend) for anything marked 👤. That account should have no
+staff roles, because staff skip auto-mod and can see everything.
+
+## 0. Before you start
+- [ ] Render shows the deploy as **Live**, and the logs show `LoofaryBot logged in as …` and
+      `Successfully registered slash commands.`
+- [ ] Discord shows the new commands. If one is missing, restart Discord (Ctrl+R).
+      New: `/automod`, `/shop`, `/pot`, `/birthday`, `/counting`, `/starboard`.
+- [ ] **Role position:** in Server Settings → Roles, drag LoofaryBot's role **above** every role it
+      hands out (level rewards, auto-role, birthday role, shop roles, reaction roles) and above
+      members it should moderate. Administrator gives the bot every *permission*, but Discord still
+      won't let it change anyone or any role **above** its own role.
+- [ ] UptimeRobot still pings `https://<your-app>.onrender.com/health` every 5 minutes (keeps the free
+      instance awake).
+
+## 1. Giveaway entries (the OG +1 / booster +2 report)
+Set up a timed giveaway with **bonus role OG +1**. Keep **Leveling → Booster perks → extra giveaway
+entries** at 2.
+- [ ] 👤 Member with **neither** OG nor boost clicks Enter → "🎉 You entered the giveaway!" (1 entry).
+- [ ] Member with **OG only** → "2 entries (1 + 1 from @OG)".
+- [ ] Member who **boosts** (no OG) → "3 entries (1 + 2 from 💎 boosting)".
+- [ ] Member with **OG and boost** → "3 entries" (the best bonus counts, bonuses don't add up).
+- [ ] `/loof entries` and the dashboard **👥 Entrants** list show the same numbers and *why*
+      (e.g. "3 tickets · +2 boosting").
+- [ ] If someone gets more than you expect, the "why" names the role giving it. Check that role
+      isn't one everybody has (e.g. a "Member" role).
+- [ ] Requirements: add "Level 5+". A 👤 member below level 5 clicks Enter → private ✅/❌ checklist,
+      not entered.
+
+## 2. Server Booster role on the dashboard
+- [ ] Giveaways → bonus entries / requirement role: **Server Booster** is in the list.
+- [ ] Leveling → XP multipliers (role): Server Booster is in the list.
+- [ ] Auto-role, level rewards, reaction roles, birthday role, shop role items: Server Booster is
+      **not** offered (Discord doesn't let bots give it).
+
+## 3. Auto-mod (Moderation → Auto-mod, or `/automod toggle enabled:true`)
+Turn it on first. The defaults are fine.
+- [ ] 👤 Chat normally and fairly fast (5–6 different messages quickly) → nothing happens.
+- [ ] 👤 Send 7+ messages within 5 seconds → they're deleted, and a notice "Warning 1/2" appears then
+      disappears after ~8s.
+- [ ] 👤 Wait 15s, then send the same message 4 times → deleted, "Warning 2/2 — next time is a 1h mute".
+- [ ] 👤 Wait 15s, then post `discord.gg/somethingelse` → deleted and **timed out for 1 hour**.
+      Remove the timeout (right-click → Remove Timeout) when done.
+- [ ] 👤 Post an invite to **your own** server → allowed.
+- [ ] 👤 Mention 5 people in one message → deleted, and a strike is given.
+- [ ] Your staff account does the same things → nothing happens (staff skip auto-mod).
+- [ ] Moderation → Cases shows the auto-mod warnings and timeout as numbered cases, and **Recent
+      catches** lists them.
+- [ ] `/automod status` shows the rules and recent catches.
+
+## 4. Logs (Logs → Settings)
+Set a log channel if you want to see them in Discord, too.
+- [ ] Change someone's nickname → "Nickname changed … Before/After (By …)".
+- [ ] Create, rename and delete a test channel → three log entries, each naming who did it.
+- [ ] Create a role, give it a permission, delete it → logs with the permission change.
+- [ ] `/purge` a few messages → one "N messages deleted" log with a transcript in the log viewer.
+- [ ] Ban and unban a test account (or use Discord's own ban menu) → ban/unban logs.
+- [ ] Create an invite → invite log.
+- [ ] Run any slash command → "used /…" in the log viewer.
+- [ ] Switch a type off (e.g. *Slash commands used*), save, run a command → no new entry.
+- [ ] **Storage card:** shows stored entries, the max (20,000), and **Database** and **Bot memory**
+      bars against the free limits. **🧹 Clean up now** works.
+
+## 5. XP Shop (`/shop view`, dashboard **XP Shop**)
+Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. +20,000.
+- [ ] `/shop view` lists 6 starter items. Pick one from the menu → confirm → bought. XP goes down.
+- [ ] Buying something you can't afford → "costs X XP — you have Y", and nothing is taken.
+- [ ] **Auto-react:** buy it, chat → the bot reacts 🔥 (at most every ~45s).
+      `/shop customize item:Auto-react emoji:🍕` changes it. `/shop toggle` turns it off/on.
+- [ ] **Nickname tag:** buy it → your name gets "⭐ " in front. Customize the emoji → it updates.
+      Toggle off → your old nickname comes back.
+- [ ] **Custom badge:** buy it, then `/shop customize item:Custom badge title:Night Owl emoji:🦉
+      color:#FF00AA` → `/levels rank` shows "🦉 **Night Owl**" and `/levels leaderboard` shows it next
+      to your name.
+- [ ] **XP boost:** buy it → `/shop inventory` shows "active until …". Chat XP is 1.5× for 24h.
+- [ ] **+3 gambles:** use up today's `/gamble` plays, buy it → you can play 3 more.
+- [ ] **Golden Loofa:** shows "N left", and `/levels rank` shows it under *Collection* after buying.
+- [ ] Dashboard: edit an item's price → `/shop view` shows the new price. Hide an item → it
+      disappears from `/shop`.
+- [ ] Dashboard: **Add item → Role**, pick a role, 24 hours, price 100 → buy it → you get the role.
+      `/shop toggle` hides/shows it. It's removed automatically after 24h.
+- [ ] Dashboard: **Member items** → search your test account → **Give for free** and **Take away**
+      both work.
+- [ ] Dashboard: **Recent purchases** lists what was bought, and Logs has *XP shop purchases*.
+
+## 6. Daily XP Pot (`/pot`, dashboard **Gambling → 💰 Daily XP Pot**)
+- [ ] `/pot setup channel:#gambling` (or on the dashboard) → "Daily XP Pot is on", with the next
+      draw time.
+- [ ] 👤 Lose a few `/gamble` games → `/pot view` shows the pot growing, and you in **Top pot
+      contributors**. Win a game → the pot doesn't change.
+- [ ] Dashboard: change the title, color and text (try `{pot}` and `{draw}`), add a banner image →
+      the preview updates as you type. Save, then run `/pot preview` → Discord shows the same.
+- [ ] **Test the draw without waiting until midnight:** have 👤 and a friend each send **3+ messages
+      at least 20 seconds apart**. Then run `/pot draw` (or dashboard **⏱️ Post & draw now**):
+  - [ ] The pot posts in the channel with your ping role, "How to win", the pot amount, a live
+        countdown ("in 10 minutes"), "Entered so far" and the top 3 contributors.
+  - [ ] 👤 Lose another game during the countdown → within ~30s the posted pot shows the higher
+        amount.
+  - [ ] When the countdown ends, the post changes to "we have a winner!" and a message pings the
+        winner. Their XP goes up by the pot amount (check `/levels rank`).
+  - [ ] `/pot history` and the dashboard's **Recent pots** list the winner.
+- [ ] **Rollover:** run `/pot draw` when nobody has chatted for an hour → the post says "rolled
+      over", and tomorrow's pot starts with that XP ("incl. … rolled over").
+- [ ] The real thing: leave it on overnight. It posts at 23:50 UTC and draws at 00:00 UTC. A pot
+      under 100 XP isn't posted at all and rolls over quietly.
+
+## 7. Birthdays / Counting / Starboard (dashboard **Engagement**)
+- [ ] `/birthday setup channel:#general` (optionally a role and an XP gift).
+      `/birthday set` with **today's** date and an hour that has already passed today (UTC) → the post
+      appears within ~5 minutes, and the role/XP is given.
+- [ ] `/counting setup channel:#counting` → count 1, 2, 3 with two accounts → ✅ reactions.
+      Same account twice in a row → ❌ and the count resets. `/counting set number:2` fixes it.
+- [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the
+      author) → it's reposted in #starboard, and the count updates as stars change.
+
+## 8. Dashboard: everything in one place
+- [ ] **Sidebar → Modules** has an on/off switch for: Welcome, Honeypot, Leveling, Chat drops,
+      Auto-Role, Gambling, Daily XP Pot, XP Shop, Auto-mod, Logs, Alerts, Tickets, Birthdays,
+      Counting and Starboard.
+- [ ] Clicking a name there opens the right page/sub-tab. For example, *Auto-mod* opens
+      Moderation → Auto-mod, and *Daily XP Pot* scrolls to the pot card.
+- [ ] Turn on something that isn't set up yet (e.g. Daily XP Pot with no channel) → an error
+      "Pick a channel… first" and the switch flips back.
+- [ ] Flip a switch in the sidebar → the switch on that feature's page matches, and saving the
+      page updates the sidebar switch too.
+- [ ] **Overview → Modules** has a card for each new feature (Auto-mod, Daily XP Pot, XP Shop, Chat
+      drops, Birthdays, Counting, Starboard). Each has a switch, a one-line status and a link.
+- [ ] **Search bar** (top): type "pot", "auto-mod", "birthday", "storage", "booster" or "shop" →
+      the feature comes first, and Enter jumps straight to it.
+- [ ] **Leaderboard** page: someone with a shop badge shows it next to their name, plus any
+      collectibles.
+- [ ] **Commands** page lists `/automod`, `/shop`, `/pot`, `/birthday`, `/counting` and
+      `/starboard`.
+- [ ] **Server settings → Dashboard access:** new pages (Engagement, XP Shop) can be given to
+      moderators. A moderator only sees the switches for pages they have.
+- [ ] **Server settings → Backups:** make a backup → it lists "N shop item(s)". Restoring doesn't
+      duplicate items or reset how many were sold.
+- [ ] Every save shows up in **Server settings → Change history**.
+
+## 9. Free-tier health (check every week or two)
+- [ ] Logs → Settings → Storage: **Database** well under 75% of 512 MB, **Bot memory** under ~80% of
+      512 MB.
+- [ ] If the database ever passes 75%, the bot trims old data automatically, only keeps moderation
+      logs, and posts one alert a day in your bot-alerts channel. Lower *Keep log history* or turn
+      off noisy log types (voice, slash commands) to help.
+- [ ] Render dashboard: the service hasn't been restarted for running out of memory ("Out of memory").
+
+If anything doesn't behave like this, note what you did and what you saw, and check the bot-alerts
+channel and the Render logs around that time.

@@ -60,6 +60,9 @@ module.exports = [
     blurb: 'Bet XP on games of chance. Every game shows your updated balance.',
     tab: 'gambling',
     commands: [
+      { usage: '/pot view · history', perm: null, description: "The Daily XP Pot: today's gambling losses, the top contributors, the draw time and recent winners." },
+      { usage: '/pot setup · look · toggle', perm: 'Manage Server', description: 'Where and when the pot is drawn, who counts as active, and how its embed looks.' },
+      { usage: '/pot draw · preview', perm: 'Manage Server', description: "Post today's pot now and draw it after the countdown, or preview the embed." },
       { usage: '/gamble coinflip', perm: null, description: 'Heads or tails — win about double your bet.' },
       { usage: '/gamble dice', perm: null, description: 'Roll 0–100 under or over a target you pick — lower chance, bigger payout.' },
       { usage: '/gamble limbo', perm: null, description: 'Pick a target multiplier (1.01x–1000x); win it if the result reaches it.' },
@@ -109,8 +112,10 @@ module.exports = [
     blurb: 'Warnings, timeouts, kicks and bans with a case history, plus logs, lockdowns and cleanup tools.',
     tab: 'moderation',
     commands: [
+      { usage: '/automod toggle · rule', perm: 'Manage Server', description: 'Spam protection: floods, repeated messages, text walls, mass mentions, invites (plus optional link and caps spam).' },
+      { usage: '/automod punishment · exempt · status', perm: 'Manage Server', description: 'Warnings before the mute (default 2, then 1 hour), roles/channels that skip it, and recent catches.' },
       { usage: '/logs set', perm: 'Manage Server', description: 'Choose the channel that receives server logs.' },
-      { usage: '/logs toggle', perm: 'Manage Server', description: 'Switch individual log types on or off.' },
+      { usage: '/logs toggle', perm: 'Manage Server', description: 'Switch individual log types on or off — messages, members, bans, channels, roles, threads, invites, emoji, server settings, commands and more.' },
       { usage: '/logs enable · disable', perm: 'Manage Server', description: 'Turn the whole logging module on or off.' },
       { usage: '/logs status', perm: 'Manage Server', description: 'Show the logging setup.' },
       { usage: '/warn', perm: 'Timeout Members', description: 'Warn a member (DM’d with the reason; can trigger automatic escalation).' },
@@ -125,6 +130,36 @@ module.exports = [
       { usage: '/unlockdown', perm: 'Manage Channels', description: 'Lift a lockdown and restore the original permissions.' },
       { usage: '/purge', perm: 'Manage Messages', description: 'Bulk-delete recent messages, optionally from one user.' },
       { usage: '/mediaonly add · remove · list', perm: 'Manage Channels', description: 'Make channels media-only — text-only posts are removed; optional comment threads.' }
+    ]
+  },
+  {
+    id: 'shop',
+    group: 'XP Shop',
+    icon: '🛍️',
+    blurb: 'Spend XP on fun extras — auto-reacts, XP boosts, extra gambles, nickname tags, custom badges, roles and collectibles.',
+    tab: 'shop',
+    commands: [
+      { usage: '/shop view', perm: null, description: 'Browse the shop and buy something from a menu.' },
+      { usage: '/shop buy', perm: null, description: 'Buy an item straight away (autocompletes).' },
+      { usage: '/shop inventory', perm: null, description: 'What you (or someone else) own.' },
+      { usage: '/shop toggle', perm: null, description: 'Switch an item on or off — auto-react, nickname tag, badge, roles.' },
+      { usage: '/shop customize', perm: null, description: 'Make it yours: your emoji, badge title and badge color.' }
+    ]
+  },
+  {
+    id: 'engagement',
+    group: 'Engagement',
+    icon: '✨',
+    blurb: 'Birthdays, a counting game and a starboard — set them up once and they run themselves.',
+    tab: 'engagement',
+    commands: [
+      { usage: '/birthday set · remove', perm: null, description: 'Save (or forget) your birthday — month and day, no year.' },
+      { usage: '/birthday view · upcoming', perm: null, description: "Someone's birthday, or whose birthdays are coming up next." },
+      { usage: '/birthday setup · toggle', perm: 'Manage Server', description: 'Where birthday wishes go, the post time, an optional role for the day and an XP gift.' },
+      { usage: '/counting setup · toggle', perm: 'Manage Server', description: 'A counting game channel — ✅ for each right number, a wrong one resets the count.' },
+      { usage: '/counting set · status', perm: 'Manage Server', description: 'Fix the count after an unfair reset, or see the next number, best run and resets.' },
+      { usage: '/starboard setup · toggle', perm: 'Manage Server', description: 'Repost messages that get enough ⭐ (or your emoji) in a starboard channel.' },
+      { usage: '/starboard ignore · top', perm: 'Manage Server', description: "Keep a channel off the starboard, or see the most-starred messages." }
     ]
   },
   {

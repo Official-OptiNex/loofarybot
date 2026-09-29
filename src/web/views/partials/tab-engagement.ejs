@@ -1,0 +1,167 @@
+    <!-- ENGAGEMENT (same as /birthday · /counting · /starboard) -->
+    <div class="tab-panel hidden" id="tab-engagement">
+      <div class="module-hero">
+        <div class="hero-icon">✨</div>
+        <div>
+          <h1>Engagement</h1>
+          <p>Birthdays, a counting game and a starboard. Once set up they run on their own. Same as <code>/birthday</code>, <code>/counting</code> and <code>/starboard</code>.</p>
+          <div class="hero-status" id="enStatus"></div>
+        </div>
+      </div>
+
+      <div class="subtabs" data-subtabs>
+        <button class="active" data-sub="en-birthdays">🎂 Birthdays</button>
+        <button data-sub="en-counting">🔢 Counting</button>
+        <button data-sub="en-starboard">⭐ Starboard</button>
+      </div>
+
+      <!-- Birthdays -->
+      <div class="subpage" data-page="en-birthdays">
+        <div class="card warn-card" id="bdWarn" style="display:none;"></div>
+        <div class="split">
+          <div>
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">Birthday posts</div><div class="setting-help">Once a day, LoofaryBot wishes everyone whose birthday it is. Members save theirs with <code>/birthday set</code>.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="bdEnabled"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Channel</div><div class="setting-help">Where the birthday wishes are posted.</div></div>
+                <div class="setting-control"><select id="bdChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Post time</div><div class="setting-help">Hour of the day in UTC. <span id="bdLocalTime"></span></div></div>
+                <div class="setting-control"><select id="bdHour"><% for (let h = 0; h < 24; h++) { %><option value="<%= h %>"><%= String(h).padStart(2, '0') %>:00 UTC</option><% } %></select></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Birthday role</div><div class="setting-help">Optional. Given for the day and taken back 24 hours later.</div></div>
+                <div class="setting-control">
+                  <select id="bdRole">
+                    <option value="">No role</option>
+                    <% roles.filter(r => !r.managed).forEach(r => { %><option value="<%= r.id %>">@<%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option><% }) %>
+                  </select>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">XP gift</div><div class="setting-help">Extra XP on their birthday (0 = none). Needs leveling on.</div></div>
+                <div class="setting-control"><input type="number" id="bdXp" min="0" max="100000" step="10"></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Message</div><div class="setting-help">Placeholders: <code>{users}</code> (everyone celebrating) <code>{count}</code> <code>{server}</code></div></div>
+                <textarea id="bdMessage" rows="2" maxlength="1500"></textarea>
+              </div>
+            </div>
+            <div class="savebar" style="position:static;"><button class="btn" id="bdSave" onclick="saveEngagement('birthdays')">Save birthdays</button></div>
+          </div>
+
+          <div class="sticky-preview">
+            <div class="card" style="margin-bottom:0;">
+              <h3 style="margin-top:0;">Preview</h3>
+              <div class="discord-chat">
+                <div class="discord-message-preview">
+                  <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                  <div class="discord-message-body">
+                    <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time" id="bdpTime">Today at 14:00</span></div>
+                    <div class="discord-embed-preview" style="border-left-color:#FF73FA; margin-top:0.4rem;"><div class="desc" id="bdpText"></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card" style="margin-top:1rem;">
+              <h3 style="margin-top:0;">Coming up <span class="muted" id="bdCount" style="font-size:0.8rem; font-weight:400;"></span></h3>
+              <div id="bdUpcoming"><p class="muted">Loading…</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Counting -->
+      <div class="subpage hidden" data-page="en-counting">
+        <div class="split">
+          <div>
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">Counting game</div><div class="setting-help">Members count up one number at a time. Right numbers get ✅, a wrong one resets to 0.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="ctEnabled"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Channel</div><div class="setting-help">Use a channel just for counting. Normal chat in it is ignored.</div></div>
+                <div class="setting-control"><select id="ctChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Take turns</div><div class="setting-help">Nobody can count twice in a row.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="ctTurns"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Allow sums</div><div class="setting-help">“3*4” counts as 12, “(5+5)*2” as 20.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="ctMath"><span class="track"></span></label></div>
+              </div>
+            </div>
+            <div class="savebar" style="position:static;"><button class="btn" id="ctSave" onclick="saveEngagement('counting')">Save counting</button></div>
+
+            <div class="card settings-card" style="margin-top:1rem;">
+              <div class="setting-row">
+                <div><div class="setting-title">Set the count</div><div class="setting-help">Undo an unfair reset. Enter the last number counted; the channel is told the next one.</div></div>
+                <div class="setting-control"><input type="number" id="ctSetTo" min="0" placeholder="e.g. 250"><button class="btn secondary" id="ctSetBtn" onclick="setCount()">Set</button></div>
+              </div>
+            </div>
+          </div>
+          <div class="sticky-preview">
+            <div class="card" style="margin-bottom:0;">
+              <h3 style="margin-top:0;">Right now</h3>
+              <div class="mini-stats" id="ctStats" style="margin-bottom:0;"><p class="muted">Loading…</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Starboard -->
+      <div class="subpage hidden" data-page="en-starboard">
+        <div class="card warn-card" id="sbWarn" style="display:none;"></div>
+        <div class="split">
+          <div>
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">Starboard</div><div class="setting-help">Messages that get enough reactions are reposted in the starboard channel, with a jump link. The count keeps updating.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="sbEnabled"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Starboard channel</div></div>
+                <div class="setting-control"><select id="sbChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Stars needed</div><div class="setting-help">Posts drop off the board again if stars are removed below this.</div></div>
+                <div class="setting-control"><input type="number" id="sbThreshold" min="1" max="100"></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Emoji</div><div class="setting-help">The reaction that counts. Pick one, type any emoji, or paste one of this server's custom emoji.</div></div>
+                <div class="setting-control">
+                  <input id="sbEmoji" maxlength="64" placeholder="⭐" style="flex:0 0 90px; min-width:90px;">
+                  <div class="chip-row" style="margin:0;">
+                    <% ['⭐', '🌟', '🔥', '💀', '😂'].forEach(e => { %><button type="button" class="chip" data-sb-emoji="<%= e %>"><%= e %></button><% }) %>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Self-stars count</div><div class="setting-help">Off: starring your own message doesn't count.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="sbSelf"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Ignored channels</div><div class="setting-help">Messages here never go to the starboard (threads follow their channel).</div></div>
+                <input type="search" id="sbIgnoreSearch" placeholder="Filter channels…" aria-label="Filter channels">
+                <div class="check-grid" id="sbIgnored">
+                  <% channels.forEach(c => { %><label class="check-pill" data-name="<%= c.name.toLowerCase() %>"><input type="checkbox" value="<%= c.id %>" class="sb-ignore"><span>#<%= c.name %></span></label><% }) %>
+                </div>
+              </div>
+            </div>
+            <div class="savebar" style="position:static;"><button class="btn" id="sbSave" onclick="saveEngagement('starboard')">Save starboard</button></div>
+          </div>
+          <div class="sticky-preview">
+            <div class="card" style="margin-bottom:0;">
+              <h3 style="margin-top:0;">Most starred</h3>
+              <div id="sbTop"><p class="muted">Loading…</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
