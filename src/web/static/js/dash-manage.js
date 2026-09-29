@@ -125,6 +125,11 @@ function attachMemberPicker(input, { onPick = null } = {}) {
   LoofMentions.load(guildId);
 }
 
+// A feature's page was saved: keep its on/off switch in the sidebar (and Overview) in step.
+function syncModuleSwitch(module, on) {
+  document.querySelectorAll(`.module-toggle[data-module="${module}"]`).forEach((el) => (el.checked = !!on));
+}
+
 // Called by showTab() whenever a page opens.
 function onManageTabShown(tab) {
   if (tab === 'giveaways') {
@@ -1602,6 +1607,7 @@ async function saveChatDrops() {
   const body = readChatDrops();
   if (body.enabled && !body.channelIds.length) throw new Error('Chat drops: pick at least one channel.');
   await manageApi('POST', 'levels/chatdrops', body);
+  syncModuleSwitch('chatdrops', body.enabled);
   loadChatDrops();
 }
 
@@ -1756,7 +1762,10 @@ async function saveEngagement(section) {
   const body = readEngagement(section);
   if (body.enabled && !body.channelId) return showToast('❌ Pick a channel first.');
   const data = await withButton(document.getElementById(EN_BUTTONS[section]), () => manageApi('POST', `engagement/${section}`, body), EN_LABELS[section]);
-  if (data) loadEngagement();
+  if (data) {
+    syncModuleSwitch(section, data.settings.enabled);
+    loadEngagement();
+  }
 }
 
 async function setCount() {
@@ -1887,6 +1896,7 @@ function readAutomod() {
 async function saveAutomod() {
   const data = await withButton(document.getElementById('amSave'), () => manageApi('POST', 'moderation/automod', readAutomod()), '🛡️ Auto-mod saved.');
   if (data) {
+    syncModuleSwitch('automod', data.settings.enabled);
     fillAutomod(data.settings);
     loadAutomod();
   }
@@ -2228,7 +2238,10 @@ async function savePot() {
   const body = readPot();
   if (body.enabled && !body.channelId) return showToast('❌ Pick a channel for the pot first.');
   const data = await withButton(document.getElementById('potSaveBtn'), () => manageApi('POST', 'gambling/pot', body), '💰 Daily XP Pot saved.');
-  if (data) loadPot();
+  if (data) {
+    syncModuleSwitch('xpPot', data.settings.enabled);
+    loadPot();
+  }
 }
 
 async function potDrawNow() {

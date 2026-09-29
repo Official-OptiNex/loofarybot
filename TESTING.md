@@ -116,7 +116,31 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the
       author) → it's reposted in #starboard, and the count updates as stars change.
 
-## 8. Free-tier health (check every week or two)
+## 8. Dashboard: everything in one place
+- [ ] **Sidebar → Modules** has an on/off switch for: Welcome, Honeypot, Leveling, Chat drops,
+      Auto-Role, Gambling, Daily XP Pot, XP Shop, Auto-mod, Logs, Alerts, Tickets, Birthdays,
+      Counting and Starboard.
+- [ ] Clicking a name there opens the right page/sub-tab. For example, *Auto-mod* opens
+      Moderation → Auto-mod, and *Daily XP Pot* scrolls to the pot card.
+- [ ] Turn on something that isn't set up yet (e.g. Daily XP Pot with no channel) → an error
+      "Pick a channel… first" and the switch flips back.
+- [ ] Flip a switch in the sidebar → the switch on that feature's page matches, and saving the
+      page updates the sidebar switch too.
+- [ ] **Overview → Modules** has a card for each new feature (Auto-mod, Daily XP Pot, XP Shop, Chat
+      drops, Birthdays, Counting, Starboard). Each has a switch, a one-line status and a link.
+- [ ] **Search bar** (top): type "pot", "auto-mod", "birthday", "storage", "booster" or "shop" →
+      the feature comes first, and Enter jumps straight to it.
+- [ ] **Leaderboard** page: someone with a shop badge shows it next to their name, plus any
+      collectibles.
+- [ ] **Commands** page lists `/automod`, `/shop`, `/pot`, `/birthday`, `/counting` and
+      `/starboard`.
+- [ ] **Server settings → Dashboard access:** new pages (Engagement, XP Shop) can be given to
+      moderators. A moderator only sees the switches for pages they have.
+- [ ] **Server settings → Backups:** make a backup → it lists "N shop item(s)". Restoring doesn't
+      duplicate items or reset how many were sold.
+- [ ] Every save shows up in **Server settings → Change history**.
+
+## 9. Free-tier health (check every week or two)
 - [ ] Logs → Settings → Storage: **Database** well under 75% of 512 MB, **Bot memory** under ~80% of
       512 MB.
 - [ ] If the database ever passes 75%, the bot trims old data automatically, only keeps moderation

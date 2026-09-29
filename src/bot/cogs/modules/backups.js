@@ -5,6 +5,7 @@ const EmbedTemplate = require('../../../database/models/EmbedTemplate');
 const UserLevel = require('../../../database/models/UserLevel');
 const ConfigBackup = require('../../../database/models/ConfigBackup');
 const TicketConfig = require('../../../database/models/TicketConfig');
+const ShopItem = require('../../../database/models/ShopItem');
 
 const FORMAT = 'loofarybot-backup';
 const VERSION = 1;
@@ -20,13 +21,14 @@ const strip = (doc, extra = []) => {
 
 /** Everything that makes up a server's LoofaryBot setup, as plain JSON. */
 async function exportGuild(guild, { includeXp = false } = {}) {
-  const [config, welcome, alerts, templates, levels, tickets] = await Promise.all([
+  const [config, welcome, alerts, templates, levels, tickets, shopItems] = await Promise.all([
     GuildConfig.findOne({ guildId: guild.id }).lean(),
     WelcomeConfig.findOne({ guildId: guild.id }).lean(),
     AlertSubscription.find({ guildId: guild.id }).lean(),
     EmbedTemplate.find({ guildId: guild.id }).lean(),
     includeXp ? UserLevel.find({ guildId: guild.id }).lean() : Promise.resolve([]),
-    TicketConfig.findOne({ guildId: guild.id }).lean()
+    TicketConfig.findOne({ guildId: guild.id }).lean(),
+    ShopItem.find({ guildId: guild.id }).lean()
   ]);
   return {
     format: FORMAT,
@@ -40,6 +42,8 @@ async function exportGuild(guild, { includeXp = false } = {}) {
       alerts: alerts.map((a) => strip(a, ['state'])),
       embedTemplates: templates.map((t) => strip(t)),
       tickets: strip(tickets, ['counter']),
+      // Shop items keep their id so restoring updates them in place (owners keep what they bought).
+      shopItems: shopItems.map((i) => ({ id: String(i._id), ...strip(i, ['sold']) })),
       ...(includeXp ? { members: levels.map((l) => strip(l)) } : {})
     }
   };
@@ -55,6 +59,7 @@ function summarize(payload) {
     hasSettings: !!d.guildConfig,
     hasWelcome: !!d.welcome,
     hasTickets: !!d.tickets,
+    shopItems: (d.shopItems || []).length,
     alerts: (d.alerts || []).length,
     embedTemplates: (d.embedTemplates || []).length,
     members: Array.isArray(d.members) ? d.members.length : 0
@@ -111,6 +116,7 @@ async function importGuild(guild, payload, { includeXp = false, createdBy = null
     const next = { ...d.guildConfig, guildId: guild.id };
     next.caseCounter = Math.max(current.caseCounter || 0, next.caseCounter || 0);
     next.boosterDropDay = current.boosterDropDay ?? null;
+    next.shopSeeded = !!(current.shopSeeded || next.shopSeeded); // don't re-add starter items that were deleted
     if (next.chatDrops || current.chatDrops) {
       next.chatDrops = { ...(next.chatDrops || {}), nextDropAt: current.chatDrops?.nextDropAt ?? null, lastDropAt: current.chatDrops?.lastDropAt ?? null };
     }
@@ -138,6 +144,17 @@ async function importGuild(guild, payload, { includeXp = false, createdBy = null
     // Ticket numbers keep counting up from where this server is.
     const current = await TicketConfig.findOne({ guildId: guild.id }, { counter: 1 }).lean();
     await TicketConfig.replaceOne({ guildId: guild.id }, { ...d.tickets, guildId: guild.id, counter: current?.counter || 0 }, { upsert: true });
+  }
+  if (Array.isArray(d.shopItems)) {
+    // Items from this server are updated in place (sales count and owners untouched); items from
+    // another server's backup are added as new. Nothing is deleted, so no one loses what they bought.
+    for (const raw of d.shopItems.slice(0, 50)) {
+      const { id, ...fields } = raw || {};
+      if (!fields.name || !fields.type) continue;
+      const existing = id && /^[0-9a-f]{24}$/i.test(id) ? await ShopItem.findOne({ _id: id, guildId: guild.id }).lean().catch(() => null) : null;
+      if (existing) await ShopItem.updateOne({ _id: existing._id }, { $set: { ...fields, guildId: guild.id } });
+      else await ShopItem.create({ ...fields, guildId: guild.id, sold: 0 }).catch((err) => console.warn('[backups] skipped a shop item:', err.message));
+    }
   }
   if (d.welcome) {
     await WelcomeConfig.replaceOne({ guildId: guild.id }, { ...d.welcome, guildId: guild.id }, { upsert: true });
