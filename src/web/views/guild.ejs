@@ -332,7 +332,7 @@
         <% if (can('leveling')) { %>
         <div class="card">
           <h3>🎁 Chat drops <%- sideToggle('chatdrops', !!ovCd.enabled) %></h3>
-          <p class="muted"><%= ovCd.enabled ? `${ovCd.minXp ?? 50}–${ovCd.maxXp ?? 250} XP every ${ovCd.minMinutes ?? 30}–${ovCd.maxMinutes ?? 90} min in ${(ovCd.channelIds || []).map(chName).filter(Boolean).join(', ') || 'no channel'}` : 'Off — random XP drops in active chat.' %></p>
+          <p class="muted"><%= ovCd.enabled ? `${ovCd.minXp ?? 50}–${ovCd.maxXp ?? 250} XP every ${ovCd.minMinutes ?? 30}–${ovCd.maxMinutes ?? 90} min in ${(ovCd.channelIds || []).map(ovCh).filter(Boolean).join(', ') || 'no channel'}` : 'Off — random XP drops in active chat.' %></p>
           <p class="muted"><%- ovLink('chatdrops', 'Drop settings') %></p>
         </div>
         <% } %>
