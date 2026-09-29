@@ -128,22 +128,26 @@ async function checkRequirements(member, g, levelsByUser = null) {
   if (!hasRequirements(req)) return null;
   if (!member) return 'You must be a member of this server.';
 
-  if (req.roleId && !member.roles.cache.has(req.roleId)) {
-    return `You need the <@&${req.roleId}> role to enter.`;
+  // Check every requirement so the member sees the whole list at once, not one miss at a time.
+  const checks = [];
+  if (req.roleId) {
+    checks.push({ ok: member.roles.cache.has(req.roleId), text: `Have the <@&${req.roleId}> role` });
   }
   if (req.minDaysInServer) {
     const days = member.joinedTimestamp ? (Date.now() - member.joinedTimestamp) / 86400000 : 0;
-    if (days < req.minDaysInServer) {
-      return `You need to have been in the server for **${req.minDaysInServer} day(s)** (you're at ${Math.floor(days)}).`;
-    }
+    checks.push({
+      ok: days >= req.minDaysInServer,
+      text: `Be in the server for **${req.minDaysInServer} day${req.minDaysInServer === 1 ? '' : 's'}** (you're at ${Math.floor(days)})`
+    });
   }
   if (req.minLevel) {
     let level;
     if (levelsByUser) level = levelsByUser.get(member.id) ?? 0;
     else level = (await UserLevel.findOne({ guildId: member.guild.id, userId: member.id }).lean())?.level ?? 0;
-    if (level < req.minLevel) return `You need to be **Level ${req.minLevel}** (you're Level ${level}).`;
+    checks.push({ ok: level >= req.minLevel, text: `Be **Level ${req.minLevel}+** (you're Level ${level})` });
   }
-  return null;
+  if (checks.every((c) => c.ok)) return null;
+  return `You don't meet the requirements for this giveaway:\n${checks.map((c) => `${c.ok ? '✅' : '❌'} ${c.text}`).join('\n')}`;
 }
 
 function buildEntryRow(emoji, disabled = false, type = 'timed') {
@@ -382,7 +386,7 @@ async function handleButtonInteraction(interaction) {
   }
 
   const reason = await checkRequirements(interaction.member, g);
-  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true });
+  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true, allowedMentions: { parse: [] } });
 
   const updated = await Giveaway.findOneAndUpdate({ _id: g._id, ended: false }, { $addToSet: { entries: userId } }, { new: true });
   if (!updated) return interaction.reply({ content: '❌ This giveaway has ended.', ephemeral: true });
@@ -404,7 +408,7 @@ async function handleDropClaim(interaction) {
   if (g.entries.includes(userId)) return interaction.reply({ content: "✅ You've already claimed this drop.", ephemeral: true });
 
   const reason = await checkRequirements(interaction.member, g);
-  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true });
+  if (reason) return interaction.reply({ content: `🔒 ${reason}`, ephemeral: true, allowedMentions: { parse: [] } });
 
   // Single atomic update: only succeeds while there's still a free slot and the user hasn't claimed,
   // so simultaneous clicks can never hand out more prizes than winnerCount.

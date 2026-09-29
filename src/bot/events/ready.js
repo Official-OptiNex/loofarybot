@@ -44,6 +44,9 @@ const { commands: greetingCommands } = require('../commands/greetings');
 const perksCommand = require('../commands/perks');
 const ticketCommand = require('../commands/ticket');
 const xpdropCommand = require('../commands/xpdrop');
+const birthdayCommand = require('../commands/birthday');
+const countingCommand = require('../commands/counting');
+const starboardCommand = require('../commands/starboard');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -69,7 +72,10 @@ const ALL_COMMANDS = [
   ...greetingCommands,
   perksCommand,
   ticketCommand,
-  xpdropCommand
+  xpdropCommand,
+  birthdayCommand,
+  countingCommand,
+  starboardCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -129,5 +135,8 @@ module.exports = function registerReadyEvent(client) {
 
     // Random XP drops in active chat channels.
     require('../cogs/modules/chatDrops').startChatDrops(client);
+
+    // Daily birthday posts (and taking the birthday role back the next day).
+    require('../cogs/modules/birthdays').startBirthdays(client);
   });
 };

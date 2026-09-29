@@ -208,6 +208,12 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - `/loof edit` changes the prize, winners, end time (`ends_in`), description, color or emoji.
   `/loof requirements` adds, changes or clears requirements. Entrants who no longer qualify are
   skipped at the draw.
+- Members who don't meet the requirements can't enter. Clicking **Enter** (or **Claim!**) shows them a
+  private ✅/❌ checklist of every requirement, e.g. "❌ Be **Level 5+** (you're Level 3)".
+- Discord-managed roles such as **Server Booster** can be picked as a required role, a bonus-entry
+  role, an XP-multiplier role or a ping. They're left out of role pickers where the bot would have
+  to hand the role out (level rewards, auto-role, reaction roles, birthday role), because Discord
+  doesn't allow that.
 - Every `message_id` option autocompletes — start typing the prize. Duration options suggest
   common values and show what you typed (e.g. `90m (1h 30m)`).
 - `/loof drop` posts a **Claim!** button; the first N members to click win instantly.
@@ -330,6 +336,33 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - Only one drop is open at a time, claims are atomic (a click race gives exactly the right number of
   winners), and drops survive restarts. Nothing happens while leveling is off.
 - `/xpdrop setup` (channels, XP range, timing, activity, claim window) · `now` · `status` · `toggle`.
+
+### Birthdays (`/birthday …` or dashboard **Engagement → Birthdays**)
+- Members save their birthday with `/birthday set` (month and day only, no year).
+- Once a day, at the hour you pick (UTC, default 14:00), LoofaryBot posts **one** message wishing
+  everyone whose birthday it is. The message is customizable with `{users}`, `{count}` and `{server}`.
+- Optional extras: a **birthday role** for the day (taken back after 24 hours) and an **XP gift**.
+- Feb 29 birthdays are celebrated on Feb 28 in other years. Members who left and bots are skipped,
+  and the post never repeats on the same day, even after a restart.
+- `/birthday upcoming` and the dashboard list the next birthdays.
+
+### Counting (`/counting …` or dashboard **Engagement → Counting**)
+- Members count up one number at a time in a counting channel. Right numbers get ✅, every 100 gets
+  💯, and the number that beats the best run gets 🏆.
+- A wrong number, or counting twice in a row (with **take turns** on), resets the count to 0 with a
+  short message. If two people send the same right number at the same moment, the slower one gets 👀
+  instead of a reset.
+- Sums like `3*4` count when **allow sums** is on. Messages that don't start with a number are
+  ignored, so people can still chat. If someone deletes the latest count, the bot posts the next number.
+- `/counting set` (or the dashboard) fixes the count after an unfair reset.
+
+### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)
+- Messages with enough ⭐ (default 3, or your own emoji) are reposted in the starboard channel with
+  the text, the first image and a jump link.
+- The star count on the post keeps updating (🌟 at 10+, 💫 at 25+). If stars drop below the
+  threshold the post is removed, and deleting the original removes the copy too.
+- Stars from the author (unless allowed) and bots don't count. NSFW channels never feed a non-NSFW
+  starboard, and you can ignore channels. Threads follow their parent channel.
 
 ### Booster perks (`/perks` or dashboard **Leveling → Booster perks**)
 Server boosters get, by default:

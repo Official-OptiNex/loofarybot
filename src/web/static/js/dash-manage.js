@@ -145,6 +145,7 @@ function onManageTabShown(tab) {
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
   if (tab === 'leveling') loadChatDrops();
   if (tab === 'gambling') loadGambleStats();
+  if (tab === 'engagement') loadEngagement();
   if (tab === 'tickets') {
     loadTickets();
     loadTicketHistory(tkState.page || 1);
@@ -541,6 +542,7 @@ function panelRoleOptions(selectedId) {
   return (
     '<option value="">— Pick a role —</option>' +
     roles
+      .filter((r) => !r.managed)
       .map((r) => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''} ${r.assignable ? '' : 'disabled'}>@${esc(r.name)}${r.assignable ? '' : ' ⚠️'}</option>`)
       .join('')
   );
@@ -1632,3 +1634,166 @@ async function loadGambleStats() {
         .join('')
     : '<tr><td class="muted">Nobody has gambled yet.</td></tr>';
 }
+
+/* ------------------------------------------------------------------ Engagement: birthdays, counting, starboard */
+
+const enState = { loaded: false, data: null };
+
+function fillEngagementForms(d) {
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  const c = (id, val) => (document.getElementById(id).checked = !!val);
+  const b = d.birthdays.settings;
+  c('bdEnabled', b.enabled);
+  v('bdChannel', b.channelId || '');
+  v('bdHour', b.announceHour);
+  v('bdRole', b.roleId || '');
+  v('bdXp', b.xpGift);
+  v('bdMessage', b.message);
+  const ct = d.counting.settings;
+  c('ctEnabled', ct.enabled);
+  v('ctChannel', ct.channelId || '');
+  c('ctTurns', !ct.allowSameUser);
+  c('ctMath', ct.mathAllowed);
+  const sb = d.starboard.settings;
+  c('sbEnabled', sb.enabled);
+  v('sbChannel', sb.channelId || '');
+  v('sbThreshold', sb.threshold);
+  v('sbEmoji', sb.emoji);
+  c('sbSelf', sb.selfStar);
+  document.querySelectorAll('.sb-ignore').forEach((el) => (el.checked = sb.ignoredChannelIds.includes(el.value)));
+  renderBirthdayPreview();
+}
+
+function renderEngagementStatus(d) {
+  const chip = (on, text) => `<span class="status-chip ${on ? 'good' : 'off'}"><span class="dot"></span>${text}</span>`;
+  document.getElementById('enStatus').innerHTML = [
+    chip(d.birthdays.settings.enabled, `🎂 Birthdays ${d.birthdays.settings.enabled ? 'on' : 'off'}`),
+    chip(d.counting.settings.enabled, `🔢 Counting ${d.counting.settings.enabled ? `on · next ${fmt(d.counting.settings.current + 1)}` : 'off'}`),
+    chip(d.starboard.settings.enabled, `⭐ Starboard ${d.starboard.settings.enabled ? 'on' : 'off'}`)
+  ].join('');
+
+  const warn = (id, items, what) => {
+    const el = document.getElementById(id);
+    el.style.display = items.length ? '' : 'none';
+    el.innerHTML = items.length ? `⚠️ For ${what}, LoofaryBot needs <strong>${items.map(esc).join(', ')}</strong>.` : '';
+  };
+  warn('bdWarn', d.birthdays.missingPerms, 'birthdays');
+  warn('sbWarn', d.starboard.missingPerms, 'the starboard');
+
+  const bd = d.birthdays;
+  document.getElementById('bdCount').textContent = `· ${fmt(bd.saved)} saved`;
+  const when = (n) => (n === 0 ? '<strong>today 🎉</strong>' : n === 1 ? 'tomorrow' : `in ${n} days`);
+  document.getElementById('bdUpcoming').innerHTML = bd.upcoming.length
+    ? `<div class="payout-table-wrap"><table class="payout-table"><tbody>${bd.upcoming
+        .map((u) => `<tr><td>${esc(u.name || u.userId)}</td><td class="muted">${esc(u.date)}</td><td>${when(u.daysUntil)}</td></tr>`)
+        .join('')}</tbody></table></div>`
+    : '<p class="muted" style="margin:0;">Nobody has saved a birthday yet. Members add theirs with <code>/birthday set</code>.</p>';
+
+  const ct = d.counting.settings;
+  const stat = (value, label) => `<div class="mini-stat"><div class="value">${value}</div><div class="label">${label}</div></div>`;
+  document.getElementById('ctStats').innerHTML = [
+    stat(fmt(ct.current + 1), 'Next number'),
+    stat(fmt(ct.record), 'Best run'),
+    stat(fmt(ct.resets), 'Resets'),
+    stat(esc(ct.lastUserName || (ct.lastUserId ? 'someone' : '—')), 'Last counted by')
+  ].join('');
+
+  const top = d.starboard.top;
+  document.getElementById('sbTop').innerHTML = top.length
+    ? top
+        .map(
+          (p) => `<div class="list-row" style="display:flex; justify-content:space-between; gap:0.5rem; padding:0.4rem 0; border-top:1px solid var(--border-card);">
+            <span><strong>${fmt(p.stars)}</strong> ${esc(d.starboard.settings.emoji)} · ${esc(p.authorName || 'someone')} <span class="muted">in #${esc((channels.find((c) => c.id === p.channelId) || {}).name || 'channel')}</span></span>
+            <a href="${esc(p.url)}" target="_blank" rel="noopener">Jump ↗</a></div>`
+        )
+        .join('')
+    : '<p class="muted" style="margin:0;">Nothing has reached the starboard yet.</p>';
+}
+
+async function loadEngagement() {
+  let d;
+  try {
+    d = await manageApi('GET', 'engagement');
+  } catch (err) {
+    showToast(`⚠️ ${err.message}`);
+    return;
+  }
+  enState.data = d;
+  if (!enState.loaded) fillEngagementForms(d);
+  enState.loaded = true;
+  renderEngagementStatus(d);
+}
+
+function readEngagement(section) {
+  const v = (id) => document.getElementById(id).value;
+  const c = (id) => document.getElementById(id).checked;
+  if (section === 'birthdays') {
+    return { enabled: c('bdEnabled'), channelId: v('bdChannel') || null, announceHour: v('bdHour'), roleId: v('bdRole') || null, xpGift: v('bdXp') || 0, message: v('bdMessage') };
+  }
+  if (section === 'counting') return { enabled: c('ctEnabled'), channelId: v('ctChannel') || null, allowSameUser: !c('ctTurns'), mathAllowed: c('ctMath') };
+  return {
+    enabled: c('sbEnabled'),
+    channelId: v('sbChannel') || null,
+    threshold: v('sbThreshold'),
+    emoji: v('sbEmoji').trim() || '⭐',
+    selfStar: c('sbSelf'),
+    ignoredChannelIds: [...document.querySelectorAll('.sb-ignore:checked')].map((el) => el.value)
+  };
+}
+
+const EN_LABELS = { birthdays: '🎂 Birthday settings saved.', counting: '🔢 Counting settings saved.', starboard: '⭐ Starboard settings saved.' };
+const EN_BUTTONS = { birthdays: 'bdSave', counting: 'ctSave', starboard: 'sbSave' };
+
+async function saveEngagement(section) {
+  const body = readEngagement(section);
+  if (body.enabled && !body.channelId) return showToast('❌ Pick a channel first.');
+  const data = await withButton(document.getElementById(EN_BUTTONS[section]), () => manageApi('POST', `engagement/${section}`, body), EN_LABELS[section]);
+  if (data) loadEngagement();
+}
+
+async function setCount() {
+  const input = document.getElementById('ctSetTo');
+  if (input.value === '' || Number(input.value) < 0) return showToast('❌ Enter the last number counted (0 or more).');
+  const data = await withButton(document.getElementById('ctSetBtn'), () => manageApi('POST', 'engagement/counting', { current: input.value }), (d) => `✅ Count set — next is ${fmt(d.settings.current + 1)}.`);
+  if (data) {
+    input.value = '';
+    loadEngagement();
+  }
+}
+
+function renderBirthdayPreview() {
+  const text = document.getElementById('bdMessage').value.trim() || '🎂 Happy birthday {users}! Have an amazing day! 🎉';
+  const who = `<span class="mention-pill">@${esc(viewer.username)}</span>`;
+  const extras = [];
+  const xp = Number(document.getElementById('bdXp').value) || 0;
+  if (xp > 0) extras.push(`🎁 <strong>+${fmt(xp)} XP</strong> birthday gift`);
+  const roleId = document.getElementById('bdRole').value;
+  const role = roles.find((r) => r.id === roleId);
+  if (role) extras.push(`<span class="mention-pill">@${esc(role.name)}</span> for the day`);
+  document.getElementById('bdpText').innerHTML =
+    esc(text).replaceAll('{users}', who).replaceAll('{user}', who).replaceAll('{count}', '1').replaceAll('{server}', esc(guildName)).replace(/\n/g, '<br>') +
+    (extras.length ? `<div class="muted" style="font-size:0.78rem; margin-top:0.35rem;">${extras.join(' · ')}</div>` : '');
+  const h = Number(document.getElementById('bdHour').value) || 0;
+  document.getElementById('bdpTime').textContent = `Today at ${String(h).padStart(2, '0')}:00 UTC`;
+  const local = new Date(Date.UTC(2000, 0, 1, h));
+  document.getElementById('bdLocalTime').textContent = `That's ${local.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} your time.`;
+}
+
+(function initEngagementUi() {
+  const panel = document.getElementById('tab-engagement');
+  if (!panel) return;
+  ['bdMessage', 'bdXp', 'bdRole', 'bdHour'].forEach((id) => {
+    document.getElementById(id).addEventListener('input', renderBirthdayPreview);
+    document.getElementById(id).addEventListener('change', renderBirthdayPreview);
+  });
+  panel.querySelectorAll('[data-sb-emoji]').forEach((b) =>
+    b.addEventListener('click', () => {
+      document.getElementById('sbEmoji').value = b.dataset.sbEmoji;
+      if (typeof setUnsaved === 'function') setUnsaved(true);
+    })
+  );
+  document.getElementById('sbIgnoreSearch').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    panel.querySelectorAll('#sbIgnored .check-pill').forEach((p) => (p.style.display = !q || p.dataset.name.includes(q) ? '' : 'none'));
+  });
+})();

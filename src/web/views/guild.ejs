@@ -52,6 +52,7 @@
     ['community', 'chat', 'Polls & Reminders'],
     ['moderation', 'lock', 'Moderation'],
     ['tickets', 'ticket', 'Tickets'],
+    ['engagement', 'star', 'Engagement'],
     ['logs', 'file', 'Logs'],
     ['alerts', 'radio', 'Alerts'],
     ['leaderboard', 'trophy', 'Leaderboard'],
@@ -626,7 +627,7 @@
               <div class="field-row level-role-row">
                 <input type="number" min="1" class="lr-level" value="<%= lr.level %>" placeholder="Level" style="flex:0 0 110px;">
                 <select class="lr-role">
-                  <% roles.forEach(r => { %>
+                  <% roles.filter(r => !r.managed).forEach(r => { %>
                     <option value="<%= r.id %>" <%= r.id === lr.roleId ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
                   <% }) %>
                 </select>
@@ -868,7 +869,7 @@
           <p class="muted" style="font-size:0.85rem;">LoofaryBot's own role must sit above this role in Server Settings → Roles.</p>
           <select id="arRole">
             <option value="">— None —</option>
-            <% roles.forEach(r => { %>
+            <% roles.filter(r => !r.managed).forEach(r => { %>
               <option value="<%= r.id %>" <%= config.autoRoleId === r.id ? 'selected' : '' %>><%= r.name %><%= r.assignable ? '' : ' ⚠️ (bot cannot assign this)' %></option>
             <% }) %>
           </select>
@@ -1116,6 +1117,7 @@
     <% if (can('community')) { %><%- include('partials/tab-community', partialLocals) %><% } %>
     <% if (can('moderation')) { %><%- include('partials/tab-moderation', partialLocals) %><% } %>
     <% if (can('tickets')) { %><%- include('partials/tab-tickets', partialLocals) %><% } %>
+    <% if (can('engagement')) { %><%- include('partials/tab-engagement', partialLocals) %><% } %>
 
     <% if (isAdmin) { %>
     <!-- SETTINGS -->
@@ -1490,6 +1492,7 @@
 
     function roleOptionsHtml(selectedId) {
       return roles
+        .filter((r) => !r.managed)
         .map((r) => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}${r.assignable ? '' : ' ⚠️ (bot cannot assign this)'}</option>`)
         .join('');
     }
@@ -1508,7 +1511,7 @@
 
     // --- Unsaved changes: warn before leaving the page with edits that weren't saved ---
     let unsaved = false;
-    const IGNORE_DIRTY = 'input[type="search"], dialog *, .case-form *, .case-filters *, .list-toolbar *, .member-picker *, #cdNowChannel, #themeToggle, .module-toggle';
+    const IGNORE_DIRTY = 'input[type="search"], dialog *, .case-form *, .case-filters *, .list-toolbar *, .member-picker *, #cdNowChannel, #ctSetTo, #themeToggle, .module-toggle';
     function setUnsaved(on) {
       unsaved = on;
       document.body.classList.toggle('has-unsaved', on);

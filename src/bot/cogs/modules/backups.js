@@ -105,13 +105,32 @@ async function importGuild(guild, payload, { includeXp = false, createdBy = null
 
   if (d.guildConfig) {
     // Keep this server's running counters and schedules: rewinding the case counter would make the
-    // next /warn reuse an existing case number, and old "last sent" days could re-send today's drops.
+    // next /warn reuse an existing case number, old "last sent" days could re-send today's drops or
+    // birthday posts, and the counting game would jump back to an old number.
     const current = (await GuildConfig.findOne({ guildId: guild.id }).lean()) || {};
     const next = { ...d.guildConfig, guildId: guild.id };
     next.caseCounter = Math.max(current.caseCounter || 0, next.caseCounter || 0);
     next.boosterDropDay = current.boosterDropDay ?? null;
     if (next.chatDrops || current.chatDrops) {
       next.chatDrops = { ...(next.chatDrops || {}), nextDropAt: current.chatDrops?.nextDropAt ?? null, lastDropAt: current.chatDrops?.lastDropAt ?? null };
+    }
+    if (next.birthdays || current.birthdays) {
+      next.birthdays = { ...(next.birthdays || {}), lastRunDay: current.birthdays?.lastRunDay ?? null }; // don't re-post today's birthdays
+    }
+    if (next.counting || current.counting) {
+      // The counting game carries on from the live number (the settings come from the backup).
+      const live = current.counting || {};
+      next.counting = {
+        ...(next.counting || {}),
+        current: live.current || 0,
+        lastUserId: live.lastUserId ?? null,
+        lastMessageId: live.lastMessageId ?? null,
+        lastCountAt: live.lastCountAt ?? null,
+        record: Math.max(live.record || 0, next.counting?.record || 0),
+        bestBefore: live.bestBefore || 0,
+        resets: live.resets || 0,
+        lastResetBy: live.lastResetBy ?? null
+      };
     }
     await GuildConfig.replaceOne({ guildId: guild.id }, next, { upsert: true });
   }

@@ -132,6 +132,40 @@ const GuildConfigSchema = new mongoose.Schema(
       nextDropAt: { type: Date, default: null },
       lastDropAt: { type: Date, default: null }
     },
+    // Birthdays (/birthday, dashboard Engagement → Birthdays): one post a day, at announceHour UTC.
+    birthdays: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      roleId: { type: String, default: null }, // given for the day, removed the next day
+      xpGift: { type: Number, default: 0 },
+      announceHour: { type: Number, default: 14 }, // UTC
+      message: { type: String, default: '🎂 Happy birthday {users}! Have an amazing day! 🎉' },
+      lastRunDay: { type: String, default: null } // 'YYYY-MM-DD' of the last announcement (so restarts don't repeat it)
+    },
+    // Counting game (/counting, dashboard Engagement → Counting).
+    counting: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      current: { type: Number, default: 0 },
+      lastUserId: { type: String, default: null },
+      lastMessageId: { type: String, default: null },
+      lastCountAt: { type: Date, default: null },
+      record: { type: Number, default: 0 },
+      bestBefore: { type: Number, default: 0 }, // best run before the current one (for the 🏆 when it's beaten)
+      allowSameUser: { type: Boolean, default: false }, // false = people have to take turns
+      mathAllowed: { type: Boolean, default: true }, // "2*5" counts as 10
+      resets: { type: Number, default: 0 },
+      lastResetBy: { type: String, default: null }
+    },
+    // Starboard (/starboard, dashboard Engagement → Starboard).
+    starboard: {
+      enabled: { type: Boolean, default: false },
+      channelId: { type: String, default: null },
+      emoji: { type: String, default: '⭐' },
+      threshold: { type: Number, default: 3 },
+      selfStar: { type: Boolean, default: false },
+      ignoredChannelIds: { type: [String], default: [] }
+    },
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
     gamblingFreePlayEnabled: { type: Boolean, default: true },

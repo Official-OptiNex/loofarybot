@@ -128,6 +128,22 @@ module.exports = [
     ]
   },
   {
+    id: 'engagement',
+    group: 'Engagement',
+    icon: '✨',
+    blurb: 'Birthdays, a counting game and a starboard — set them up once and they run themselves.',
+    tab: 'engagement',
+    commands: [
+      { usage: '/birthday set · remove', perm: null, description: 'Save (or forget) your birthday — month and day, no year.' },
+      { usage: '/birthday view · upcoming', perm: null, description: "Someone's birthday, or whose birthdays are coming up next." },
+      { usage: '/birthday setup · toggle', perm: 'Manage Server', description: 'Where birthday wishes go, the post time, an optional role for the day and an XP gift.' },
+      { usage: '/counting setup · toggle', perm: 'Manage Server', description: 'A counting game channel — ✅ for each right number, a wrong one resets the count.' },
+      { usage: '/counting set · status', perm: 'Manage Server', description: 'Fix the count after an unfair reset, or see the next number, best run and resets.' },
+      { usage: '/starboard setup · toggle', perm: 'Manage Server', description: 'Repost messages that get enough ⭐ (or your emoji) in a starboard channel.' },
+      { usage: '/starboard ignore · top', perm: 'Manage Server', description: "Keep a channel off the starboard, or see the most-starred messages." }
+    ]
+  },
+  {
     id: 'tickets',
     group: 'Tickets',
     icon: '🎫',

@@ -72,7 +72,7 @@ router.get('/guilds/:guildId/mentionable', requireAuth, requireGuildAccess, guar
       .map((c) => ({ id: c.id, name: c.name }));
 
     const roles = req.guild.roles.cache
-      .filter((r) => r.name !== '@everyone' && !r.managed)
+      .filter((r) => r.name !== '@everyone' && !r.tags?.botId)
       .map((r) => ({ id: r.id, name: r.name }));
 
     const emojis = req.guild.emojis.cache.map((e) => ({
@@ -190,7 +190,7 @@ router.post('/guilds/:guildId/levels', requireAuth, requireGuildAccess, guardApi
     if (typeof enabled === 'boolean') config.levelingEnabled = enabled;
     if (Array.isArray(levelRoles)) {
       config.levelRoles = levelRoles
-        .filter((lr) => lr.level && lr.roleId)
+        .filter((lr) => lr.level && lr.roleId && !req.guild.roles.cache.get(String(lr.roleId))?.managed)
         .map((lr) => ({ level: Number(lr.level), roleId: String(lr.roleId) }));
     }
     if (Array.isArray(xpMultipliers)) {
@@ -963,6 +963,9 @@ router.post('/guilds/:guildId/autorole', requireAuth, requireGuildAccess, guardA
   try {
     const { roleId, enabled } = req.body;
     const config = await getOrCreateConfig(req.guild.id);
+    if (roleId && req.guild.roles.cache.get(String(roleId))?.managed) {
+      return res.status(400).json({ ok: false, error: 'That role is managed by Discord or an integration (like Server Booster) — the bot can’t hand it out.' });
+    }
     if (roleId !== undefined) config.autoRoleId = roleId || null;
     if (typeof enabled === 'boolean') config.autoRoleEnabled = enabled;
     await config.save();

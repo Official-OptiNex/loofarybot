@@ -20,6 +20,9 @@ const ModCase = require('../../database/models/ModCase');
 const Ticket = require('../../database/models/Ticket');
 const tickets = require('../../bot/cogs/modules/tickets');
 const levelColors = require('../../bot/cogs/modules/levelColors');
+const birthdays = require('../../bot/cogs/modules/birthdays');
+const counting = require('../../bot/cogs/modules/counting');
+const starboard = require('../../bot/cogs/modules/starboard');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const { parseDuration } = require('../../bot/utils/duration');
 
@@ -822,6 +825,72 @@ router.post('/guilds/:guildId/tickets/:ticketId/close', ...guard('tickets'), asy
   if (result.error) return bad(res, result.error);
   res.locals.audit = { section: 'Tickets', action: `Closed ticket #${t.number}`, detail: str(req.body?.reason, 100) };
   res.json({ ok: true, ticket: serializeTicket(result.ticket, req.guild), dmSent: !!result.dmSent });
+});
+
+// ---------------------------------------------------------------- Engagement (birthdays, counting, starboard)
+
+router.get('/guilds/:guildId/engagement', ...guard('engagement'), async (req, res) => {
+  const guild = req.guild;
+  const config = await getOrCreateConfig(guild.id);
+  const name = (id) => guild.members.cache.get(id)?.displayName || null;
+  const [upcoming, savedCount, top] = await Promise.all([
+    birthdays.upcoming(guild.id, { limit: 15, guild }),
+    require('../../database/models/Birthday').countDocuments({ guildId: guild.id }),
+    starboard.topPosts(guild.id, 10)
+  ]);
+  const b = birthdays.birthdaySettings(config);
+  const c = counting.countingSettings(config);
+  const st = starboard.starboardSettings(config);
+  res.json({
+    levelingEnabled: config.levelingEnabled !== false,
+    birthdays: {
+      settings: { ...b, lastRunDay: undefined },
+      saved: savedCount,
+      missingPerms: birthdays.missingPermissions(guild, b),
+      upcoming: upcoming.map((x) => ({ ...x, name: name(x.userId), date: birthdays.formatDate(x.month, x.day) }))
+    },
+    counting: {
+      settings: { ...c, lastUserName: c.lastUserId ? name(c.lastUserId) : null, lastResetByName: c.lastResetBy ? name(c.lastResetBy) : null }
+    },
+    starboard: {
+      settings: st,
+      missingPerms: starboard.missingPermissions(guild, st),
+      top: top.map((p) => ({
+        stars: p.stars,
+        authorId: p.authorId,
+        authorName: name(p.authorId),
+        channelId: p.channelId,
+        url: messageUrl(guild.id, p.channelId, p.messageId),
+        at: p.createdAt
+      }))
+    }
+  });
+});
+
+const PICK = {
+  birthdays: ['enabled', 'channelId', 'roleId', 'xpGift', 'announceHour', 'message'],
+  counting: ['enabled', 'channelId', 'allowSameUser', 'mathAllowed', 'current'],
+  starboard: ['enabled', 'channelId', 'emoji', 'threshold', 'selfStar', 'ignoredChannelIds']
+};
+const MODULES = { birthdays, counting, starboard };
+
+router.post('/guilds/:guildId/engagement/:module', ...guard('engagement'), async (req, res) => {
+  const mod = MODULES[req.params.module];
+  if (!mod || !Object.hasOwn(MODULES, req.params.module)) return bad(res, 'Unknown section.', 404);
+  const b = req.body || {};
+  const input = {};
+  for (const k of PICK[req.params.module]) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await mod.saveSettings(req.guild, input);
+  if (saved.error) return bad(res, saved.error);
+  // A dashboard count change gets the same heads-up in the channel as /counting set.
+  if (req.params.module === 'counting' && input.current !== undefined && input.current !== '' && saved.settings.enabled && saved.settings.channelId) {
+    const next = (saved.settings.current + 1).toLocaleString('en-US');
+    await req.guild.channels.cache
+      .get(saved.settings.channelId)
+      ?.send({ content: `🛠️ A moderator set the count to **${saved.settings.current.toLocaleString('en-US')}**. The next number is **${next}**.`, allowedMentions: { parse: [] } })
+      .catch(() => null);
+  }
+  res.json({ ok: true, settings: saved.settings });
 });
 
 module.exports = router;

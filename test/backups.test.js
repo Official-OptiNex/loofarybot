@@ -6,19 +6,22 @@ const rows={}; for (const n of ['GuildConfig','WelcomeConfig','AlertSubscription
 const B=require(root+'src/bot/cogs/modules/backups');
 const guild={id:'g',name:'Loof'};
 (async()=>{
-  await M('GuildConfig').create({guildId:'g',caseCounter:5,boosterDropDay:'2026-01-01',chatDrops:{enabled:true,channelIds:['c'],minXp:10,maxXp:20},gamblingDailyWinCap:777});
+  await M('GuildConfig').create({guildId:'g',caseCounter:5,boosterDropDay:'2026-01-01',chatDrops:{enabled:true,channelIds:['c'],minXp:10,maxXp:20},counting:{enabled:true,channelId:'cnt',current:10,record:10},birthdays:{enabled:true,channelId:'bd',lastRunDay:'2026-01-01'},gamblingDailyWinCap:777});
   await M('TicketConfig').create({guildId:'g',supportRoleIds:['sup'],panel:{title:'Old title'},counter:3});
   const backup=await B.exportGuild(guild);
   assert.equal(backup.data.tickets.panel.title,'Old title'); assert.ok(!('counter' in backup.data.tickets));
   assert.equal(B.summarize(backup).hasTickets,true);
   // life goes on: more cases, tickets, drops
   rows.GuildConfig[0].caseCounter=42; rows.GuildConfig[0].boosterDropDay='2026-09-27'; rows.GuildConfig[0].chatDrops.nextDropAt='2026-09-27T10:00:00.000Z';
+  rows.GuildConfig[0].counting.current=250; rows.GuildConfig[0].counting.record=300; rows.GuildConfig[0].counting.channelId='moved'; rows.GuildConfig[0].birthdays.lastRunDay='2026-09-27';
   rows.TicketConfig[0].counter=19; rows.TicketConfig[0].panel.title='New title'; rows.GuildConfig[0].gamblingDailyWinCap=5;
   await B.importGuild(guild,backup);
   const cfg=rows.GuildConfig.find(r=>r.guildId==='g'); const tk=rows.TicketConfig.find(r=>r.guildId==='g');
   assert.equal(cfg.gamblingDailyWinCap,777,'settings restored'); assert.equal(tk.panel.title,'Old title','ticket settings restored');
   assert.equal(cfg.caseCounter,42,'case counter never goes backwards'); assert.equal(cfg.boosterDropDay,'2026-09-27'); assert.equal(cfg.chatDrops.nextDropAt,'2026-09-27T10:00:00.000Z'); assert.equal(cfg.chatDrops.minXp,10);
   assert.equal(tk.counter,19,'ticket numbers keep counting');
+  assert.equal(cfg.counting.current,250,'the count carries on'); assert.equal(cfg.counting.record,300); assert.equal(cfg.counting.channelId,'cnt','counting settings restored');
+  assert.equal(cfg.birthdays.lastRunDay,'2026-09-27',"today's birthdays aren't posted again");
   assert.equal(rows.ConfigBackup.length,1,'safety backup taken first');
   console.log('✓ backups include ticket settings; restoring keeps case/ticket counters and today’s drop schedule');
   // cross-server import into a fresh server
