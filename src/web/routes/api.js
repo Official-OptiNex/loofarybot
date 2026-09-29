@@ -24,7 +24,7 @@ const router = express.Router();
 
 // Maps each API route to the dashboard page it belongs to, so moderators can only use the pages
 // they've been given. null = available to anyone with dashboard access.
-const MODULE_PAGES = { tickets: 'tickets', welcome: 'welcome', honeypot: 'honeypot', leveling: 'leveling', autorole: 'autorole', gambling: 'gambling', logs: 'logs', alerts: 'alerts' };
+const MODULE_PAGES = { tickets: 'tickets', welcome: 'welcome', honeypot: 'honeypot', leveling: 'leveling', autorole: 'autorole', gambling: 'gambling', logs: 'logs', alerts: 'alerts', shop: 'shop' };
 function pageFor(req) {
   const tail = (req.route?.path || '').replace('/guilds/:guildId', '').replace(/^\//, '');
   const first = tail.split('/')[0];
@@ -607,6 +607,12 @@ router.post('/guilds/:guildId/logs', requireAuth, requireGuildAccess, guardApi, 
     }
     const config = await getOrCreateConfig(req.guild.id);
     config.logChannelId = channelId || null;
+    if (req.body.retentionDays !== undefined) {
+      const { RETENTION_CHOICES } = require('../../bot/cogs/modules/storage');
+      const days = Number(req.body.retentionDays);
+      if (!RETENTION_CHOICES.includes(days)) return res.status(400).json({ ok: false, error: `Keep logs for ${RETENTION_CHOICES.join(', ')} days.` });
+      config.logRetentionDays = days;
+    }
     if (events && typeof events === 'object') {
       for (const key of Object.keys(LOG_EVENTS)) {
         if (typeof events[key] === 'boolean') config.set(`logEvents.${key}`, events[key]);
@@ -620,6 +626,19 @@ router.post('/guilds/:guildId/logs', requireAuth, requireGuildAccess, guardApi, 
   }
 });
 
+// Log storage: how much is kept, and a manual clean-up (Logs → Settings → Storage).
+router.get('/guilds/:guildId/logs/storage', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const storage = require('../../bot/cogs/modules/storage');
+  res.json(await storage.storageStats(req.guild.id));
+});
+
+router.post('/guilds/:guildId/logs/cleanup', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  const storage = require('../../bot/cogs/modules/storage');
+  const removed = await storage.runCleanup({ guildId: req.guild.id });
+  res.locals.audit = { section: 'Logs', action: 'Cleaned up old logs', detail: `${removed.logs} log entries removed` };
+  res.json({ ok: true, removed });
+});
+
 // --- Module on/off switches (sidebar, overview cards and each module page header) ---
 
 const MODULE_FIELDS = {
@@ -628,7 +647,8 @@ const MODULE_FIELDS = {
   autorole: 'autoRoleEnabled',
   gambling: 'gamblingEnabled',
   logs: 'logsEnabled',
-  alerts: 'socialAlertsEnabled'
+  alerts: 'socialAlertsEnabled',
+  shop: 'shopEnabled'
 };
 
 router.post('/guilds/:guildId/modules/:module', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {

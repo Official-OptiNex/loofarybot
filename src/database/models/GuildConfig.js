@@ -185,6 +185,27 @@ const GuildConfigSchema = new mongoose.Schema(
       modRoleIds: { type: [String], default: [] },
       modPages: { type: [String], default: ['leaderboard', 'commands', 'logviewer'] }
     },
+    // Auto-mod (Moderation → Auto-mod, /automod). Each rule deletes the messages and gives a strike:
+    // strikes 1..warnings are warnings, the next one is a timeout.
+    automod: {
+      enabled: { type: Boolean, default: false },
+      flood: { enabled: { type: Boolean, default: true }, messages: { type: Number, default: 7 }, seconds: { type: Number, default: 5 } },
+      duplicates: { enabled: { type: Boolean, default: true }, count: { type: Number, default: 4 }, seconds: { type: Number, default: 30 } },
+      walls: { enabled: { type: Boolean, default: true }, maxLines: { type: Number, default: 30 } },
+      mentions: { enabled: { type: Boolean, default: true }, max: { type: Number, default: 5 }, everyone: { type: Boolean, default: true } },
+      invites: { enabled: { type: Boolean, default: true } },
+      links: { enabled: { type: Boolean, default: false }, max: { type: Number, default: 4 } },
+      caps: { enabled: { type: Boolean, default: false }, percent: { type: Number, default: 80 }, minLength: { type: Number, default: 15 } },
+      warnings: { type: Number, default: 2 }, // warnings before the timeout
+      muteMinutes: { type: Number, default: 60 },
+      strikeResetHours: { type: Number, default: 24 }, // strikes older than this are forgotten
+      notify: { type: Boolean, default: true }, // short in-channel notice (deleted after a few seconds)
+      exemptRoleIds: { type: [String], default: [] },
+      exemptChannelIds: { type: [String], default: [] }
+    },
+    logRetentionDays: { type: Number, default: 30 }, // dashboard log viewer history
+    shopEnabled: { type: Boolean, default: true }, // XP shop (/shop, dashboard XP Shop)
+    shopSeeded: { type: Boolean, default: false }, // the starter items were added once
     logChannelId: { type: String, default: null },
     logEvents: {
       messageEdit: { type: Boolean, default: true },
@@ -193,7 +214,19 @@ const GuildConfigSchema = new mongoose.Schema(
       memberLeave: { type: Boolean, default: true },
       voice: { type: Boolean, default: true },
       roles: { type: Boolean, default: true },
-      modActions: { type: Boolean, default: true }
+      modActions: { type: Boolean, default: true },
+      automod: { type: Boolean, default: true },
+      bulkDelete: { type: Boolean, default: true },
+      members: { type: Boolean, default: true },
+      bans: { type: Boolean, default: true },
+      channels: { type: Boolean, default: true },
+      serverRoles: { type: Boolean, default: true },
+      threads: { type: Boolean, default: true },
+      invites: { type: Boolean, default: true },
+      emojis: { type: Boolean, default: true },
+      server: { type: Boolean, default: true },
+      commands: { type: Boolean, default: true },
+      shop: { type: Boolean, default: true }
     },
 
     // --- Moderation cases ---

@@ -1086,3 +1086,6 @@ kbd { font-family: inherit; font-size: 0.75rem; padding: 1px 6px; border-radius:
   .cmd-item code { white-space: normal; overflow-wrap: anywhere; flex-shrink: 1; }
   .cmd-item .desc { flex-basis: 100%; order: 3; }
 }
+
+/* XP shop: hidden items */
+.item-card.muted-card { opacity: 0.6; }

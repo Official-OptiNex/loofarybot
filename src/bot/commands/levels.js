@@ -255,7 +255,12 @@ async function execute(interaction) {
         { name: 'Progress', value: progressBar(record.xp - levelStartXp, nextLevelXp - levelStartXp) },
         ...(record.dailyStreak ? [{ name: 'Daily streak', value: `🔥 ${record.dailyStreak} day(s) · best ${record.bestStreak || record.dailyStreak}`, inline: true }] : [])
       );
-    if (card.text) embed.setDescription(card.text);
+    // XP shop flair: a custom badge and collectibles.
+    const flair = (await require('../cogs/modules/shop').flair(interaction.guildId, target.id).catch(() => new Map())).get(target.id);
+    const badge = flair?.badge ? `${flair.badge.emoji} **${flair.badge.text}**` : '';
+    if (flair?.badge?.color && !card.color) embed.setColor(flair.badge.color);
+    if (card.text || badge) embed.setDescription([badge, card.text].filter(Boolean).join('\n'));
+    if (flair?.collectibles.length) embed.addFields({ name: 'Collection', value: flair.collectibles.map((c) => `${c.emoji} ${c.name}${c.quantity > 1 ? ` ×${c.quantity}` : ''}`).join(' · ').slice(0, 1024) });
     if (card.backgroundUrl) embed.setImage(card.backgroundUrl);
     return interaction.reply({ embeds: [embed] });
   }
@@ -270,7 +275,11 @@ async function execute(interaction) {
       return interaction.reply({ content: `There are only ${totalPages} page(s) of leaderboard data.`, ephemeral: true });
     }
     const startRank = (safePage - 1) * 10;
-    const lines = entries.map((r, i) => `**${startRank + i + 1}.** <@${r.userId}> — Level ${r.level} (${r.xp} XP)`);
+    const flair = await require('../cogs/modules/shop').flair(interaction.guildId, entries.map((r) => r.userId)).catch(() => new Map());
+    const lines = entries.map((r, i) => {
+      const badge = flair.get(r.userId)?.badge;
+      return `**${startRank + i + 1}.** <@${r.userId}>${badge ? ` ${badge.emoji} *${badge.text}*` : ''} — Level ${r.level} (${r.xp} XP)`;
+    });
     const embed = new EmbedBuilder()
       .setTitle('🏆 XP Leaderboard')
       .setColor('#F1C40F')

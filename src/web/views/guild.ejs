@@ -26,6 +26,7 @@
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
     login: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l4-4-4-4M14 12H4"/>',
+    bag: '<path d="M5 8h14l-1 12.5H6z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
     star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
     target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
     curve: '<path d="M3 3v18h18"/><path d="M6.5 15c3-7 5.5-7 8 0 1.5 4 3 3.5 5-2"/>',
@@ -53,6 +54,7 @@
     ['moderation', 'lock', 'Moderation'],
     ['tickets', 'ticket', 'Tickets'],
     ['engagement', 'star', 'Engagement'],
+    ['shop', 'bag', 'XP Shop'],
     ['logs', 'file', 'Logs'],
     ['alerts', 'radio', 'Alerts'],
     ['leaderboard', 'trophy', 'Leaderboard'],
@@ -70,7 +72,8 @@
     ['gambling', 'Gambling', gambling.enabled],
     ['logs', 'Logs', config.logsEnabled !== false],
     ['alerts', 'Alerts', config.socialAlertsEnabled !== false],
-    ['tickets', 'Tickets', locals.ticketsEnabled !== false]
+    ['tickets', 'Tickets', locals.ticketsEnabled !== false],
+    ['shop', 'XP Shop', config.shopEnabled !== false]
   ].filter(([tab]) => can(tab) || (tab === 'logs' && can('logviewer')));
   // Moderators see module switches only for pages they're allowed to edit.
   const sideToggle = (key, on) =>
@@ -1007,6 +1010,22 @@
             </div>
           <% }) %>
         </div>
+        <div class="card settings-card">
+          <h3 style="margin-top:0;">🗄️ Storage</h3>
+          <div class="setting-row">
+            <div><div class="setting-title">Keep log history for</div><div class="setting-help">Older entries in the log viewer are deleted automatically to save space. Messages already posted in your Discord log channel stay.</div></div>
+            <div class="setting-control">
+              <select id="logRetention">
+                <% [7, 14, 30, 60, 90].forEach(d => { %><option value="<%= d %>" <%= (config.logRetentionDays || 30) === d ? 'selected' : '' %>><%= d %> days</option><% }) %>
+              </select>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Stored right now</div><div class="setting-help" id="logStorageInfo">Loading…</div></div>
+            <div class="setting-control"><button class="btn secondary small" id="logCleanupBtn" onclick="runLogCleanup()">🧹 Clean up now</button></div>
+          </div>
+          <p class="muted" style="font-size:0.78rem; margin:0.4rem 0 0;">Also cleaned automatically: finished chat drops after 30 days, ended polls after 90, ended giveaways after 180, and ticket transcripts 180 days after the ticket closes (the ticket stays in History).</p>
+        </div>
         <div class="savebar"><button class="btn" onclick="saveLogs()">Save changes</button></div>
       </div>
     </div>
@@ -1111,13 +1130,14 @@
       </div>
     </div>
 
-    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot, moduleToggle, ticketsEnabled: locals.ticketsEnabled !== false }; %>
+    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot, moduleToggle, ticketsEnabled: locals.ticketsEnabled !== false, shopEnabled: config.shopEnabled !== false }; %>
     <% if (can('giveaways')) { %><%- include('partials/tab-giveaways', partialLocals) %><% } %>
     <% if (can('reactionroles')) { %><%- include('partials/tab-reactionroles', partialLocals) %><% } %>
     <% if (can('community')) { %><%- include('partials/tab-community', partialLocals) %><% } %>
     <% if (can('moderation')) { %><%- include('partials/tab-moderation', partialLocals) %><% } %>
     <% if (can('tickets')) { %><%- include('partials/tab-tickets', partialLocals) %><% } %>
     <% if (can('engagement')) { %><%- include('partials/tab-engagement', partialLocals) %><% } %>
+    <% if (can('shop')) { %><%- include('partials/tab-shop', partialLocals) %><% } %>
 
     <% if (isAdmin) { %>
     <!-- SETTINGS -->
@@ -1341,6 +1361,7 @@
       if (tab === 'logs' && !logState.loaded) {
         logState.loaded = true;
         loadLogs(1);
+        loadLogStorage();
       }
       if (tab === 'overview' && joinChart) joinChart.resize();
       history.replaceState(null, '', tab === 'overview' ? location.pathname : `#${tab}`);
@@ -1661,7 +1682,38 @@
     function saveLogs() {
       const events = {};
       document.querySelectorAll('.log-event').forEach((el) => (events[el.dataset.key] = el.checked));
-      postJson('logs', { channelId: document.getElementById('logChannel').value, events }, '✅ Log settings saved.');
+      postJson('logs', { channelId: document.getElementById('logChannel').value, events, retentionDays: Number(document.getElementById('logRetention').value) }, '✅ Log settings saved.');
+    }
+
+    async function loadLogStorage() {
+      const el = document.getElementById('logStorageInfo');
+      if (!el) return;
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/logs/storage`);
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Failed to load.');
+        const top = Object.entries(d.byType).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t, n]) => `${LOG_LABELS[t] || t} ${fmt(n)}`).join(' · ');
+        el.textContent = d.logs ? `${fmt(d.logs)} log entries, oldest from ${new Date(d.oldest).toLocaleDateString()}${top ? ` — ${top}` : ''}.` : 'No log entries stored yet.';
+      } catch (err) {
+        el.textContent = `❌ ${err.message}`;
+      }
+    }
+
+    async function runLogCleanup() {
+      const btn = document.getElementById('logCleanupBtn');
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/logs/cleanup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Failed.');
+        const n = d.removed.logs + d.removed.chatDrops + d.removed.polls + d.removed.giveaways + d.removed.transcripts;
+        showToast(n ? `🧹 Removed ${fmt(d.removed.logs)} old log entries${n > d.removed.logs ? ` and ${fmt(n - d.removed.logs)} other old items` : ''}.` : '✨ Nothing old enough to remove.');
+        loadLogStorage();
+      } catch (err) {
+        showToast(`❌ ${err.message}`);
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     // --- Join analytics chart ---
@@ -2477,7 +2529,11 @@
 
     // --- Server log viewer ---
     const logState = { page: 1, totalPages: 1 };
-    const LOG_LABELS = { messageEdit: 'Edited', messageDelete: 'Deleted', memberJoin: 'Joined', memberLeave: 'Left', voice: 'Voice', roles: 'Roles' };
+    const LOG_LABELS = {
+      messageEdit: 'Edited', messageDelete: 'Deleted', memberJoin: 'Joined', memberLeave: 'Left', voice: 'Voice', roles: 'Roles',
+      modActions: 'Mod action', automod: 'Auto-mod', bulkDelete: 'Purge', members: 'Member', bans: 'Ban', channels: 'Channel',
+      serverRoles: 'Server role', threads: 'Thread', invites: 'Invite', emojis: 'Emoji', server: 'Server', commands: 'Command', shop: 'Shop'
+    };
 
     // Word diff (same algorithm as the bot's log embeds) for highlighting edits.
     function diffWords(a, b) {

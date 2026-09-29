@@ -7,7 +7,10 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates, // voice join/leave/move logs
-    GatewayIntentBits.GuildMessageReactions // starboard
+    GatewayIntentBits.GuildMessageReactions, // starboard
+    GatewayIntentBits.GuildModeration, // ban/unban logs
+    GatewayIntentBits.GuildInvites, // invite logs
+    GatewayIntentBits.GuildExpressions // emoji & sticker logs
   ],
   // Partials let logging still see edits/deletes/leaves for messages & members that aren't cached,
   // and let the starboard see reactions on older messages.

@@ -165,7 +165,9 @@ async function handleMessageXp(message) {
   const userId = message.author.id;
   const now = Date.now();
 
-  const multiplier = getXpMultiplier(config, message.channel, message.member);
+  // XP boosts bought in the shop stack with channel/role multipliers.
+  const boost = config.shopEnabled === false ? 1 : await require('./shop').boostMultiplier(message.guild.id, message.author.id).catch(() => 1);
+  const multiplier = getXpMultiplier(config, message.channel, message.member) * boost;
   const gained = Math.round((Math.floor(Math.random() * (xpMax - xpMin + 1)) + xpMin) * multiplier);
   if (gained <= 0) return; // e.g. a 0x multiplier on a bot-spam channel
 

@@ -47,6 +47,8 @@ const xpdropCommand = require('../commands/xpdrop');
 const birthdayCommand = require('../commands/birthday');
 const countingCommand = require('../commands/counting');
 const starboardCommand = require('../commands/starboard');
+const automodCommand = require('../commands/automod');
+const shopCommand = require('../commands/shop');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -75,7 +77,9 @@ const ALL_COMMANDS = [
   xpdropCommand,
   birthdayCommand,
   countingCommand,
-  starboardCommand
+  starboardCommand,
+  automodCommand,
+  shopCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -138,5 +142,11 @@ module.exports = function registerReadyEvent(client) {
 
     // Daily birthday posts (and taking the birthday role back the next day).
     require('../cogs/modules/birthdays').startBirthdays(client);
+
+    // XP shop: end expired boosts and temporary roles.
+    require('../cogs/modules/shop').startShop(client);
+
+    // Delete old log history and other finished data so the database stays small.
+    require('../cogs/modules/storage').startStorageCleanup();
   });
 };

@@ -21,6 +21,11 @@ const Ticket = require('../../database/models/Ticket');
 const tickets = require('../../bot/cogs/modules/tickets');
 const levelColors = require('../../bot/cogs/modules/levelColors');
 const birthdays = require('../../bot/cogs/modules/birthdays');
+const automod = require('../../bot/cogs/modules/automod');
+const shop = require('../../bot/cogs/modules/shop');
+const ShopItem = require('../../database/models/ShopItem');
+const ShopOwnership = require('../../database/models/ShopOwnership');
+const LogEntry = require('../../database/models/LogEntry');
 const counting = require('../../bot/cogs/modules/counting');
 const starboard = require('../../bot/cogs/modules/starboard');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
@@ -471,6 +476,35 @@ router.get('/guilds/:guildId/moderation', ...guard('moderation'), async (req, re
   });
 });
 
+// Auto-mod settings and recent catches (Moderation → Auto-mod). Same as /automod.
+router.get('/guilds/:guildId/moderation/automod', ...guard('moderation'), async (req, res) => {
+  const config = await getOrCreateConfig(req.guild.id);
+  const recent = await automod.recentActions(req.guild.id, 20);
+  res.json({
+    settings: automod.automodSettings(config),
+    missingPerms: automod.missingPermissions(req.guild),
+    recent: recent.map((c) => ({
+      caseId: c.caseId,
+      type: c.type,
+      userId: c.userId,
+      userTag: c.userTag,
+      name: req.guild.members.cache.get(c.userId)?.displayName || c.userTag || c.userId,
+      reason: c.reason,
+      createdAt: c.createdAt
+    }))
+  });
+});
+
+router.post('/guilds/:guildId/moderation/automod', ...guard('moderation'), async (req, res) => {
+  const b = req.body || {};
+  const input = {};
+  for (const k of ['enabled', 'rules', 'warnings', 'muteMinutes', 'strikeResetHours', 'notify', 'exemptRoleIds', 'exemptChannelIds']) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await automod.saveSettings(req.guild, input);
+  if (saved.error) return bad(res, saved.error);
+  res.locals.audit = { section: 'Moderation', action: 'Updated auto-mod', detail: `${saved.settings.enabled ? 'On' : 'Off'} · ${saved.settings.warnings} warning(s) → ${saved.settings.muteMinutes} min mute` };
+  res.json({ ok: true, settings: saved.settings });
+});
+
 router.post('/guilds/:guildId/moderation/lockdown', ...guard('moderation'), async (req, res) => {
   const b = req.body || {};
   let channel = null;
@@ -891,6 +925,127 @@ router.post('/guilds/:guildId/engagement/:module', ...guard('engagement'), async
       .catch(() => null);
   }
   res.json({ ok: true, settings: saved.settings });
+});
+
+// ---------------------------------------------------------------- XP shop
+
+function serializeItem(i, stats = {}) {
+  return {
+    id: String(i._id),
+    key: i.key || null,
+    type: i.type,
+    name: i.name,
+    description: i.description || '',
+    emoji: i.emoji,
+    price: i.price,
+    enabled: i.enabled !== false,
+    order: i.order || 0,
+    stock: i.stock ?? null,
+    sold: i.sold || 0,
+    maxPerUser: i.maxPerUser ?? 1,
+    minLevel: i.minLevel || 0,
+    config: i.config || {},
+    owners: stats.owners || 0,
+    active: stats.active || 0,
+    spent: stats.spent || 0
+  };
+}
+
+router.get('/guilds/:guildId/shop', ...guard('shop'), async (req, res) => {
+  const guild = req.guild;
+  const config = await getOrCreateConfig(guild.id);
+  const [items, stats, recent] = await Promise.all([
+    shop.listItems(guild.id, { all: true }),
+    shop.shopStats(guild.id),
+    LogEntry.find({ guildId: guild.id, type: 'shop' }).sort({ createdAt: -1 }).limit(15).lean().catch(() => [])
+  ]);
+  const me = guild.members.me;
+  res.json({
+    enabled: config.shopEnabled !== false,
+    levelingEnabled: config.levelingEnabled !== false,
+    types: Object.fromEntries(Object.entries(shop.TYPES).map(([k, t]) => [k, { label: t.label, help: t.help, toggle: t.toggle, custom: t.custom }])),
+    items: items.map((i) => serializeItem(i, stats.perItem[String(i._id)])),
+    totals: { spent: stats.totalSpent, buyers: stats.buyers },
+    recent: recent.map((e) => ({ userTag: e.userTag, userId: e.userId, summary: e.summary, at: e.createdAt })),
+    botCan: {
+      manageRoles: !!me?.permissions.has(PermissionFlagsBits.ManageRoles),
+      manageNicknames: !!me?.permissions.has(PermissionFlagsBits.ManageNicknames),
+      highestRolePosition: me?.roles.highest.position ?? 0
+    }
+  });
+});
+
+router.post('/guilds/:guildId/shop/items', ...guard('shop'), async (req, res) => {
+  const { item, error } = shop.cleanItem(req.guild, req.body || {});
+  if (error) return bad(res, error);
+  const count = await ShopItem.countDocuments({ guildId: req.guild.id });
+  if (count >= 50) return bad(res, 'A shop can hold up to 50 items.');
+  const created = await ShopItem.create({ ...item, guildId: req.guild.id, order: count });
+  res.locals.audit = { section: 'XP Shop', action: `Added “${item.name}”`, detail: `${item.price} XP · ${shop.TYPES[item.type].label}` };
+  res.json({ ok: true, item: serializeItem(created.toObject ? created.toObject() : created) });
+});
+
+router.post('/guilds/:guildId/shop/items/:id', ...guard('shop'), async (req, res) => {
+  const existing = await ShopItem.findOne({ _id: req.params.id, guildId: req.guild.id }).lean().catch(() => null);
+  if (!existing) return bad(res, 'That item no longer exists.', 404);
+  const { item, error } = shop.cleanItem(req.guild, { ...req.body, type: existing.type }); // the kind can't change once people own it
+  if (error) return bad(res, error);
+  if (item.stock !== null && item.stock < (existing.sold || 0)) return bad(res, `Stock can't go below the ${existing.sold} already sold.`);
+  await ShopItem.updateOne({ _id: existing._id }, { $set: item });
+  res.locals.audit = { section: 'XP Shop', action: `Edited “${item.name}”`, detail: `${item.price} XP${item.enabled ? '' : ' · hidden'}` };
+  const fresh = await ShopItem.findOne({ _id: existing._id }).lean();
+  res.json({ ok: true, item: serializeItem(fresh) });
+});
+
+router.delete('/guilds/:guildId/shop/items/:id', ...guard('shop'), async (req, res) => {
+  const existing = await ShopItem.findOne({ _id: req.params.id, guildId: req.guild.id }).lean().catch(() => null);
+  if (!existing) return bad(res, 'That item no longer exists.', 404);
+  // Switch owners' effects off (nickname tags, roles) before the item goes.
+  const owned = await ShopOwnership.find({ guildId: req.guild.id, itemId: String(existing._id) }).lean();
+  for (const o of owned) await shop.removeOwned(req.guild, o._id).catch(() => null);
+  await ShopItem.deleteOne({ _id: existing._id });
+  res.locals.audit = { section: 'XP Shop', action: `Deleted “${existing.name}”`, detail: owned.length ? `${owned.length} owner(s) lost it` : '' };
+  res.json({ ok: true, removedFrom: owned.length });
+});
+
+router.post('/guilds/:guildId/shop/order', ...guard('shop'), async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).slice(0, 50) : [];
+  for (const [i, id] of ids.entries()) await ShopItem.updateOne({ _id: id, guildId: req.guild.id }, { $set: { order: i } }).catch(() => null);
+  res.json({ ok: true });
+});
+
+router.post('/guilds/:guildId/shop/restore', ...guard('shop'), async (req, res) => {
+  const added = await shop.restoreDefaults(req.guild.id);
+  res.locals.audit = { section: 'XP Shop', action: 'Restored starter items', detail: `${added} added` };
+  res.json({ ok: true, added });
+});
+
+// A member's items, and staff gifting / removing them.
+router.get('/guilds/:guildId/shop/member/:userId', ...guard('shop'), async (req, res) => {
+  const member = await req.guild.members.fetch(String(req.params.userId)).catch(() => null);
+  if (!member) return bad(res, "That member isn't in the server.", 404);
+  const owned = await shop.inventory(req.guild.id, member.id);
+  const record = await UserLevel.findOne({ guildId: req.guild.id, userId: member.id }, { xp: 1, level: 1 }).lean();
+  res.json({
+    member: { id: member.id, name: member.displayName, avatarUrl: member.displayAvatarURL({ size: 64 }), xp: record?.xp || 0, level: record?.level || 0 },
+    owned: owned.map((o) => ({ id: String(o._id), itemId: String(o.itemId), name: o.item.name, emoji: o.item.emoji, type: o.item.type, active: o.active, quantity: o.quantity, spent: o.spent, expiresAt: o.expiresAt, custom: o.custom }))
+  });
+});
+
+router.post('/guilds/:guildId/shop/member/:userId/give', ...guard('shop'), async (req, res) => {
+  const member = await req.guild.members.fetch(String(req.params.userId)).catch(() => null);
+  if (!member) return bad(res, "That member isn't in the server.", 404);
+  const result = await shop.buy(req.guild, member, String(req.body?.itemId || ''), { free: true, by: `${req.session.user.global_name || req.session.user.username} (dashboard)` });
+  if (result.error) return bad(res, result.error.replace(/\*\*/g, ''));
+  res.locals.audit = { section: 'XP Shop', action: `Gave “${result.item.name}” to ${member.displayName}`, detail: '' };
+  res.json({ ok: true });
+});
+
+router.delete('/guilds/:guildId/shop/owned/:id', ...guard('shop'), async (req, res) => {
+  const result = await shop.removeOwned(req.guild, String(req.params.id));
+  if (result.error) return bad(res, result.error, 404);
+  res.locals.audit = { section: 'XP Shop', action: `Took “${result.item?.name || 'an item'}” from a member`, detail: '' };
+  res.json({ ok: true });
 });
 
 module.exports = router;

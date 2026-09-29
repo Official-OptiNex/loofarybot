@@ -79,8 +79,11 @@ No manual schema setup needed — Mongoose creates collections automatically on 
 2. **Bot** tab → enable **Message Content Intent** and **Server Members Intent** (both are
    required: message content for the honeypot/leveling message listener, members for
    kick/ban/role actions and join/leave logs).
-   The bot needs **Manage Roles** for reaction roles, level rewards and `/lockdown`, and
-   **View Audit Log** if you want role-change logs to say who made the change.
+   The bot needs **Manage Roles** for reaction roles, level rewards and `/lockdown`,
+   **Timeout Members** for `/timeout` and auto-mod, **Manage Nicknames** for the XP shop's
+   nickname tags, and **View Audit Log** so logs can say who made a change. The invite link on
+   the home page asks for all of them. The other gateway intents the bot uses (reactions, bans,
+   invites, emoji) don't need switching on.
 3. **OAuth2** tab → copy the **Client Secret** into `CLIENT_SECRET`.
 4. **OAuth2 → Redirects** → add `https://your-app.onrender.com/auth/discord/callback` (and a
    `http://localhost:3000/auth/discord/callback` entry too if testing locally), matching
@@ -239,8 +242,47 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - `/slowmode interval:30s` (or `off`) for a channel.
 - Dashboard **Moderation** page: a *Cases* tab to take action and search, revoke, edit or delete
   cases; plus *Lockdown & purge*, *Media-only* and *Escalation & DMs* tabs.
-- Logs are stored for 30 days and shown in the dashboard's **Log viewer** (search by user, text or
-  channel, filter by event type). Posting to a Discord channel is optional.
+- **Auto-mod** (`/automod` or dashboard **Moderation → Auto-mod**, off until you turn it on). It
+  catches spam without punishing fast typers:
+  - 🌊 **Message spam:** 7+ messages in 5 seconds.
+  - 🔁 **Repeated messages:** the same text 4 times in 30 seconds, ignoring case and spaces.
+  - 🧱 **Text walls:** the same line or word over and over, "aaaaaa…", or 30+ lines. Code blocks are fine.
+  - 📣 **Mention spam:** 5+ people or roles in one message, or trying @everyone/@here without
+    permission.
+  - 🔗 **Invites to other servers.** Invites to your own server are fine.
+  - 🌐 **Link spam** and 🔠 **caps spam:** optional, off by default.
+
+  Offending messages are deleted and the member gets a strike. By default that's **2 warnings,
+  then a 1 hour timeout**, and a short notice ("Warning 1/2") deletes itself after 8 seconds.
+  - One burst of spam counts as one strike.
+  - Strikes are forgotten after 24 hours, and a mute starts the count over.
+  - Staff (Manage Messages) and exempt roles or channels are never checked.
+  - Every catch is a numbered case and is logged.
+
+  All thresholds, the number of warnings and the mute length can be changed.
+- **Logs cover everything** (each type can be switched off):
+  - message edits, deletes and purges (with a transcript)
+  - joins and leaves
+  - voice activity
+  - role changes
+  - nicknames, timeouts, boosts and server avatars
+  - bans and unbans made anywhere
+  - channels, server roles (with permission changes) and threads
+  - invites, and emoji and stickers
+  - server settings
+  - slash commands used
+  - moderator actions, auto-mod catches and shop purchases
+
+  When the bot has View Audit Log, entries say who made the change.
+- **Storage:** the dashboard's **Log viewer** keeps history for 30 days by default (7, 14, 30, 60 or
+  90 under **Logs → Settings → Storage**). Older entries are deleted automatically every few hours,
+  or right away with **Clean up now**. Also cleaned automatically:
+  - finished chat drops after 30 days
+  - ended polls after 90 days
+  - ended giveaways after 180 days
+  - ticket transcripts 180 days after the ticket closes (the ticket stays in History)
+
+  Posting logs to a Discord channel is optional.
 - Message edit/delete logs include a **Jump to message** button, and edits highlight exactly what
   changed (~~removed~~ words struck through, added words in bold).
 - `/logs set #channel` — logs message edits/deletes, member joins/leaves, voice joins/leaves/moves,
@@ -336,6 +378,33 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - Only one drop is open at a time, claims are atomic (a click race gives exactly the right number of
   winners), and drops survive restarts. Nothing happens while leveling is off.
 - `/xpdrop setup` (channels, XP range, timing, activity, claim window) · `now` · `status` · `toggle`.
+
+### XP Shop (`/shop …` or the dashboard's **XP Shop** page)
+Members spend XP on fun extras. The shop is open by default and comes with starter items:
+
+| Item | Price | What it does |
+| --- | --- | --- |
+| ✨ Auto-react | 2,500 XP | LoofaryBot reacts to your messages (at most every 45s) with **your** emoji. Toggle it on/off. |
+| ⚡ XP Boost (24h) | 1,500 XP | +50% chat XP for 24 hours. Buying again adds another 24 hours. |
+| 🎲 +3 Gambles | 800 XP | Three extra `/gamble` plays today. |
+| 🏷️ Nickname tag | 1,200 XP | An emoji of your choice in front of your name. Toggle it off and your old nickname comes back. |
+| 🎖️ Custom badge | 3,000 XP | Fully yours: your **title, emoji and color** on `/levels rank` and the leaderboard. |
+| 🏆 Golden Loofa | 10,000 XP | A collectible trophy for your rank card. Only 10 exist. |
+
+- **Using the shop:** `/shop view` shows the shop with a buy menu. `/shop buy`, `/shop inventory`,
+  `/shop toggle` and `/shop customize` (emoji, badge title, badge color) cover the rest.
+- **Safe payments:** XP is taken atomically, so a member can't overspend, and limited stock can't
+  oversell. If an item can't be delivered (for example a role above the bot), the XP is refunded.
+- **Dashboard:** edit, hide, reorder or delete any item, or add your own of any kind. Each item can
+  have:
+  - a **role** (optionally temporary, e.g. VIP for 24h)
+  - collectibles, boosts with any multiplier and length, or extra gambles
+  - stock, a limit per member and a minimum level
+
+  Roles with Administrator or Manage Server can't be sold. The **Member items** tab shows what
+  someone owns, and lets you **give** items for free or **take one away**. **Recent purchases** and
+  totals are shown too, and every purchase is logged.
+- Spending XP lowers XP (and possibly level), just like gambling. Role rewards already earned are kept.
 
 ### Birthdays (`/birthday …` or dashboard **Engagement → Birthdays**)
 - Members save their birthday with `/birthday set` (month and day only, no year).

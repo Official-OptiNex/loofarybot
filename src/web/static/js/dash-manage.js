@@ -138,6 +138,7 @@ function onManageTabShown(tab) {
   }
   if (tab === 'moderation') {
     loadModeration();
+    loadAutomod();
     loadMediaOnly();
     initCases();
     attachMemberPicker(document.getElementById('pgUser'));
@@ -146,6 +147,10 @@ function onManageTabShown(tab) {
   if (tab === 'leveling') loadChatDrops();
   if (tab === 'gambling') loadGambleStats();
   if (tab === 'engagement') loadEngagement();
+  if (tab === 'shop') {
+    loadShop();
+    attachMemberPicker(document.getElementById('shMember'), { onPick: (u) => loadShopMember(u.id) });
+  }
   if (tab === 'tickets') {
     loadTickets();
     loadTicketHistory(tkState.page || 1);
@@ -1796,4 +1801,325 @@ function renderBirthdayPreview() {
     const q = e.target.value.trim().toLowerCase();
     panel.querySelectorAll('#sbIgnored .check-pill').forEach((p) => (p.style.display = !q || p.dataset.name.includes(q) ? '' : 'none'));
   });
+})();
+
+/* ------------------------------------------------------------------ Auto-mod (Moderation tab) */
+
+const amState = { loaded: false };
+const AM_RULES = ['flood', 'duplicates', 'walls', 'mentions', 'invites', 'links', 'caps'];
+
+function fillAutomod(s) {
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  const c = (id, val) => (document.getElementById(id).checked = !!val);
+  c('amEnabled', s.enabled);
+  AM_RULES.forEach((r) => c(`am_${r}`, s[r].enabled));
+  c('am_everyone', s.mentions.everyone);
+  v('amFloodMsgs', s.flood.messages);
+  v('amFloodSecs', s.flood.seconds);
+  v('amDupCount', s.duplicates.count);
+  v('amDupSecs', s.duplicates.seconds);
+  v('amWallLines', s.walls.maxLines);
+  v('amMentionMax', s.mentions.max);
+  v('amLinkMax', s.links.max);
+  v('amCapsPct', s.caps.percent);
+  v('amWarnings', s.warnings);
+  v('amMute', s.muteMinutes);
+  v('amReset', s.strikeResetHours);
+  c('amNotify', s.notify);
+  document.querySelectorAll('.am-role').forEach((el) => (el.checked = s.exemptRoleIds.includes(el.value)));
+  document.querySelectorAll('.am-channel').forEach((el) => (el.checked = s.exemptChannelIds.includes(el.value)));
+}
+
+function renderAutomodRecent(recent) {
+  document.getElementById('amRecent').innerHTML = recent.length
+    ? recent
+        .map(
+          (c) => `<div style="font-size:0.84rem; padding:0.45rem 0; border-top:1px solid var(--border-card);">
+            ${c.type === 'timeout' ? '⏳' : '⚠️'} <strong>${esc(c.name)}</strong> <span class="muted">· ${fromNow(new Date(c.createdAt).getTime())} · case #${c.caseId}</span><br>
+            <span class="muted">${esc(String(c.reason || '').replace(/^Auto-mod: /, ''))}</span></div>`
+        )
+        .join('')
+    : '<p class="muted" style="margin:0;">Nothing caught yet.</p>';
+}
+
+async function loadAutomod() {
+  if (!document.getElementById('amEnabled')) return;
+  let d;
+  try {
+    d = await manageApi('GET', 'moderation/automod');
+  } catch (err) {
+    document.getElementById('amRecent').innerHTML = emptyCard('⚠️', esc(err.message));
+    return;
+  }
+  if (!amState.loaded) fillAutomod(d.settings);
+  amState.loaded = true;
+  const warn = document.getElementById('amWarn');
+  warn.style.display = d.missingPerms.length ? '' : 'none';
+  warn.innerHTML = d.missingPerms.length ? `⚠️ Auto-mod needs LoofaryBot to have <strong>${d.missingPerms.map(esc).join(', ')}</strong>.` : '';
+  renderAutomodRecent(d.recent);
+}
+
+function readAutomod() {
+  const v = (id) => document.getElementById(id).value;
+  const c = (id) => document.getElementById(id).checked;
+  const rules = Object.fromEntries(AM_RULES.map((r) => [r, { enabled: c(`am_${r}`) }]));
+  Object.assign(rules.flood, { messages: v('amFloodMsgs'), seconds: v('amFloodSecs') });
+  Object.assign(rules.duplicates, { count: v('amDupCount'), seconds: v('amDupSecs') });
+  rules.walls.maxLines = v('amWallLines');
+  Object.assign(rules.mentions, { max: v('amMentionMax'), everyone: c('am_everyone') });
+  rules.links.max = v('amLinkMax');
+  rules.caps.percent = v('amCapsPct');
+  return {
+    enabled: c('amEnabled'),
+    rules,
+    warnings: v('amWarnings'),
+    muteMinutes: v('amMute'),
+    strikeResetHours: v('amReset'),
+    notify: c('amNotify'),
+    exemptRoleIds: [...document.querySelectorAll('.am-role:checked')].map((el) => el.value),
+    exemptChannelIds: [...document.querySelectorAll('.am-channel:checked')].map((el) => el.value)
+  };
+}
+
+async function saveAutomod() {
+  const data = await withButton(document.getElementById('amSave'), () => manageApi('POST', 'moderation/automod', readAutomod()), '🛡️ Auto-mod saved.');
+  if (data) {
+    fillAutomod(data.settings);
+    loadAutomod();
+  }
+}
+
+/* ------------------------------------------------------------------ XP shop */
+
+const shState = { items: [], types: {}, editing: null, memberId: null, loaded: false };
+
+function shopItemMeta(i) {
+  const t = shState.types[i.type] || {};
+  const bits = [t.label || i.type];
+  if (i.type === 'xpBoost') bits.push(`×${i.config.multiplier || 1.5} for ${i.config.durationHours || 24}h`);
+  if (i.type === 'extraGambles') bits.push(`+${i.config.plays || 3} plays`);
+  if (i.type === 'role') bits.push(`${roleLabel(i.config.roleId)}${i.config.durationHours ? ` for ${i.config.durationHours}h` : ''}`);
+  if (i.stock !== null) bits.push(i.sold >= i.stock ? 'sold out' : `${fmt(i.stock - i.sold)} of ${fmt(i.stock)} left`);
+  if (i.minLevel) bits.push(`level ${i.minLevel}+`);
+  if (i.maxPerUser === 0) bits.push('buy any number');
+  return bits.join(' · ');
+}
+
+function renderShop() {
+  const list = document.getElementById('shItems');
+  if (!shState.items.length) {
+    list.innerHTML = emptyCard('🛍️', 'No items yet. Add one, or restore the starter items.');
+    return;
+  }
+  list.innerHTML = shState.items
+    .map(
+      (i, idx) => `<div class="card item-card${i.enabled ? '' : ' muted-card'}">
+        <span style="font-size:1.6rem; width:2.2rem; text-align:center;">${esc(i.emoji)}</span>
+        <div class="item-main">
+          <div class="item-title">${esc(i.name)} <span class="status-chip ${i.enabled ? 'good' : 'off'}"><span class="dot"></span>${i.enabled ? `${fmt(i.price)} XP` : 'hidden'}</span></div>
+          <div class="item-meta">${esc(shopItemMeta(i))}</div>
+          <div class="item-meta">${i.owners ? `${fmt(i.owners)} owner${i.owners === 1 ? '' : 's'}${shState.types[i.type]?.toggle ? ` (${fmt(i.active)} using it)` : ''} · ${fmt(i.spent)} XP spent` : 'Nobody has bought it yet'}</div>
+        </div>
+        <span class="item-actions">
+          <button class="btn secondary small" title="Move up" onclick="moveShopItem(${idx}, -1)" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn secondary small" title="Move down" onclick="moveShopItem(${idx}, 1)" ${idx === shState.items.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="btn secondary small" onclick="openShopEditor('${i.id}')">Edit</button>
+        </span>
+      </div>`
+    )
+    .join('');
+}
+
+async function loadShop() {
+  let d;
+  try {
+    d = await manageApi('GET', 'shop');
+  } catch (err) {
+    document.getElementById('shItems').innerHTML = emptyCard('⚠️', esc(err.message));
+    return;
+  }
+  shState.items = d.items;
+  shState.types = d.types;
+  if (!shState.loaded) {
+    document.getElementById('shType').innerHTML = Object.entries(d.types)
+      .map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`)
+      .join('');
+  }
+  shState.loaded = true;
+  document.getElementById('shStatus').innerHTML = [
+    `<span class="status-chip ${d.enabled ? 'good' : 'off'}"><span class="dot"></span>${d.enabled ? 'Open' : 'Closed'}</span>`,
+    `<span class="status-chip"><span class="dot"></span>${fmt(d.items.filter((i) => i.enabled).length)} items</span>`,
+    `<span class="status-chip"><span class="dot"></span>${fmt(d.totals.spent)} XP spent by ${fmt(d.totals.buyers)} member${d.totals.buyers === 1 ? '' : 's'}</span>`,
+    d.levelingEnabled ? '' : '<span class="status-chip warn"><span class="dot"></span>Leveling is off — nobody can buy</span>'
+  ].join('');
+  document.getElementById('shSummary').textContent = `${d.items.length} item${d.items.length === 1 ? '' : 's'} · members see them in this order`;
+  document.getElementById('shRecent').innerHTML = d.recent.length
+    ? d.recent.map((r) => `<div style="font-size:0.86rem; padding:0.45rem 0; border-top:1px solid var(--border-card);"><strong>${esc(r.userTag || r.userId)}</strong> ${esc(r.summary)} <span class="muted">· ${fromNow(new Date(r.at).getTime())}</span></div>`).join('')
+    : '<p class="muted" style="margin:0;">No purchases yet.</p>';
+  renderShop();
+}
+
+function shopEditorShowFields() {
+  const type = document.getElementById('shType').value;
+  document.querySelectorAll('#shEditor [data-sh-for]').forEach((row) => (row.style.display = row.dataset.shFor.split(' ').includes(type) ? '' : 'none'));
+  document.getElementById('shTypeHelp').textContent = shState.types[type]?.help || '';
+  document.getElementById('shDurationHelp').textContent = type === 'role' ? 'Hours. 0 = keeps it forever.' : 'Hours. Buying again adds more time.';
+  renderShopPreview();
+}
+
+function openShopEditor(id = null) {
+  const item = id ? shState.items.find((i) => i.id === id) : null;
+  shState.editing = item;
+  const defaults = { type: 'collectible', name: '', emoji: '🛍️', description: '', price: 1000, stock: null, maxPerUser: 1, minLevel: 0, enabled: true, config: {} };
+  const i = item || defaults;
+  const v = (el, val) => (document.getElementById(el).value = val ?? '');
+  document.getElementById('shEditorTitle').textContent = item ? `Edit ${item.name}` : 'Add item';
+  v('shType', i.type);
+  document.getElementById('shType').disabled = !!item; // the kind is fixed once it exists
+  v('shName', i.name);
+  v('shEmoji', i.emoji);
+  v('shDesc', i.description);
+  v('shPrice', i.price);
+  v('shStock', i.stock);
+  v('shMax', i.maxPerUser);
+  v('shMinLevel', i.minLevel);
+  document.getElementById('shItemEnabled').checked = i.enabled;
+  v('shRole', i.config.roleId || '');
+  v('shDuration', i.config.durationHours ?? (i.type === 'xpBoost' ? 24 : 0));
+  v('shMult', i.config.multiplier ?? 1.5);
+  v('shPlays', i.config.plays ?? 3);
+  v('shReactEmoji', i.config.reactEmoji || '');
+  v('shCooldown', i.config.cooldownSeconds ?? 45);
+  v('shBadgeText', i.config.defaultText || '');
+  document.getElementById('shDeleteBtn').style.display = item ? '' : 'none';
+  shopEditorShowFields();
+  document.getElementById('shEditor').showModal();
+}
+
+function closeShopEditor() {
+  document.getElementById('shEditor').close();
+  if (typeof markSaved === 'function') markSaved();
+}
+
+function readShopEditor() {
+  const v = (id) => document.getElementById(id).value;
+  const type = v('shType');
+  const config = {};
+  if (type === 'role') Object.assign(config, { roleId: v('shRole'), durationHours: v('shDuration') });
+  if (type === 'xpBoost') Object.assign(config, { multiplier: v('shMult'), durationHours: v('shDuration') });
+  if (type === 'extraGambles') config.plays = v('shPlays');
+  if (type === 'autoReact') Object.assign(config, { reactEmoji: v('shReactEmoji'), cooldownSeconds: v('shCooldown') });
+  if (type === 'nickTag') config.reactEmoji = v('shReactEmoji');
+  if (type === 'badge') config.defaultText = v('shBadgeText');
+  return {
+    type,
+    name: v('shName').trim(),
+    emoji: v('shEmoji').trim(),
+    description: v('shDesc').trim(),
+    price: v('shPrice'),
+    stock: v('shStock'),
+    maxPerUser: v('shMax'),
+    minLevel: v('shMinLevel'),
+    enabled: document.getElementById('shItemEnabled').checked,
+    config
+  };
+}
+
+function renderShopPreview() {
+  const f = readShopEditor();
+  const bits = [`<strong>${fmt(Number(f.price) || 0)} XP</strong>`];
+  if (f.stock !== '') bits.push(`${fmt(Number(f.stock))} left`);
+  if (Number(f.minLevel)) bits.push(`level ${Number(f.minLevel)}+`);
+  document.getElementById('shPreview').innerHTML = `${esc(f.emoji || '🛍️')} <strong>${esc(f.name || 'Item name')}</strong> · ${bits.join(' · ')}<br>${esc(f.description || shState.types[f.type]?.help || '')}${f.enabled ? '' : '<br><em class="muted">Hidden from the shop</em>'}`;
+}
+
+async function saveShopItem() {
+  const body = readShopEditor();
+  if (!body.name) return showToast('❌ Give the item a name.');
+  const id = shState.editing?.id;
+  const data = await withButton(document.getElementById('shSaveBtn'), () => manageApi('POST', id ? `shop/items/${id}` : 'shop/items', body), id ? '✅ Item saved.' : '✅ Item added to the shop.');
+  if (data) {
+    closeShopEditor();
+    loadShop();
+  }
+}
+
+async function deleteShopItem() {
+  const item = shState.editing;
+  if (!item) return;
+  if (!confirm(`Delete “${item.name}”?${item.owners ? ` ${item.owners} member(s) own it and will lose it (no refund).` : ''}`)) return;
+  const data = await withButton(document.getElementById('shDeleteBtn'), () => manageApi('DELETE', `shop/items/${item.id}`), '🗑️ Item deleted.');
+  if (data) {
+    closeShopEditor();
+    loadShop();
+  }
+}
+
+async function moveShopItem(idx, dir) {
+  const items = shState.items;
+  const j = idx + dir;
+  if (j < 0 || j >= items.length) return;
+  [items[idx], items[j]] = [items[j], items[idx]];
+  renderShop();
+  await manageApi('POST', 'shop/order', { ids: items.map((i) => i.id) }).catch((err) => showToast(`❌ ${err.message}`));
+}
+
+async function restoreShopDefaults() {
+  const data = await withButton(null, () => manageApi('POST', 'shop/restore'), (d) => (d.added ? `↺ Put back ${d.added} starter item${d.added === 1 ? '' : 's'}.` : '✨ All starter items are already there.'));
+  if (data) loadShop();
+}
+
+async function loadShopMember(userId) {
+  shState.memberId = userId;
+  const box = document.getElementById('shMemberBox');
+  let d;
+  try {
+    d = await manageApi('GET', `shop/member/${userId}`);
+  } catch (err) {
+    box.innerHTML = `<p class="muted">❌ ${esc(err.message)}</p>`;
+    return;
+  }
+  const m = d.member;
+  const giveable = shState.items; // staff can give hidden items too
+  box.innerHTML = `
+    <div style="display:flex; align-items:center; gap:0.7rem; margin-bottom:0.8rem;"><img src="${esc(m.avatarUrl)}" alt="" style="width:36px; height:36px; border-radius:50%;"><div><strong>${esc(m.name)}</strong><div class="muted" style="font-size:0.8rem;">Level ${fmt(m.level)} · ${fmt(m.xp)} XP</div></div></div>
+    ${
+      d.owned.length
+        ? d.owned
+            .map(
+              (o) => `<div class="locked-row"><span>${esc(o.emoji)} <strong>${esc(o.name)}</strong> <span class="muted" style="font-size:0.8rem;">${shState.types[o.type]?.toggle ? (o.active ? '· on' : '· off') : ''}${o.quantity > 1 ? ` · ×${o.quantity}` : ''}${o.expiresAt ? ` · until ${new Date(o.expiresAt).toLocaleString()}` : ''}${o.custom?.text ? ` · “${esc(o.custom.text)}”` : ''}${o.custom?.emoji && shState.types[o.type]?.custom.includes('emoji') ? ` · ${esc(o.custom.emoji)}` : ''} · paid ${fmt(o.spent)} XP</span></span>
+              <button class="btn secondary small" onclick="removeShopOwned('${o.id}', this)">Take away</button></div>`
+            )
+            .join('')
+        : '<p class="muted" style="margin:0 0 0.6rem;">Doesn’t own anything yet.</p>'
+    }
+    <div style="display:flex; gap:0.5rem; margin-top:0.8rem; flex-wrap:wrap;">
+      <select id="shGiveItem" style="max-width:320px;">${giveable.map((i) => `<option value="${i.id}">${esc(i.emoji)} ${esc(i.name)}</option>`).join('')}</select>
+      <button class="btn small" id="shGiveBtn" onclick="giveShopItem()">🎁 Give for free</button>
+    </div>`;
+}
+
+async function giveShopItem() {
+  const itemId = document.getElementById('shGiveItem').value;
+  const data = await withButton(document.getElementById('shGiveBtn'), () => manageApi('POST', `shop/member/${shState.memberId}/give`, { itemId }), '🎁 Given!');
+  if (data) {
+    loadShopMember(shState.memberId);
+    loadShop();
+  }
+}
+
+async function removeShopOwned(id, btn) {
+  if (!confirm('Take this item away? Its effect is switched off and nothing is refunded.')) return;
+  const data = await withButton(btn, () => manageApi('DELETE', `shop/owned/${id}`), '🗑️ Taken away.');
+  if (data) {
+    loadShopMember(shState.memberId);
+    loadShop();
+  }
+}
+
+(function initShopUi() {
+  const dialog = document.getElementById('shEditor');
+  if (!dialog) return;
+  document.getElementById('shType').addEventListener('change', shopEditorShowFields);
+  dialog.querySelectorAll('input, textarea, select').forEach((el) => el.addEventListener('input', renderShopPreview));
 })();

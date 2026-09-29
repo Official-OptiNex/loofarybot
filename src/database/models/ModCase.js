@@ -14,7 +14,8 @@ const ModCaseSchema = new mongoose.Schema(
     durationMs: { type: Number, default: null }, // timeouts and temporary bans
     expiresAt: { type: Date, default: null }, // temporary bans: when to unban
     active: { type: Boolean, default: true }, // warns count toward escalation while active; temp bans until lifted
-    auto: { type: Boolean, default: false }, // created by warning escalation
+    auto: { type: Boolean, default: false }, // created by warning escalation or auto-mod
+    source: { type: String, default: null }, // 'automod' for auto-mod strikes
     dmSent: { type: Boolean, default: false },
     revokedBy: { type: String, default: null },
     revokedAt: { type: Date, default: null }

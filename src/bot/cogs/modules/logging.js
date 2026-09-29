@@ -19,7 +19,19 @@ const LOG_EVENTS = {
   memberLeave: 'Member leaves',
   voice: 'Voice channel activity',
   roles: 'Role changes',
-  modActions: 'Moderator actions (warns, timeouts, kicks, bans)'
+  modActions: 'Moderator actions (warns, timeouts, kicks, bans)',
+  automod: 'Auto-mod catches',
+  bulkDelete: 'Bulk deletes (purges)',
+  members: 'Nicknames, timeouts, boosts, server avatars',
+  bans: 'Bans & unbans (from anywhere)',
+  channels: 'Channels created, deleted, edited',
+  serverRoles: 'Server roles created, deleted, edited',
+  threads: 'Threads',
+  invites: 'Invites created & deleted',
+  emojis: 'Emoji & stickers',
+  server: 'Server settings',
+  commands: 'Slash commands used',
+  shop: 'XP shop purchases'
 };
 
 const truncate = (str, max = 1024) => (!str ? '*(empty)*' : str.length > max ? `${str.slice(0, max - 1)}…` : str);
