@@ -1,5 +1,7 @@
 const { PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
+const { getCachedConfig } = require('../../../database/configCache');
+const knownMembers = require('../../../database/knownMembers');
 const UserLevel = require('../../../database/models/UserLevel');
 const { XP_MIN, XP_MAX, XP_COOLDOWN_MS, LEVEL_XP_BASE } = require('../../../config');
 
@@ -50,8 +52,9 @@ function getXpMultiplier(config, channel, member) {
 }
 
 // Keeps the stored `level` in sync with `xp` after an atomic XP change.
-async function syncLevel(guildId, userId, levelXpBase) {
-  const record = await UserLevel.findOne({ guildId, userId });
+async function syncLevel(guildId, userId, levelXpBase, fresh = null) {
+  // `fresh` = the record an update just returned, which saves reading it again.
+  const record = fresh || (await UserLevel.findOne({ guildId, userId }));
   if (!record) return null;
   const oldLevel = record.level;
   const newLevel = levelForXp(record.xp, levelXpBase);
@@ -157,8 +160,9 @@ async function debitXp(guildId, userId, amount, levelXpBase) {
 async function handleMessageXp(message) {
   if (message.author.bot || !message.guild) return;
 
-  const config = await getOrCreateConfig(message.guild.id);
-  if (!config.levelingEnabled) return;
+  // Cached settings (read-only here) — this runs for every message.
+  const config = (await getCachedConfig(message.guild.id)) || (await getOrCreateConfig(message.guild.id));
+  if (config.levelingEnabled === false) return;
 
   const { xpMin, xpMax, cooldownMs, levelXpBase } = getEffectiveXpSettings(config);
   const guildId = message.guild.id;
@@ -173,11 +177,15 @@ async function handleMessageXp(message) {
 
   // Make sure the record exists, then award XP with a single conditional update so the cooldown
   // check and the XP write can't race each other (or a gambling payout landing at the same time).
-  const exists = await UserLevel.exists({ guildId, userId });
-  if (!exists) {
-    await UserLevel.create({ guildId, userId }).catch((err) => {
-      if (err.code !== 11000) throw err; // another message created it first — fine
-    });
+  // Members we've already seen have a record — skip the existence check (one less query per message).
+  if (!knownMembers.has(guildId, userId)) {
+    const exists = await UserLevel.exists({ guildId, userId });
+    if (!exists) {
+      await UserLevel.create({ guildId, userId }).catch((err) => {
+        if (err.code !== 11000) throw err; // another message created it first — fine
+      });
+    }
+    knownMembers.remember(guildId, userId);
   }
 
   const updated = await UserLevel.findOneAndUpdate(
@@ -187,7 +195,7 @@ async function handleMessageXp(message) {
   );
   if (!updated) return; // still on cooldown
 
-  const result = await syncLevel(guildId, userId, levelXpBase);
+  const result = await syncLevel(guildId, userId, levelXpBase, updated);
   if (result && result.newLevel > result.oldLevel) {
     await handleLevelUp(message, config, result.oldLevel, result.newLevel);
   }

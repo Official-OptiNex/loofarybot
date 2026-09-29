@@ -79,7 +79,7 @@ function jumpRow(url, label = 'Jump to message') {
 
 async function getLogSettings(guild, eventKey) {
   if (!guild) return null;
-  const config = await GuildConfig.findOne({ guildId: guild.id }, { logChannelId: 1, logEvents: 1, logsEnabled: 1 }).lean();
+  const config = await require('../../../database/configCache').getCachedConfig(guild.id);
   if (!config || config.logsEnabled === false) return null;
   if (config.logEvents && config.logEvents[eventKey] === false) return null;
   return config;
@@ -103,9 +103,12 @@ async function sendLog(guild, eventKey, embed, { entry = {}, components = [] } =
   try {
     const config = await getLogSettings(guild, eventKey);
     if (!config) return;
-    await LogEntry.create({ guildId: guild.id, type: eventKey, ...entry }).catch((err) =>
-      console.error(`Failed to store ${eventKey} log:`, err.message)
-    );
+    // When the database is nearly full only moderation logs are stored (the log channel still gets all).
+    if (require('./storage').shouldStoreLog(eventKey)) {
+      await LogEntry.create({ guildId: guild.id, type: eventKey, ...entry }).catch((err) =>
+        console.error(`Failed to store ${eventKey} log:`, err.message)
+      );
+    }
     const channel = resolveLogChannel(guild, config.logChannelId);
     if (!channel) return;
     await channel.send({ embeds: [embed.setTimestamp()], components, allowedMentions: { parse: [] } });

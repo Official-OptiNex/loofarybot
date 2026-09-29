@@ -1024,6 +1024,10 @@
             <div><div class="setting-title">Stored right now</div><div class="setting-help" id="logStorageInfo">Loading…</div></div>
             <div class="setting-control"><button class="btn secondary small" id="logCleanupBtn" onclick="runLogCleanup()">🧹 Clean up now</button></div>
           </div>
+          <div class="setting-row stack">
+            <div><div class="setting-title">Free-tier usage</div><div class="setting-help">Past 75% the bot trims old data harder and only keeps moderation logs until there's room again — you'll get a bot alert.</div></div>
+            <div id="logResources"></div>
+          </div>
           <p class="muted" style="font-size:0.78rem; margin:0.4rem 0 0;">Also cleaned automatically: finished chat drops after 30 days, ended polls after 90, ended giveaways after 180, and ticket transcripts 180 days after the ticket closes (the ticket stays in History).</p>
         </div>
         <div class="savebar"><button class="btn" onclick="saveLogs()">Save changes</button></div>
@@ -1693,7 +1697,17 @@
         const d = await res.json();
         if (!res.ok) throw new Error(d.error || 'Failed to load.');
         const top = Object.entries(d.byType).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t, n]) => `${LOG_LABELS[t] || t} ${fmt(n)}`).join(' · ');
-        el.textContent = d.logs ? `${fmt(d.logs)} log entries, oldest from ${new Date(d.oldest).toLocaleDateString()}${top ? ` — ${top}` : ''}.` : 'No log entries stored yet.';
+        el.textContent = d.logs ? `${fmt(d.logs)} log entries (max ${fmt(d.cap)}), oldest from ${new Date(d.oldest).toLocaleDateString()}${top ? ` — ${top}` : ''}.` : 'No log entries stored yet.';
+        const bar = (label, used, limit) => {
+          const pct = Math.min(100, Math.round((used / limit) * 100));
+          const tone = pct >= 75 ? 'var(--c-red, #ED4245)' : pct >= 50 ? 'var(--c-yellow, #F0B232)' : 'var(--c-green, #57F287)';
+          return `<div style="margin-top:0.45rem;"><div style="display:flex; justify-content:space-between; font-size:0.8rem;"><span>${label}</span><span class="muted">${fmt(used)} / ${fmt(limit)} MB · ${pct}%</span></div>
+            <div style="height:6px; border-radius:4px; background:var(--border-card); overflow:hidden;"><div style="height:100%; width:${pct}%; background:${tone};"></div></div></div>`;
+        };
+        document.getElementById('logResources').innerHTML =
+          (d.db ? bar('Database (MongoDB free tier)', d.db.usedMb, d.db.limitMb) : '<div class="muted" style="font-size:0.8rem;">Database size unavailable.</div>') +
+          bar('Bot memory (Render free tier)', d.memory.rssMb, d.memory.limitMb) +
+          (d.lowSpace ? '<p style="font-size:0.8rem; color:var(--c-red, #ED4245); margin:0.5rem 0 0;">⚠️ The database is nearly full — only moderation logs are being stored until space frees up.</p>' : '');
       } catch (err) {
         el.textContent = `❌ ${err.message}`;
       }

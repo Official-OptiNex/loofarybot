@@ -85,6 +85,7 @@ function msg(user,content,ch='general',extra={}){ const c=guild.channels.cache.g
   assert.equal(await A.handleAutomod(msg('ben','hey @everyone look'),cfg()),true,'@everyone attempt without permission');
   const before=rows.ModCase.length; await A.saveSettings(guild,{enabled:false}); assert.equal(await A.handleAutomod(msg('ben','discord.gg/other'),cfg()),false); assert.equal(rows.ModCase.length,before);
   await A.saveSettings(guild,{enabled:true});
+  await new Promise((r)=>setTimeout(r,20)); // logs are written in the background
   const amLogs=rows.LogEntry.filter(l=>l.type==='automod'); assert.ok(amLogs.length>=5); assert.match(amLogs[0].summary,/auto-mod: message spam → warning 1\/2/);
   console.log('✓ own-server invites, staff and exempt roles are left alone; @everyone attempts caught; off means off; every catch is logged');
 
@@ -198,6 +199,7 @@ function msg(user,content,ch='general',extra={}){ const c=guild.channels.cache.g
   // Gift from staff: free, logged.
   const xpBefore=rows.UserLevel.find(u=>u.userId==='ben').xp;
   b=await Shop.buy(guild,ben,id('badge'),{free:true,by:'Ada (dashboard)'}); assert.ok(b.ok); assert.equal(rows.UserLevel.find(u=>u.userId==='ben').xp,xpBefore);
+  await new Promise((r)=>setTimeout(r,20)); // the purchase log is written in the background
   assert.match(rows.LogEntry.filter(l=>l.type==='shop').at(-1).summary,/was given Custom badge by Ada/);
   const own=rows.ShopOwnership.find(o=>o.userId==='ben'&&o.type==='badge'); assert.ok((await Shop.removeOwned(guild,own._id)).ok); assert.ok(!rows.ShopOwnership.some(o=>o._id===own._id));
   // Shop closed.

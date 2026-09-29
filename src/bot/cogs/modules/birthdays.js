@@ -106,12 +106,6 @@ function botCanGiveRole(guild, roleId) {
 async function celebrate(guild, config, { now = new Date() } = {}) {
   const s = birthdaySettings(config);
   const today = dayKey(now);
-  const claimed = await GuildConfig.updateOne(
-    { guildId: guild.id, 'birthdays.lastRunDay': { $ne: today } },
-    { $set: { 'birthdays.lastRunDay': today } }
-  );
-  if (claimed.modifiedCount !== 1) return { skipped: true };
-
   const dates = datesFor(now);
   const rows = await Birthday.find({ guildId: guild.id, $or: dates, lastCelebrated: { $ne: today } }).lean();
   const members = [];
@@ -119,7 +113,14 @@ async function celebrate(guild, config, { now = new Date() } = {}) {
     const member = guild.members.cache.get(r.userId) || (await guild.members.fetch(r.userId).catch(() => null));
     if (member && !member.user.bot) members.push(member);
   }
+  // Nobody to celebrate (yet): don't use up today, so a birthday saved later today still gets its post.
   if (!members.length) return { celebrated: [] };
+
+  const claimed = await GuildConfig.updateOne(
+    { guildId: guild.id, 'birthdays.lastRunDay': { $ne: today } },
+    { $set: { 'birthdays.lastRunDay': today } }
+  );
+  if (claimed.modifiedCount !== 1) return { skipped: true };
 
   const channel = s.channelId ? guild.channels.cache.get(s.channelId) : null;
   const ids = members.map((m) => m.id);

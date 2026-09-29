@@ -147,6 +147,6 @@ module.exports = function registerReadyEvent(client) {
     require('../cogs/modules/shop').startShop(client);
 
     // Delete old log history and other finished data so the database stays small.
-    require('../cogs/modules/storage').startStorageCleanup();
+    require('../cogs/modules/storage').startStorageCleanup(client);
   });
 };

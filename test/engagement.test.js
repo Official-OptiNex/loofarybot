@@ -51,6 +51,8 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   console.log('✓ settings validated (no managed roles), birthdays saved, upcoming list sorted and skips members who left');
 
   await B.tick(client,new Date(Date.UTC(2027,1,28,13))); assert.equal(sent.length,0,'before the post hour: nothing');
+  await B.tick(client,new Date(Date.UTC(2027,1,27,15))); assert.equal(sent.length,0,'nobody on Feb 27');
+  assert.notEqual(cfg().birthdays.lastRunDay,'2027-02-27','a day with no birthdays isn’t used up (a birthday saved later that day still gets its post)');
   await B.tick(client,now);
   assert.equal(sent.length,1); const post=sent[0].m.payload;
   assert.match(post.embeds[0].data.description,/^🎂 HBD <@ann> and <@ben> from Loofary Lounge! \(2\)/);

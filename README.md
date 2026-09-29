@@ -275,8 +275,9 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 
   When the bot has View Audit Log, entries say who made the change.
 - **Storage:** the dashboard's **Log viewer** keeps history for 30 days by default (7, 14, 30, 60 or
-  90 under **Logs → Settings → Storage**). Older entries are deleted automatically every few hours,
-  or right away with **Clean up now**. Also cleaned automatically:
+  90 under **Logs → Settings → Storage**). A server also keeps at most **20,000 entries**, the newest,
+  so a busy day can't flood the database. Older entries are deleted every hour, or right away with
+  **Clean up now**. Also cleaned automatically:
   - finished chat drops after 30 days
   - ended polls after 90 days
   - ended giveaways after 180 days
@@ -513,7 +514,38 @@ amount, the announcement channel, or turns them off.
   - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,
     or copy any message in the server into the editor.
 
-## 7. Tests
+## 7. Staying inside the free tiers
+
+LoofaryBot is built to run for a long time on **MongoDB Atlas M0** (512 MB storage, ~100
+operations/second) and **Render's free web service** (512 MB RAM):
+- **Database size:**
+  - Log history has a time limit *and* a per-server entry cap (above).
+  - Finished drops, polls, giveaways and old ticket transcripts are cleaned up.
+  - Old backups are pruned (7 daily and 10 others per server).
+  - Dashboard change history expires after 180 days.
+  - An hourly **watchdog** checks the database size. Past **75% of 512 MB** it trims harder, stores
+    only moderation logs until there's room again (the Discord log channel still gets everything),
+    and posts one alert a day in the bot-alerts channel.
+  - **Logs → Settings → Storage** shows the database and memory usage against the free limits.
+- **Database load:**
+  - Server settings are cached for up to 30 seconds on the chat path. Any change from the dashboard
+    or a command clears the cache immediately.
+  - Chat XP skips re-reading records it just wrote.
+  - Together these take a chat message from ~5 database operations to ~2.
+  - The connection pool is capped at 10.
+- **Memory:**
+  - Discord's message cache is limited to 100 messages per channel, and messages older than 6 hours
+    are swept hourly.
+  - Presences aren't cached.
+  - All in-memory helpers (spam tracking, cooldowns, caches) are size-limited and cleaned up.
+- **Uptime:** keep UptimeRobot pinging `/health` so the free instance doesn't sleep. One service
+  running 24/7 uses ~744 of Render's 750 free hours a month, so don't run a second free service on
+  the same account.
+- **If you upgrade:** set `DB_STORAGE_LIMIT_MB`, `RAM_LIMIT_MB` or `LOG_MAX_ENTRIES` to match the new plan.
+
+See **[TESTING.md](TESTING.md)** for a step-by-step checklist to verify everything after deploying.
+
+## 8. Tests
 
 ```bash
 npm install
@@ -527,7 +559,7 @@ evaluated with [mingo](https://github.com/kofrasa/mingo) (a dev dependency), so 
 `$ifNull`, `$max`… operators are exercised. Each file runs in its own process; any database call a
 test didn't stub fails immediately instead of hanging.
 
-## 8. Notes & Limitations
+## 9. Notes & Limitations
 
 - Dashboard logins are stored in MongoDB (`web_sessions`), so they survive redeploys. Keep
   `SESSION_SECRET` set to the same long random value — changing it logs everyone out.

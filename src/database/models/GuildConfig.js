@@ -273,4 +273,16 @@ const GuildConfigSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Any write clears the short settings cache for that server (database/configCache.js).
+const { invalidate } = require('../configCache');
+GuildConfigSchema.post('save', (doc) => invalidate(doc.guildId));
+for (const op of ['updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'deleteOne', 'deleteMany', 'findOneAndDelete']) {
+  GuildConfigSchema.pre(op, function clearConfigCache() {
+    invalidate(this.getFilter?.().guildId);
+  });
+  GuildConfigSchema.post(op, function clearConfigCacheAfter() {
+    invalidate(this.getFilter?.().guildId); // again, in case a read refilled it mid-write
+  });
+}
+
 module.exports = mongoose.model('GuildConfig', GuildConfigSchema);

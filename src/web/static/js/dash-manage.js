@@ -428,7 +428,7 @@ function renderEntrants() {
             ${e.avatarUrl ? `<img src="${esc(e.avatarUrl)}" alt="">` : '<span class="entrant-avatar"></span>'}
             <div style="flex:1; min-width:0;"><strong>${esc(e.name || 'Left the server')}</strong> <span class="muted" style="font-size:0.78rem;">${esc(e.username ? '@' + e.username : e.id)}</span></div>
             ${e.won ? '<span class="status-chip good"><span class="dot"></span>Winner</span>' : ''}
-            ${e.tickets > 1 ? `<span class="status-chip"><span class="dot"></span>${e.tickets} tickets</span>` : ''}
+            ${e.tickets > 1 ? `<span class="status-chip"><span class="dot"></span>${e.tickets} tickets${e.why ? ` · ${esc(e.why)}` : ''}</span>` : ''}
             ${entrantState.ended ? '' : `<button class="btn secondary small" onclick="removeEntrant('${e.id}', this)">Remove</button>`}
           </div>`
         )

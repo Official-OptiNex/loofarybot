@@ -200,10 +200,14 @@ router.post('/guilds/:guildId/giveaways/:messageId', ...guard('giveaways'), asyn
 router.get('/guilds/:guildId/giveaways/:messageId/entrants', ...guard('giveaways'), async (req, res) => {
   const g = await findGiveaway(req, res);
   if (!g) return;
-  const weights = await giveaways.entryWeights(req.guild, g, g.entries);
+  const breakdowns = await giveaways.entryBreakdowns(req.guild, g, g.entries);
+  const roleName = (id) => req.guild.roles.cache.get(id)?.name || 'deleted role';
   const entrants = g.entries.map((id) => {
     const m = req.guild.members.cache.get(id);
-    return { id, name: m?.displayName || null, username: m?.user.username || null, avatarUrl: m?.displayAvatarURL?.({ size: 64 }) || null, tickets: weights.get(id) || 1, won: (g.winners || []).includes(id) };
+    const b = breakdowns.get(id) || { tickets: 1, best: null };
+    // Why they have that many tickets, e.g. "+2 boosting" or "+1 @OG".
+    const why = b.best ? `+${b.best.extra} ${b.best.kind === 'booster' ? 'boosting' : `@${roleName(b.best.roleId)}`}` : null;
+    return { id, name: m?.displayName || null, username: m?.user.username || null, avatarUrl: m?.displayAvatarURL?.({ size: 64 }) || null, tickets: b.tickets, why, won: (g.winners || []).includes(id) };
   });
   res.json({ entrants, total: entrants.length, tickets: entrants.reduce((n, e) => n + e.tickets, 0) });
 });

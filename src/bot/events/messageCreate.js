@@ -5,7 +5,7 @@ const { noteActivity } = require('../cogs/modules/chatDrops');
 const { handleCounting } = require('../cogs/modules/counting');
 const { handleAutomod } = require('../cogs/modules/automod');
 const { handleShopMessage } = require('../cogs/modules/shop');
-const GuildConfig = require('../../database/models/GuildConfig');
+const { getCachedConfig } = require('../../database/configCache');
 const { reportError } = require('../utils/errorReporter');
 
 module.exports = function registerMessageCreateEvent(client) {
@@ -14,7 +14,7 @@ module.exports = function registerMessageCreateEvent(client) {
       // Honeypot check runs first: if the message is in the trap channel it gets
       // deleted immediately, so it should never also count toward XP gain.
       if (message.guild) {
-        const guildConfig = await GuildConfig.findOne({ guildId: message.guild.id }).lean();
+        const guildConfig = await getCachedConfig(message.guild.id); // cached a few seconds — this runs for every message
         if (guildConfig && guildConfig.honeypotEnabled !== false && guildConfig.honeypotChannelId === message.channel.id) {
           return handleHoneypotMessage(message);
         }
