@@ -41,7 +41,7 @@ const msgOf=(d)=>guild.channels.cache.get(d.channelId).msgs.get(d.messageId);
   talk('general',5,true); await D.tick(client); assert.equal(dropRows.length,0,'bots don’t count as activity');
   talk('general',2); await D.tick(client); assert.equal(dropRows.length,0,'not enough activity yet');
   assert.equal(cfgRows[0].chatDrops.nextDropAt,due,'waiting keeps the due time');
-  talk('general',1); forced=[0,0]; await D.tick(client);
+  talk('general',1); forced=[0,0,0,0]; await D.tick(client); // next-drop delay, channel, amount, winners (0 → 1 winner)
   assert.equal(dropRows.length,1); let d=lastDrop(); assert.equal(d.channelId,'general'); assert.equal(d.amount,120); assert.equal(d.winners,1); assert.ok(d.messageId);
   const nd=new Date(cfgRows[0].chatDrops.nextDropAt).getTime(); assert.ok(nd>Date.now()+29*60e3,'next drop scheduled');
   const m=msgOf(d); assert.match(J(m.payload.embeds[0]),/XP Drop!.*\*\*120 XP\*\* for the first person to click/);
