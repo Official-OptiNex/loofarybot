@@ -1,7 +1,11 @@
 // Daily XP Pot: every XP lost in /gamble goes into today's pot (it keeps growing right up to the
 // draw). A few minutes before the end of the day (the draw time, UTC) the pot is posted with a live
-// countdown; everyone who chatted in the last hour is entered automatically, one wins the lot.
-// No one active, or the pot is too small? It rolls over to tomorrow.
+// countdown; everyone who chatted in the last hour is entered automatically. Prizes are tiered:
+// 1st place gets up to the top prize (3,000 XP by default), and each place after gets less than the
+// one above, from whatever's left. The number of winners is capped, and anything that doesn't fit
+// rolls over to tomorrow. No one active, or the pot is too small? It all rolls over.
+// The pot itself is capped too (10,000 XP by default): once it's full it's posted and drawn right
+// away, whatever the time, and further losses go into the next pot.
 const crypto = require('crypto');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
@@ -14,6 +18,10 @@ const TICK_MS = 15 * 1000;
 const EDIT_EVERY_MS = 30 * 1000; // live embed refresh (the countdown itself ticks client-side)
 const MESSAGE_GAP_MS = 20 * 1000; // messages closer together than this count once (no spam-to-enter)
 const LATE_LIMIT_MS = 12 * HOUR; // a draw missed while the bot was offline is still done within this
+const TIER_PERCENT = 70; // each place gets at most this % of the place above it
+const MIN_PRIZE = 10; // no prizes smaller than this — what's left rolls over instead
+const MEDALS = ['🥇', '🥈', '🥉'];
+const placeLabel = (i) => MEDALS[i] || `**#${i + 1}**`;
 
 const fmt = (n) => Number(Math.round(n)).toLocaleString('en-US');
 const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
@@ -23,8 +31,12 @@ const DEFAULT_DESCRIPTION =
   'Every XP lost in `/gamble` today goes into this pot — and it keeps growing right up to the draw.\n\n' +
   '**How to win**\n' +
   '💬 Chat in the server: **{min}+ messages in the last {window} minutes** before the draw and you’re entered automatically. No buttons, no cost.\n' +
-  '🎲 One random active member wins the **whole pot**.\n' +
-  '🔁 Nobody active, or the pot is too small? It rolls over to tomorrow.';
+  '🏆 Up to **{places} winners**, picked at random. 1st place gets up to **{max} XP**, and each place after gets less than the one above.\n' +
+  '🔥 The pot tops out at **{cap} XP**. When it’s full, it’s drawn right away, whatever the time.\n' +
+  '🔁 Whatever doesn’t fit, or a pot nobody is active for, rolls over to tomorrow.';
+
+const DEFAULT_WIN_MESSAGE = '🎉 The **Daily XP Pot** has been drawn: **{pot} XP** to {count}!\n{winners}';
+const OLD_WIN_MESSAGE = '🎉 {winner} won the **Daily XP Pot** — **{pot} XP**! 💰'; // before tiered prizes
 
 function potSettings(config) {
   const p = (config && config.xpPot) || {};
@@ -39,6 +51,9 @@ function potSettings(config) {
     minMessages: int(p.minMessages, 3, 1, 50),
     sharePercent: int(p.sharePercent, 100, 1, 100),
     minPot: int(p.minPot, 100, 0, 1000000),
+    maxPrize: int(p.maxPrize, 3000, MIN_PRIZE, 1000000),
+    maxWinners: int(p.maxWinners, 10, 1, 25),
+    maxPot: int(p.maxPot, 10000, 100, 1000000),
     pingRoleId: p.pingRoleId || null,
     embed: {
       title: e.title || '💰 Daily XP Pot',
@@ -48,8 +63,36 @@ function potSettings(config) {
       imageUrl: e.imageUrl || null,
       footer: e.footer ?? 'Losses today = someone’s win tonight'
     },
-    winMessage: p.winMessage || '🎉 {winner} won the **Daily XP Pot** — **{pot} XP**! 💰'
+    winMessage: p.winMessage && p.winMessage !== OLD_WIN_MESSAGE ? p.winMessage : DEFAULT_WIN_MESSAGE
   };
+}
+
+/**
+ * Splits a pot into prizes for 1st, 2nd, 3rd…: 1st gets up to `maxPrize`, and every place after gets
+ * at most 70% of the place above, from whatever is left. At most `maxWinners` places (and never more
+ * than the people entered), no prize under 10 XP. Returns { prizes, leftover } — leftover rolls over.
+ */
+function prizeLadder(amount, entrants, s) {
+  const prizes = [];
+  let left = Math.max(0, Math.floor(amount || 0));
+  let cap = s.maxPrize;
+  const places = Math.min(s.maxWinners, Math.max(0, entrants));
+  while (prizes.length < places && left >= MIN_PRIZE && cap >= MIN_PRIZE) {
+    const prize = Math.min(left, cap);
+    prizes.push(prize);
+    left -= prize;
+    cap = Math.floor((prize * TIER_PERCENT) / 100);
+  }
+  return { prizes, leftover: left };
+}
+
+/** "🥇 3,000 · 🥈 2,100 · 🥉 1,470" (+ what rolls over) — for the live post and previews. */
+function describeLadder(amount, entrants, s) {
+  const { prizes, leftover } = prizeLadder(amount, entrants, s);
+  if (!prizes.length) return { text: 'Not enough in the pot yet', prizes, leftover };
+  let text = prizes.map((p, i) => `${placeLabel(i)} ${fmt(p)}`).join(' · ');
+  if (leftover > 0) text += `\n-# +${fmt(leftover)} XP rolls over to tomorrow`;
+  return { text, prizes, leftover };
 }
 
 /** The next draw time strictly after `now` (drawHour:00 UTC today, or tomorrow). */
@@ -77,21 +120,40 @@ async function addLoss(guildId, userId, loss, now = Date.now()) {
 /**
  * Adds XP to the next pot that hasn't been drawn yet (the one for the next draw after `from`,
  * skipping days already drawn). `userId` counts it as their contribution; without it, it's rollover.
+ * A pot never goes over `maxPot`: what doesn't fit goes into the pot after it.
  */
 async function addToOpenPot(guildId, s, amount, { userId = null, from = Date.now(), skipDay = null } = {}) {
   let drawAt = nextDrawAt(from, s.drawHour);
   if (skipDay && dayKey(drawAt) === skipDay) drawAt = new Date(drawAt.getTime() + 24 * HOUR);
-  const inc = userId ? { amount, [`contributors.${userId}`]: amount } : { amount, rolledOver: amount };
-  for (let i = 0; i < 3; i++) {
-    try {
-      await XpPot.updateOne({ guildId, day: dayKey(drawAt), status: { $in: ['collecting', 'posted'] } }, { $inc: inc, $setOnInsert: { drawAt, status: 'collecting' } }, { upsert: true });
-      return true;
-    } catch (err) {
-      if (err.code !== 11000) throw err;
-      drawAt = new Date(drawAt.getTime() + 24 * HOUR); // that day is already drawn — next one
+  let left = Math.floor(amount);
+  let retries = 5;
+  for (let days = 0; days < 30 && left > 0; ) {
+    const day = dayKey(drawAt);
+    const pot = await XpPot.findOne({ guildId, day }, { amount: 1, status: 1 }).lean();
+    const open = !pot || ['collecting', 'posted'].includes(pot.status);
+    const room = open ? s.maxPot - (pot?.amount || 0) : 0;
+    const add = Math.min(left, room);
+    if (add > 0) {
+      const inc = userId ? { amount: add, [`contributors.${userId}`]: add } : { amount: add, rolledOver: add };
+      // Only if it still fits (someone else may have just added to it); otherwise look again.
+      const filter = { guildId, day, status: { $in: ['collecting', 'posted'] } };
+      if (pot) filter.amount = { $lte: s.maxPot - add };
+      try {
+        const r = await XpPot.updateOne(filter, { $inc: inc, $setOnInsert: { drawAt, status: 'collecting' } }, { upsert: !pot });
+        if (r.modifiedCount || r.upsertedCount || r.upsertedId) {
+          left -= add;
+          continue;
+        }
+      } catch (err) {
+        if (err.code !== 11000) throw err;
+      }
+      if (--retries < 0) break; // raced with other updates: look at this day again
+      continue;
     }
+    drawAt = new Date(drawAt.getTime() + 24 * HOUR); // drawn already, or full — the next one
+    days++;
   }
-  return false;
+  return left < amount;
 }
 
 // ---------------------------------------------------------------- Who's active
@@ -146,6 +208,8 @@ setInterval(() => {
 
 // ---------------------------------------------------------------- Embeds
 
+const winnersList = (winners) => winners.map((w, i) => `${placeLabel(i)} <@${w.userId}> — **${fmt(w.amount)} XP**`).join('\n');
+
 function topContributors(pot, n = 3) {
   const entries = pot?.contributors instanceof Map ? [...pot.contributors.entries()] : Object.entries(pot?.contributors || {});
   return entries.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, n);
@@ -158,31 +222,38 @@ function fill(text, vars) {
 /**
  * The pot embed. phase: 'live' (countdown), 'done' (winner), 'rolled' (nobody won), 'preview'.
  */
-function buildEmbed(pot, s, { phase = 'live', entrants = null, winnerId = null, won = 0, drawAt = null } = {}) {
+function buildEmbed(pot, s, { phase = 'live', entrants = null, winners = [], leftover = 0, drawAt = null } = {}) {
   const at = drawAt || pot?.drawAt || new Date();
   const amount = pot?.amount || 0;
-  const vars = { pot: fmt(amount), draw: ts(at), time: ts(at, 't'), min: s.minMessages, window: s.windowMinutes, entrants: entrants ?? '—' };
+  const vars = { pot: fmt(amount), draw: ts(at), time: ts(at, 't'), min: s.minMessages, window: s.windowMinutes, entrants: entrants ?? '—', max: fmt(s.maxPrize), places: s.maxWinners, cap: fmt(s.maxPot) };
   const embed = new EmbedBuilder()
     .setColor(phase === 'done' ? '#57F287' : phase === 'rolled' ? '#4E5058' : s.embed.color)
     .setTitle(phase === 'done' ? `${s.embed.title} — we have a winner!` : phase === 'rolled' ? `${s.embed.title} — rolled over` : s.embed.title)
     .setDescription(fill(s.embed.description || DEFAULT_DESCRIPTION, vars).slice(0, 4000));
   if (phase === 'done') {
-    embed.addFields({ name: '🏆 Winner', value: `<@${winnerId}>`, inline: true }, { name: '💰 Won', value: `**${fmt(won)} XP**`, inline: true }, { name: '🎟️ Entered', value: fmt(entrants || 0), inline: true });
+    embed.addFields(
+      { name: winners.length === 1 ? '🏆 Winner' : '🏆 Winners', value: winnersList(winners).slice(0, 1024) },
+      { name: '💰 Paid out', value: `**${fmt(winners.reduce((t, w) => t + w.amount, 0))} XP**`, inline: true },
+      { name: '🎟️ Entered', value: fmt(entrants || 0), inline: true }
+    );
+    if (leftover > 0) embed.addFields({ name: '🔁 Rolled over', value: `${fmt(leftover)} XP → tomorrow`, inline: true });
   } else if (phase === 'rolled') {
     embed.addFields(
       { name: '💰 Pot', value: `**${fmt(amount)} XP** → tomorrow`, inline: true },
-      { name: 'Why', value: amount < s.minPot ? `Under the ${fmt(s.minPot)} XP minimum` : 'Nobody was active in the last hour', inline: true }
+      { name: 'Why', value: amount < Math.max(s.minPot, MIN_PRIZE) ? `Under the ${fmt(Math.max(s.minPot, MIN_PRIZE))} XP minimum` : 'Nobody was active in the last hour', inline: true }
     );
   } else {
     embed.addFields(
-      { name: '💰 Pot', value: `**${fmt(amount)} XP**${pot?.rolledOver ? `\n-# incl. ${fmt(pot.rolledOver)} rolled over` : ''}`, inline: true },
+      { name: '💰 Pot', value: `**${fmt(amount)}** / ${fmt(s.maxPot)} XP${amount >= s.maxPot ? '\n🔥 **Full!** Drawn early' : ''}${pot?.rolledOver ? `\n-# incl. ${fmt(pot.rolledOver)} rolled over` : ''}`, inline: true },
       { name: '⏳ Draw', value: `${ts(at)}\n-# ${ts(at, 't')}`, inline: true },
       { name: '🎟️ Entered so far', value: entrants === null ? '—' : fmt(entrants), inline: true }
     );
+    // Prizes as they'd be if drawn right now (with nobody entered yet: as if every place is filled).
+    const ladder = describeLadder(amount, entrants ? entrants : s.maxWinners, s);
+    embed.addFields({ name: entrants ? '🏆 Prizes right now' : '🏆 Prizes', value: ladder.text });
   }
   const top = topContributors(pot);
-  const medals = ['🥇', '🥈', '🥉'];
-  embed.addFields({ name: '📉 Top pot contributors', value: top.length ? top.map(([id, v], i) => `${medals[i]} <@${id}> — ${fmt(v)} XP`).join('\n') : 'Nobody has lost any XP yet… 👀' });
+  embed.addFields({ name: '📉 Top pot contributors', value: top.length ? top.map(([id, v], i) => `${MEDALS[i]} <@${id}> — ${fmt(v)} XP`).join('\n') : 'Nobody has lost any XP yet… 👀' });
   if (s.embed.thumbnailUrl) embed.setThumbnail(s.embed.thumbnailUrl);
   if (s.embed.imageUrl) embed.setImage(s.embed.imageUrl);
   if (s.embed.footer) embed.setFooter({ text: s.embed.footer.slice(0, 2048) });
@@ -226,7 +297,17 @@ async function refreshLive(guild, s, pot, now = Date.now()) {
   await msg.edit({ embeds: [buildEmbed(pot, s, { entrants })] }).catch(() => null);
 }
 
-/** Draws a pot whose time has come: picks the winner, pays out, or rolls it over. */
+/** Picks `n` different members at random, in order (the first one picked gets 1st place). */
+function pickWinners(entrants, n) {
+  const pool = [...entrants];
+  for (let i = 0; i < n; i++) {
+    const j = i + crypto.randomInt(pool.length - i);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, n);
+}
+
+/** Draws a pot whose time has come: picks the winners, pays out, or rolls it over. */
 async function drawPot(guild, s, potId, { now = Date.now(), adjustXp = null } = {}) {
   const pot = await XpPot.findOneAndUpdate({ _id: potId, status: { $in: ['collecting', 'posted'] } }, { $set: { status: 'done' } }, { new: true });
   if (!pot) return null; // someone else drew it
@@ -236,32 +317,46 @@ async function drawPot(guild, s, potId, { now = Date.now(), adjustXp = null } = 
   const amount = pot.amount || 0;
   const channel = (pot.channelId && guild.channels.cache.get(pot.channelId)) || potChannel(guild, s);
   const msg = pot.messageId ? await channel?.messages?.fetch(pot.messageId).catch(() => null) : null;
+  const rollOver = (xp) =>
+    xp > 0 ? addToOpenPot(guild.id, s, xp, { from: Math.max(now, drawAt.getTime()), skipDay: pot.day }).catch((err) => console.warn('[xpPot] rollover failed:', err.message)) : null;
+  const { prizes, leftover } = prizeLadder(amount, entrants.length, s);
 
-  if (amount < Math.max(1, s.minPot) || !entrants.length) {
+  if (amount < Math.max(1, s.minPot) || !prizes.length) {
     // Roll the XP over to the next draw.
     await XpPot.updateOne({ _id: pot._id }, { $set: { status: 'rolled', entrants: entrants.length } });
-    if (amount > 0) await addToOpenPot(guild.id, s, amount, { from: Math.max(now, drawAt.getTime()), skipDay: pot.day }).catch((err) => console.warn('[xpPot] rollover failed:', err.message));
+    await rollOver(amount);
     const embed = buildEmbed(pot, s, { phase: 'rolled', entrants: entrants.length });
     // Only a pot that was posted says so — quiet days (tiny pots) roll over silently.
     if (msg) await msg.edit({ content: null, embeds: [embed] }).catch(() => null);
     return { rolled: true, amount, entrants: entrants.length };
   }
 
-  const winnerId = entrants[crypto.randomInt(entrants.length)];
+  const winners = pickWinners(entrants, prizes.length).map((userId, i) => ({ userId, place: i + 1, amount: prizes[i] }));
   const pay = adjustXp || require('./leveling').adjustXp;
-  await pay(guild, winnerId, amount).catch((err) => console.error('[xpPot] payout failed:', err.message));
-  await XpPot.updateOne({ _id: pot._id }, { $set: { winnerId, won: amount, entrants: entrants.length } });
-  const embed = buildEmbed(pot, s, { phase: 'done', entrants: entrants.length, winnerId, won: amount });
+  for (const w of winners) await pay(guild, w.userId, w.amount).catch((err) => console.error('[xpPot] payout failed:', err.message));
+  const paid = amount - leftover;
+  await XpPot.updateOne({ _id: pot._id }, { $set: { winners, winnerId: winners[0].userId, won: paid, leftover, entrants: entrants.length } });
+  await rollOver(leftover);
+  const embed = buildEmbed(pot, s, { phase: 'done', entrants: entrants.length, winners, leftover });
   if (msg) await msg.edit({ content: null, embeds: [embed] }).catch(() => null);
   const top = topContributors(pot).map(([id]) => `<@${id}>`).join(', ');
+  const list = winnersList(winners);
+  let content = fill(s.winMessage, {
+    winner: `<@${winners[0].userId}>`,
+    winners: list,
+    count: winners.length === 1 ? '1 winner' : `${winners.length} winners`,
+    pot: fmt(paid),
+    prize: fmt(winners[0].amount),
+    rollover: fmt(leftover),
+    entrants: entrants.length,
+    contributors: top || 'nobody'
+  });
+  // A custom message that only names {winner} still pings everyone who won something.
+  if (winners.length > 1 && !s.winMessage.includes('{winners}')) content += `\n${list}`;
   await channel
-    ?.send({
-      content: fill(s.winMessage, { winner: `<@${winnerId}>`, pot: fmt(amount), entrants: entrants.length, contributors: top || 'nobody' }).slice(0, 2000),
-      embeds: msg ? [] : [embed],
-      allowedMentions: { users: [winnerId] }
-    })
+    ?.send({ content: content.slice(0, 2000), embeds: msg ? [] : [embed], allowedMentions: { users: winners.map((w) => w.userId) } })
     .catch(() => null);
-  return { winnerId, amount, entrants: entrants.length };
+  return { winners, amount: paid, leftover, entrants: entrants.length };
 }
 
 async function tickGuild(client, config, now = Date.now()) {
@@ -278,7 +373,10 @@ async function tickGuild(client, config, now = Date.now()) {
     }
     await drawPot(guild, s, pot._id, { now });
   }
-  // 2) Countdown time: post the pot, then keep its numbers fresh.
+  // 2) A full pot starts its countdown right away, whatever the time.
+  const full = await XpPot.findOne({ guildId: guild.id, status: 'collecting', amount: { $gte: s.maxPot } }).sort({ drawAt: 1 }).lean();
+  if (full) await postPot(guild, s, new Date(now + s.countdownMinutes * 60000), now, full.day);
+  // 3) Countdown time: post the pot, then keep its numbers fresh.
   const drawAt = nextDrawAt(now, s.drawHour);
   if (now >= drawAt.getTime() - s.countdownMinutes * 60000) {
     const pot = await XpPot.findOne({ guildId: guild.id, day: dayKey(drawAt) }).lean();
@@ -287,6 +385,9 @@ async function tickGuild(client, config, now = Date.now()) {
     if (pot?.status === 'collecting' && pot.amount >= Math.max(1, s.minPot)) await postPot(guild, s, drawAt, now);
     else if (pot?.status === 'posted') await refreshLive(guild, s, pot, now);
   }
+  // A pot drawn early because it filled up counts down outside that window.
+  const early = await XpPot.find({ guildId: guild.id, status: 'posted', drawAt: { $gt: new Date(now) } }).lean();
+  for (const pot of early) await refreshLive(guild, s, pot, now); // at most every 30s per pot
 }
 
 async function tick(client, now = Date.now()) {
@@ -360,6 +461,9 @@ function cleanSettings(guild, input) {
     if (input.minMessages !== undefined) patch['xpPot.minMessages'] = whole(input.minMessages, 1, 50, 'Messages needed');
     if (input.sharePercent !== undefined) patch['xpPot.sharePercent'] = whole(input.sharePercent, 1, 100, 'Share of losses (%)');
     if (input.minPot !== undefined) patch['xpPot.minPot'] = whole(input.minPot, 0, 1000000, 'Minimum pot');
+    if (input.maxPrize !== undefined) patch['xpPot.maxPrize'] = whole(input.maxPrize, MIN_PRIZE, 1000000, 'The 1st place prize');
+    if (input.maxWinners !== undefined) patch['xpPot.maxWinners'] = whole(input.maxWinners, 1, 25, 'Winners');
+    if (input.maxPot !== undefined) patch['xpPot.maxPot'] = whole(input.maxPot, 100, 1000000, 'The pot cap');
     if (input.pingRoleId !== undefined) {
       const id = input.pingRoleId ? String(input.pingRoleId) : null;
       if (id && !guild.roles.cache.has(id)) return { error: 'That role is not in this server.' };
@@ -375,7 +479,7 @@ function cleanSettings(guild, input) {
     if (e.thumbnailUrl !== undefined) patch['xpPot.embed.thumbnailUrl'] = url(e.thumbnailUrl, 'The thumbnail');
     if (e.imageUrl !== undefined) patch['xpPot.embed.imageUrl'] = url(e.imageUrl, 'The banner');
     if (e.footer !== undefined) patch['xpPot.embed.footer'] = String(e.footer || '').trim().slice(0, 2048);
-    if (input.winMessage !== undefined) patch['xpPot.winMessage'] = String(input.winMessage || '').trim().slice(0, 1500) || '🎉 {winner} won the **Daily XP Pot** — **{pot} XP**! 💰';
+    if (input.winMessage !== undefined) patch['xpPot.winMessage'] = String(input.winMessage || '').trim().slice(0, 1500) || DEFAULT_WIN_MESSAGE;
   } catch (err) {
     return { error: err.message };
   }
@@ -395,7 +499,11 @@ async function saveSettings(guild, input) {
 
 module.exports = {
   DEFAULT_DESCRIPTION,
+  DEFAULT_WIN_MESSAGE,
+  TIER_PERCENT,
   potSettings,
+  prizeLadder,
+  describeLadder,
   nextDrawAt,
   dayKey,
   addLoss,

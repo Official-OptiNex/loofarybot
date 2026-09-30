@@ -4,7 +4,7 @@
           <h3 style="margin:0;">💰 Daily XP Pot</h3>
           <span class="hero-status" id="potStatus" style="margin:0;"></span>
         </div>
-        <p class="muted" style="font-size:0.84rem; margin-top:0;">Every XP lost in <code>/gamble</code> goes into today’s pot, and it keeps growing until the draw. A few minutes before the end of the day it’s posted with a live countdown. Everyone who chatted in the last hour is entered automatically, and one wins it all. Same as <code>/pot</code>.</p>
+        <p class="muted" style="font-size:0.84rem; margin-top:0;">Every XP lost in <code>/gamble</code> goes into today’s pot, and it keeps growing until the draw. A few minutes before the end of the day it’s posted with a live countdown. Everyone who chatted in the last hour is entered automatically. Prizes are tiered: 1st place gets the most (up to the top prize), 2nd a bit less, 3rd less again, and so on. The pot holds up to a cap (10,000 XP by default), and when it’s full it’s drawn right away. Anything that doesn’t fit rolls over. Same as <code>/pot</code>.</p>
         <div class="split">
           <div class="settings-card" style="padding:0;">
             <div class="setting-row">
@@ -36,6 +36,25 @@
               <div class="setting-control"><input type="number" id="potMin" min="0" max="1000000" step="50"></div>
             </div>
             <div class="setting-row">
+              <div><div class="setting-title">Top prize (1st place)</div><div class="setting-help">The most XP one person can win. Each place after gets at most 70% of the place above.</div></div>
+              <div class="setting-control"><input type="number" id="potMaxPrize" min="10" max="1000000" step="100"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Winners (at most)</div><div class="setting-help">Never more than the people entered. What’s left after the last place rolls over.</div></div>
+              <div class="setting-control"><input type="number" id="potMaxWinners" min="1" max="25"></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Pot cap</div><div class="setting-help">The most XP the pot holds. When it’s full, it’s posted and drawn right away (after the countdown), whatever the time. Losses after that go into the next pot.</div></div>
+              <div class="setting-control"><input type="number" id="potMaxPot" min="100" max="1000000" step="500"></div>
+            </div>
+            <div class="setting-row stack">
+              <div><div class="setting-title">Prize ladder</div><div class="setting-help">Try a pot size to see how it would be split.</div></div>
+              <div class="setting-control" style="flex-direction:column; align-items:stretch;">
+                <div style="display:flex; gap:0.5rem; align-items:center;"><span class="muted">If the pot is</span><input type="number" id="potLadderAmount" min="0" max="10000000" step="500" style="flex:0 0 110px; min-width:110px;" aria-label="Pot size"><span class="muted">XP with enough people entered:</span></div>
+                <div id="potLadder" style="font-size:0.85rem; margin-top:0.4rem;"></div>
+              </div>
+            </div>
+            <div class="setting-row">
               <div><div class="setting-title">Ping</div><div class="setting-help">When the countdown starts.</div></div>
               <div class="setting-control"><select id="potPing"><option value="">No ping</option><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></div>
             </div>
@@ -45,7 +64,7 @@
               <div class="setting-control"><input id="potTitle" maxlength="256" placeholder="💰 Daily XP Pot"><input type="color" id="potColor" value="#F1C40F" style="flex:0 0 56px; min-width:56px;" aria-label="Color"></div>
             </div>
             <div class="setting-row stack">
-              <div><div class="setting-title">Text</div><div class="setting-help">Leave empty for the built-in “how it works”. Placeholders: <code>{pot}</code> <code>{draw}</code> <code>{time}</code> <code>{min}</code> <code>{window}</code></div></div>
+              <div><div class="setting-title">Text</div><div class="setting-help">Leave empty for the built-in “how it works”. Placeholders: <code>{pot}</code> <code>{cap}</code> <code>{max}</code> (top prize) <code>{places}</code> <code>{draw}</code> <code>{time}</code> <code>{min}</code> <code>{window}</code></div></div>
               <textarea id="potDesc" rows="4" maxlength="3000"></textarea>
             </div>
             <div class="setting-row">
@@ -57,7 +76,7 @@
               <div class="setting-control"><input id="potFooter" maxlength="200"></div>
             </div>
             <div class="setting-row stack">
-              <div><div class="setting-title">Winner message</div><div class="setting-help"><code>{winner}</code> <code>{pot}</code> <code>{entrants}</code> <code>{contributors}</code> (the top 3)</div></div>
+              <div><div class="setting-title">Winner message</div><div class="setting-help"><code>{winners}</code> (everyone who won, with their prize) <code>{winner}</code> (1st place) <code>{count}</code> <code>{pot}</code> (paid out) <code>{prize}</code> (1st prize) <code>{rollover}</code> <code>{entrants}</code> <code>{contributors}</code> (the top 3). Leave empty for the default.</div></div>
               <input id="potWin" maxlength="1500">
             </div>
             <div class="savebar" style="position:static;">

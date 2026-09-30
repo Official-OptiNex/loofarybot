@@ -12,8 +12,10 @@ const XpPotSchema = new mongoose.Schema(
     status: { type: String, enum: ['collecting', 'posted', 'done', 'rolled'], default: 'collecting' },
     channelId: { type: String, default: null },
     messageId: { type: String, default: null },
-    winnerId: { type: String, default: null },
-    won: { type: Number, default: 0 },
+    winners: { type: [{ _id: false, userId: String, place: Number, amount: Number }], default: [] }, // 1st, 2nd, 3rd…
+    winnerId: { type: String, default: null }, // 1st place
+    won: { type: Number, default: 0 }, // total paid out
+    leftover: { type: Number, default: 0 }, // didn't fit the prizes — rolled over to the next pot
     entrants: { type: Number, default: 0 }
   },
   { timestamps: true }

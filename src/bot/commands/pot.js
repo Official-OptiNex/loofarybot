@@ -5,7 +5,7 @@ const { dashboardUrl } = require('../cogs/modules/help');
 
 const data = new SlashCommandBuilder()
   .setName('pot')
-  .setDescription('The Daily XP Pot — gambling losses, won by someone who chatted in the last hour')
+  .setDescription('The Daily XP Pot — gambling losses, shared out to people who chatted in the last hour')
   .setDMPermission(false)
   .addSubcommand((s) => s.setName('view').setDescription("Today's pot, the top contributors and when it's drawn"))
   .addSubcommand((s) => s.setName('history').setDescription('Recent winners'))
@@ -18,6 +18,9 @@ const data = new SlashCommandBuilder()
       .addIntegerOption((o) => o.setName('countdown').setDescription('Minutes of live countdown before the draw (default 10)').setMinValue(1).setMaxValue(60))
       .addIntegerOption((o) => o.setName('messages').setDescription('Messages in the last hour to be entered (default 3)').setMinValue(1).setMaxValue(50))
       .addIntegerOption((o) => o.setName('min_pot').setDescription('Smaller pots roll over to tomorrow (default 100)').setMinValue(0).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('top_prize').setDescription('Most XP 1st place can win (default 3,000); the rest goes to 2nd, 3rd…').setMinValue(10).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('winners').setDescription('Most winners per draw (default 10); anything left rolls over').setMinValue(1).setMaxValue(25))
+      .addIntegerOption((o) => o.setName('pot_cap').setDescription('Most XP the pot holds (default 10,000); when full, it is drawn right away').setMinValue(100).setMaxValue(1000000))
       .addIntegerOption((o) => o.setName('share').setDescription('% of each gambling loss that goes into the pot (default 100)').setMinValue(1).setMaxValue(100))
       .addRoleOption((o) => o.setName('ping').setDescription('Role to ping when the countdown starts'))
   )
@@ -31,7 +34,7 @@ const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName('image').setDescription('Banner image link (or "none")').setMaxLength(500))
       .addStringOption((o) => o.setName('thumbnail').setDescription('Small image link (or "none")').setMaxLength(500))
       .addStringOption((o) => o.setName('footer').setDescription('Footer text').setMaxLength(200))
-      .addStringOption((o) => o.setName('win_message').setDescription('Winner message — {winner} {pot} {entrants} {contributors}').setMaxLength(1500))
+      .addStringOption((o) => o.setName('win_message').setDescription('Winner message — {winners} {winner} {count} {pot} {prize} {rollover} {entrants}; "default" resets').setMaxLength(1500))
   )
   .addSubcommand((s) =>
     s.setName('toggle').setDescription('(Staff) Turn the Daily XP Pot on or off').addBooleanOption((o) => o.setName('enabled').setDescription('On or off').setRequired(true))
@@ -40,6 +43,14 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('preview').setDescription('(Staff) See how the pot embed looks, just for you'));
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
+const MEDALS = ['🥇', '🥈', '🥉'];
+// "🥇 <@a> 3,000 · 🥈 <@b> 2,100 · +2 more (7,000 XP, 12 entered)" — older pots only have one winner.
+function winnersLine(p) {
+  const winners = p.winners?.length ? p.winners : [{ userId: p.winnerId, amount: p.won }];
+  const shown = winners.slice(0, 3).map((w, i) => `${MEDALS[i]} <@${w.userId}> ${fmt(w.amount)}`).join(' · ');
+  const more = winners.length > 3 ? ` · +${winners.length - 3} more` : '';
+  return `${shown}${more} (**${fmt(p.won)} XP**, ${fmt(p.entrants)} entered)`;
+}
 const isStaff = (i) => i.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
 
 async function execute(interaction) {
@@ -62,7 +73,7 @@ async function execute(interaction) {
       .setTitle('💰 Recent Daily XP Pots')
       .setDescription(
         past.length
-          ? past.map((p) => `**${p.day}** · ${p.status === 'done' ? `🏆 <@${p.winnerId}> won **${fmt(p.won)} XP** (${fmt(p.entrants)} entered)` : `🔁 ${fmt(p.amount)} XP rolled over`}`).join('\n')
+          ? past.map((p) => `**${p.day}** · ${p.status === 'done' ? winnersLine(p) : `🔁 ${fmt(p.amount)} XP rolled over`}`).join('\n')
           : 'No pots have been drawn yet.'
       );
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
@@ -72,7 +83,7 @@ async function execute(interaction) {
 
   if (sub === 'setup') {
     const input = { enabled: true, channelId: o.getChannel('channel').id };
-    for (const [opt, key] of [['draw_hour', 'drawHour'], ['countdown', 'countdownMinutes'], ['messages', 'minMessages'], ['min_pot', 'minPot'], ['share', 'sharePercent']]) {
+    for (const [opt, key] of [['draw_hour', 'drawHour'], ['countdown', 'countdownMinutes'], ['messages', 'minMessages'], ['min_pot', 'minPot'], ['share', 'sharePercent'], ['top_prize', 'maxPrize'], ['winners', 'maxWinners'], ['pot_cap', 'maxPot']]) {
       if (o.getInteger(opt) !== null) input[key] = o.getInteger(opt);
     }
     if (o.getRole('ping')) input.pingRoleId = o.getRole('ping').id;
@@ -84,6 +95,8 @@ async function execute(interaction) {
       `✅ **Daily XP Pot is on** in <#${s.channelId}>.\n` +
         `🎲 ${s.sharePercent}% of every gambling loss goes in · 📣 posted ${s.countdownMinutes} min before the draw · 🏆 drawn at **${String(s.drawHour).padStart(2, '0')}:00 UTC** (next: <t:${Math.floor(next.getTime() / 1000)}:R>)\n` +
         `💬 Entered: ${s.minMessages}+ messages in the last ${s.windowMinutes} min · pots under ${fmt(s.minPot)} XP roll over.\n` +
+        `🏆 Up to ${s.maxWinners} winner(s): 1st gets up to **${fmt(s.maxPrize)} XP**, each place after gets less (e.g. ${pot.describeLadder(s.maxPrize * 3, s.maxWinners, s).prizes.slice(0, 4).map(fmt).join(' → ')}…). The rest rolls over.\n` +
+        `🔥 The pot holds at most **${fmt(s.maxPot)} XP**; when it's full, it's drawn right away (${s.countdownMinutes} min countdown), whatever the time.\n` +
         `-# Style it with \`/pot look\` or on the dashboard: ${dashboardUrl(guild.id)}`
     );
   }
@@ -98,7 +111,7 @@ async function execute(interaction) {
     if (o.getString('thumbnail') !== null) e.thumbnailUrl = clear(o.getString('thumbnail'));
     if (o.getString('footer') !== null) e.footer = o.getString('footer');
     const input = { embed: e };
-    if (o.getString('win_message') !== null) input.winMessage = o.getString('win_message');
+    if (o.getString('win_message') !== null) input.winMessage = o.getString('win_message').toLowerCase() === 'default' ? '' : o.getString('win_message').replace(/\\n/g, '\n');
     const saved = await pot.saveSettings(guild, input);
     if (saved.error) return reply(`❌ ${saved.error}`);
     const cur = await pot.currentPot(guild);

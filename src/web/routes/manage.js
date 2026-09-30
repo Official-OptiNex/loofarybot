@@ -1063,17 +1063,28 @@ router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, re
   res.json({
     settings: cur.settings,
     defaultDescription: xpPot.DEFAULT_DESCRIPTION,
+    defaultWinMessage: xpPot.DEFAULT_WIN_MESSAGE,
+    tierPercent: xpPot.TIER_PERCENT,
     pot: { amount: cur.pot.amount || 0, rolledOver: cur.pot.rolledOver || 0, status: cur.pot.status || 'collecting', drawAt: cur.drawAt },
     entrants: cur.entrants,
     top: cur.top.map(([id, amount]) => ({ id, name: name(id), amount })),
-    history: past.map((p) => ({ day: p.day, status: p.status, amount: p.amount, won: p.won, entrants: p.entrants, winnerId: p.winnerId, winnerName: p.winnerId ? name(p.winnerId) : null }))
+    history: past.map((p) => ({
+      day: p.day,
+      status: p.status,
+      amount: p.amount,
+      won: p.won,
+      leftover: p.leftover || 0,
+      entrants: p.entrants,
+      // Pots drawn before tiered prizes had a single winner.
+      winners: (p.winners?.length ? p.winners : p.winnerId ? [{ userId: p.winnerId, place: 1, amount: p.won }] : []).map((w) => ({ ...w, name: name(w.userId) }))
+    }))
   });
 });
 
 router.post('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, res) => {
   const b = req.body || {};
   const input = {};
-  for (const k of ['enabled', 'channelId', 'drawHour', 'countdownMinutes', 'windowMinutes', 'minMessages', 'sharePercent', 'minPot', 'pingRoleId', 'embed', 'winMessage']) if (b[k] !== undefined) input[k] = b[k];
+  for (const k of ['enabled', 'channelId', 'drawHour', 'countdownMinutes', 'windowMinutes', 'minMessages', 'sharePercent', 'minPot', 'maxPrize', 'maxWinners', 'maxPot', 'pingRoleId', 'embed', 'winMessage']) if (b[k] !== undefined) input[k] = b[k];
   const saved = await xpPot.saveSettings(req.guild, input);
   if (saved.error) return bad(res, saved.error);
   res.locals.audit = { section: 'Gambling', action: 'Updated the Daily XP Pot', detail: `${saved.settings.enabled ? 'On' : 'Off'} · draw ${String(saved.settings.drawHour).padStart(2, '0')}:00 UTC` };

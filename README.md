@@ -158,18 +158,33 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   that's 3+ messages in the last 60 minutes, and messages must be at least 20 seconds apart, so
   spamming doesn't help. Bots never count. After a restart it falls back to members who earned
   chat XP in that hour.
-- **The draw:** one random active member wins the whole pot. The post turns into the result, and
-  a winner message pings them.
+- **The draw, with tiered prizes:** winners are picked at random from the active members, and the
+  first one picked gets the biggest prize. 1st place gets up to the **top prize** (default 3,000 XP),
+  and every place after gets at most 70% of the place above, from what's left. There are at most
+  **10 winners** (configurable, up to 25), never more than the people entered, and no prize under
+  10 XP. Whatever doesn't fit rolls over to tomorrow, so a night never pays out more than about
+  9,700 XP with the defaults. Examples:
+  - 800 XP pot → 🥇 800.
+  - 5,000 XP pot, 3 entered → 🥇 3,000 · 🥈 2,000.
+  - 20,000 XP pot, 10+ entered → 🥇 3,000 · 🥈 2,100 · 🥉 1,470 · 1,029 · 720 · 504 · 352 · 246 ·
+    172 · 120, and 10,287 rolls over.
+
+  The post turns into the result listing every winner and prize, and a winner message pings them.
+- **Pot cap:** the pot holds at most **10,000 XP** (configurable). The moment it's full, it's
+  posted and drawn after the usual countdown, whatever the time of day. Losses after that go into
+  the next pot, so no pot ever holds more than the cap.
 - **Rollovers:** if nobody's active, the pot rolls over to tomorrow. A pot under the minimum
   (default 100 XP) rolls over quietly without being posted, so quiet days stay quiet. A draw missed
   by 12+ hours (bot offline) also rolls over.
 - **Commands:** `/pot view` and `/pot history` for everyone. For staff:
-  - `/pot setup` (channel, draw hour, countdown, messages needed, minimum pot, share, ping)
+  - `/pot setup` (channel, draw hour, countdown, messages needed, minimum pot, share, top prize,
+    winners, pot cap, ping)
   - `/pot look` (title, text with `{pot}` `{draw}` `{min}` `{window}`, color, images, footer,
-    winner message)
+    winner message with `{winners}` `{winner}` `{count}` `{pot}` `{prize}` `{rollover}`)
   - `/pot draw` (post now and draw after the countdown, handy for testing)
   - `/pot preview`, `/pot toggle`
-- The dashboard has the same settings, a live embed preview, the current pot and recent winners.
+- The dashboard has the same settings, a live embed preview, a prize-ladder calculator (type a pot
+  size to see the split), the current pot and recent winners.
 
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.

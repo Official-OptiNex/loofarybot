@@ -99,9 +99,24 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
         countdown ("in 10 minutes"), "Entered so far" and the top 3 contributors.
   - [ ] 👤 Lose another game during the countdown → within ~30s the posted pot shows the higher
         amount.
-  - [ ] When the countdown ends, the post changes to "we have a winner!" and a message pings the
-        winner. Their XP goes up by the pot amount (check `/levels rank`).
-  - [ ] `/pot history` and the dashboard's **Recent pots** list the winner.
+  - [ ] The post has a **🏆 Prizes right now** line (e.g. "🥇 3,000 · 🥈 2,100 …"). It only lists as
+        many places as people are entered.
+  - [ ] When the countdown ends, the post changes to "we have a winner!" and lists every winner
+        with their prize, and a message pings all of them. Each winner's XP goes up by their prize
+        (check `/levels rank`).
+  - [ ] `/pot history` and the dashboard's **Recent pots** list the winners and prizes.
+- [ ] **Tiered prizes:** set the top prize to 3,000 and winners to 10 (the defaults).
+  - [ ] Dashboard **Prize ladder**: type 20000 → "🥇 3,000 · 🥈 2,100 · 🥉 1,470 · #4 1,029 …
+        #10 120", with "+10,287 XP rolls over". Type 800 → "🥇 800". Each place is lower than the one
+        above.
+  - [ ] Give the pot a big amount (lose some big gambles, or lower the top prize to e.g. 100 so a
+        small pot is enough), have 2–3 accounts chat, and `/pot draw` → 1st gets the most, 2nd less,
+        3rd less again. What's left shows "🔁 Rolled over" and appears in tomorrow's pot.
+- [ ] **Pot cap (10,000 XP):** on the dashboard, set **Pot cap** to something small, e.g. 500
+      (or `/pot setup channel:#… pot_cap:500`). Have 2–3 accounts chat, then lose gambles until the
+      pot passes 500 → within ~15s the pot posts with "🔥 Full! Drawn early", even in the middle of
+      the day, and it's drawn 10 minutes later. `/pot view` shows the pot at "500 / 500" at most,
+      and the XP over the cap shows up in the next pot. Set the cap back to 10,000 afterwards.
 - [ ] **Rollover:** run `/pot draw` when nobody has chatted for an hour → the post says "rolled
       over", and tomorrow's pot starts with that XP ("incl. … rolled over").
 - [ ] The real thing: leave it on overnight. It posts at 23:50 UTC and draws at 00:00 UTC. A pot
