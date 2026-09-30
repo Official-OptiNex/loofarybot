@@ -176,7 +176,11 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - **Rollovers:** if nobody's active, the pot rolls over to tomorrow. A pot under the minimum
   (default 100 XP) rolls over quietly without being posted, so quiet days stay quiet. A draw missed
   by 12+ hours (bot offline) also rolls over.
-- **Commands:** `/pot view` and `/pot history` for everyone. For staff:
+- **Who's entered:** `/pot entrants` shows everyone entered right now (with their message count), who's
+  almost in, and whether *you* are in. `/pot entrants last:true` shows who was entered in the last
+  draw. The dashboard's pot card has the same "Entered right now" list, and each of the Recent pots
+  can be expanded to see who was entered.
+- **Commands:** `/pot view`, `/pot history` and `/pot entrants` for everyone. For staff:
   - `/pot setup` (channel, draw hour, countdown, messages needed, minimum pot, share, top prize,
     winners, pot cap, ping)
   - `/pot look` (title, text with `{pot}` `{draw}` `{min}` `{window}`, color, images, footer,

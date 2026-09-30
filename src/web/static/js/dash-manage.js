@@ -2242,6 +2242,24 @@ function renderPotPreview() {
   document.getElementById('potLocal').textContent = `That's ${new Date(Date.UTC(2000, 0, 1, h)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} your time.`;
 }
 
+// Who's entered in the pot right now, and who's chatted but doesn't have enough messages yet.
+function renderPotEntrants(d) {
+  const list = d.entrantList || { entered: [], close: [] };
+  const min = list.minMessages || 3;
+  document.getElementById('potEntrantCount').textContent = `(${fmt(list.entered.length)})`;
+  document.getElementById('potEntrantNote').textContent = list.estimated
+    ? 'The bot restarted recently, so this is everyone who chatted in that time.'
+    : list.windowOpen
+      ? `${min}+ messages in the last hour before the draw. Updates when you reload.`
+      : `The draw's window hasn't started yet — this is who'd be in if it were drawn right now.`;
+  const chip = (r, label) => `<span style="display:inline-flex; align-items:center; gap:0.25rem;">${pill('@' + (r.name || r.id))}<span class="muted" style="font-size:0.75rem;">${label}</span></span>`;
+  const entered = list.entered.length ? list.entered.map((r) => chip(r, r.messages ? `${r.messages} msgs` : '')).join('') : '<span class="muted">Nobody yet.</span>';
+  const close = list.close.length
+    ? `<div class="muted" style="font-size:0.8rem; margin:0.6rem 0 0.3rem;">⏳ Almost in (${fmt(list.close.length)})</div><div style="display:flex; flex-wrap:wrap; gap:0.35rem;">${list.close.map((r) => chip(r, `${r.messages}/${min}`)).join('')}</div>`
+    : '';
+  document.getElementById('potEntrants').innerHTML = `<div style="display:flex; flex-wrap:wrap; gap:0.35rem; max-height:220px; overflow:auto;">${entered}</div>${close}`;
+}
+
 async function loadPot() {
   if (!document.getElementById('potCard')) return;
   let d;
@@ -2260,13 +2278,15 @@ async function loadPot() {
     `<span class="status-chip"><span class="dot"></span>💰 ${fmt(d.pot.amount)} XP in today’s pot</span>`,
     s.enabled ? `<span class="status-chip"><span class="dot"></span>${d.pot.status === 'posted' ? '⏱️ counting down now' : `drawn ${esc(fromNow(new Date(d.pot.drawAt).getTime()))}`}</span>` : ''
   ].join('');
+  renderPotEntrants(d);
   document.getElementById('potHistory').innerHTML = d.history.length
     ? d.history
         .map((p) => {
           const medals = ['🥇', '🥈', '🥉'];
           const who = p.winners.map((w, i) => `${medals[i] || `#${i + 1}`} ${esc(w.name || w.userId)} <strong>${fmt(w.amount)}</strong>`).join(' · ');
           const rolled = p.leftover ? ` · 🔁 ${fmt(p.leftover)} rolled over` : '';
-          return `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);"><strong>${esc(p.day)}</strong> · ${p.status === 'done' ? `${who} <span class="muted">(${fmt(p.won)} XP paid, ${fmt(p.entrants)} entered${rolled})</span>` : `🔁 ${fmt(p.amount)} XP rolled over`}</div>`;
+          const names = p.entrantNames && p.entrantNames.length ? `<details style="margin-top:0.2rem;"><summary class="muted" style="cursor:pointer;">👥 ${fmt(p.entrants)} entered</summary><div style="margin-top:0.3rem; display:flex; flex-wrap:wrap; gap:0.3rem;">${p.entrantNames.map((n) => pill('@' + n)).join('')}</div></details>` : '';
+          return `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);"><strong>${esc(p.day)}</strong> · ${p.status === 'done' ? `${who} <span class="muted">(${fmt(p.won)} XP paid, ${fmt(p.entrants)} entered${rolled})</span>` : `🔁 ${fmt(p.amount)} XP rolled over`}${names}</div>`;
         })
         .join('')
     : '<p class="muted" style="margin:0;">No pots drawn yet.</p>';

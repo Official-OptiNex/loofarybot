@@ -105,6 +105,11 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
         with their prize, and a message pings all of them. Each winner's XP goes up by their prize
         (check `/levels rank`).
   - [ ] `/pot history` and the dashboard's **Recent pots** list the winners and prizes.
+- [ ] **Entrants:** with a couple of accounts chatting, `/pot entrants` lists who's ✅ entered (with
+      message counts), who's ⏳ almost in ("1/3"), and says whether *you're* in. On the dashboard, the
+      pot card's **🎟️ Entered right now** shows the same people. After a draw, `/pot entrants
+      last:true` lists who was entered (winners marked 🏆), and each Recent pot has a "👥 N entered"
+      list you can open.
 - [ ] **Tiered prizes:** set the top prize to 3,000 and winners to 10 (the defaults).
   - [ ] Dashboard **Prize ladder**: type 20000 → "🥇 3,000 · 🥈 2,100 · 🥉 1,470 · #4 1,029 …
         #10 120", with "+10,287 XP rolls over". Type 800 → "🥇 800". Each place is lower than the one

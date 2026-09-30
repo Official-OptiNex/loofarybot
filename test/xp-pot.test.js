@@ -86,6 +86,23 @@ const paid=[]; const adjustXp=async(g,u,d)=>paid.push([u,d]);
   assert.deepEqual((await P.activeMembers(guild,s,new Date(day0+D))).sort(),['ann','dan'],'3+ messages ≥20s apart in the last hour; bots never');
   console.log('✓ active = 3+ messages (≥20s apart, so spamming doesn’t help) in the hour before the draw');
 
+  // ---- who's entered: /pot entrants and the dashboard list
+  let who=await P.potEntrants(guild,{now:at(23,56)});
+  assert.deepEqual(who.entered.map(r=>[r.userId,r.messages]),[['ann',3],['dan',3]]); assert.deepEqual(who.close.map(r=>[r.userId,r.messages]),[['ben',2]]);
+  assert.equal(who.windowOpen,true); assert.equal(who.estimated,false);
+  assert.equal((await P.potEntrants(guild,{now:at(15)})).windowOpen,false,'before the last hour: "if drawn right now"');
+  const potCmd=require(root+'src/bot/commands/pot');
+  const run=async(user,last=null)=>{ let out; await potCmd.execute({guild,user:{id:user},memberPermissions:{has:()=>false},options:{getSubcommand:()=>'entrants',getBoolean:()=>last},reply:async(p)=>{out=p;}}); return out; };
+  Date.now=()=>at(23,56);
+  let r2=await run('ben'); let ed=r2.embeds[0].data;
+  assert.equal(r2.ephemeral,true); assert.deepEqual(r2.allowedMentions,{parse:[]},'lists people without pinging them');
+  assert.equal(ed.title,'🎟️ Daily XP Pot entrants — 2'); assert.match(ed.description,/You have \*\*2\/3\*\* messages\. 1 more/);
+  assert.equal(ed.fields[0].name,'✅ Entered (2)'); assert.equal(ed.fields[0].value,'<@ann> (3) · <@dan> (3)'); assert.equal(ed.fields[1].value,'<@ben> (2/3)');
+  assert.match((await run('ann')).embeds[0].data.description,/You're entered\*\* \(3 messages\)/);
+  assert.match((await run('cat')).embeds[0].data.description,/not entered yet/);
+  Date.now=realNow;
+  console.log('✓ /pot entrants: who’s entered (with message counts), who’s almost in, and whether you are — without pinging anyone');
+
   // ---- countdown: posted 10 minutes before, with how it works + top 3 contributors
   await P.tick(client,at(23,49)); assert.equal(sent.length,0,'not yet');
   await P.tick(client,at(23,50));
@@ -112,6 +129,10 @@ const paid=[]; const adjustXp=async(g,u,d)=>paid.push([u,d]);
   assert.deepEqual(paid,[['dan',3000],['ann',550]],'1st gets the top prize, 2nd the rest');
   p=pots()[0]; assert.equal(p.status,'done'); assert.equal(p.winnerId,'dan'); assert.equal(p.won,3550); assert.equal(p.leftover,0); assert.equal(p.entrants,2);
   assert.deepEqual(p.winners.map(w=>[w.userId,w.place,w.amount]),[['dan',1,3000],['ann',2,550]]);
+  assert.deepEqual(p.entrantIds,['ann','dan'],'who was entered is saved with the pot');
+  who=await P.potEntrants(guild,{last:true}); assert.deepEqual(who.entered.map(r=>[r.userId,r.won]),[['dan',3000],['ann',550]]);
+  const lastRun=await (async()=>{ let out; await require(root+'src/bot/commands/pot').execute({guild,user:{id:'ben'},memberPermissions:{has:()=>false},options:{getSubcommand:()=>'entrants',getBoolean:()=>true},reply:async(x)=>{out=x;}}); return out.embeds[0].data; })();
+  assert.match(lastRun.title,/2027-05-11 pot — 2/); assert.match(lastRun.description,/weren’t entered/); assert.equal(lastRun.fields[0].value,'<@dan> 🏆 3,000 · <@ann> 🏆 550');
   const done=post.edits.at(-1).embeds[0].data; assert.match(done.title,/we have a winner/);
   assert.equal(done.fields[0].name,'🏆 Winners'); assert.equal(done.fields[0].value,'🥇 <@dan> — **3,000 XP**\n🥈 <@ann> — **550 XP**'); assert.match(done.fields[1].value,/3,550 XP/);
   const win=sent.at(-1).payload; assert.equal(win.content,'🎉 The **Daily XP Pot** has been drawn: **3,550 XP** to 2 winners!\n🥇 <@dan> — **3,000 XP**\n🥈 <@ann> — **550 XP**'); assert.deepEqual(win.allowedMentions,{users:['dan','ann']});

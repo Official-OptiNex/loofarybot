@@ -1060,6 +1060,8 @@ router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, re
   const cur = await xpPot.currentPot(guild);
   const name = (id) => guild.members.cache.get(id)?.displayName || null;
   const past = await xpPot.recentPots(guild.id, 7);
+  const who = await xpPot.potEntrants(guild);
+  const person = (r) => ({ id: r.userId, name: r.name, messages: r.messages });
   res.json({
     settings: cur.settings,
     defaultDescription: xpPot.DEFAULT_DESCRIPTION,
@@ -1067,6 +1069,7 @@ router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, re
     tierPercent: xpPot.TIER_PERCENT,
     pot: { amount: cur.pot.amount || 0, rolledOver: cur.pot.rolledOver || 0, status: cur.pot.status || 'collecting', drawAt: cur.drawAt },
     entrants: cur.entrants,
+    entrantList: { entered: who.entered.map(person), close: who.close.map(person), estimated: who.estimated, windowOpen: who.windowOpen, minMessages: cur.settings.minMessages },
     top: cur.top.map(([id, amount]) => ({ id, name: name(id), amount })),
     history: past.map((p) => ({
       day: p.day,
@@ -1075,6 +1078,7 @@ router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, re
       won: p.won,
       leftover: p.leftover || 0,
       entrants: p.entrants,
+      entrantNames: (p.entrantIds || []).map((id) => name(id) || id),
       // Pots drawn before tiered prizes had a single winner.
       winners: (p.winners?.length ? p.winners : p.winnerId ? [{ userId: p.winnerId, place: 1, amount: p.won }] : []).map((w) => ({ ...w, name: name(w.userId) }))
     }))

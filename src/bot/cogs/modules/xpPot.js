@@ -19,7 +19,8 @@ const EDIT_EVERY_MS = 30 * 1000; // live embed refresh (the countdown itself tic
 const MESSAGE_GAP_MS = 20 * 1000; // messages closer together than this count once (no spam-to-enter)
 const LATE_LIMIT_MS = 12 * HOUR; // a draw missed while the bot was offline is still done within this
 const TIER_PERCENT = 70; // each place gets at most this % of the place above it
-const MIN_PRIZE = 10; // no prizes smaller than this — what's left rolls over instead
+const MIN_PRIZE = 10;
+const MAX_SAVED_ENTRANTS = 500; // who was entered is kept with each drawn pot (for /pot entrants) // no prizes smaller than this — what's left rolls over instead
 const MEDALS = ['🥇', '🥈', '🥉'];
 const placeLabel = (i) => MEDALS[i] || `**#${i + 1}**`;
 
@@ -175,26 +176,39 @@ function noteChat(message) {
 }
 
 /**
- * Members active in the window before the draw: {min} messages (≥20s apart) in the last {window}
- * minutes. After a restart (no memory yet) it falls back to "earned chat XP in that window".
+ * Everyone who chatted in the {window} minutes before `at`, with how many of their messages count
+ * (≥20s apart): `entered` have {min}+, `close` have fewer. After a restart (no memory yet) it falls
+ * back to "earned chat XP in that window" — then message counts aren't known (`estimated`).
  */
-async function activeMembers(guild, s, drawAt) {
-  const from = drawAt.getTime() - s.windowMinutes * 60000;
-  const to = drawAt.getTime();
+async function entrantStatus(guild, s, at) {
+  const from = at.getTime() - s.windowMinutes * 60000;
+  const to = at.getTime();
   const g = activity.get(guild.id);
-  let ids = [];
-  if (g && g.size) {
-    for (const [userId, list] of g) if (list.filter((t) => t >= from && t <= to).length >= s.minMessages) ids.push(userId);
+  const estimated = !(g && g.size);
+  let rows = [];
+  if (!estimated) {
+    for (const [userId, list] of g) {
+      const messages = list.filter((t) => t >= from && t <= to).length;
+      if (messages) rows.push({ userId, messages });
+    }
   } else {
-    const rows = await UserLevel.find({ guildId: guild.id, lastMessageTimestamp: { $gte: from } }, { userId: 1 }).lean().catch(() => []);
-    ids = rows.map((r) => r.userId);
+    const found = await UserLevel.find({ guildId: guild.id, lastMessageTimestamp: { $gte: from } }, { userId: 1 }).lean().catch(() => []);
+    rows = found.map((r) => ({ userId: r.userId, messages: null }));
   }
-  const out = [];
-  for (const id of ids) {
-    const member = guild.members.cache.get(id) || (await guild.members.fetch(id).catch(() => null));
-    if (member && !member.user.bot) out.push(id);
+  const entered = [];
+  const close = [];
+  for (const r of rows) {
+    const member = guild.members.cache.get(r.userId) || (await guild.members.fetch(r.userId).catch(() => null));
+    if (!member || member.user.bot) continue;
+    const row = { ...r, name: member.displayName || member.user.username || r.userId };
+    (r.messages === null || r.messages >= s.minMessages ? entered : close).push(row);
   }
-  return out;
+  return { entered, close, estimated };
+}
+
+/** The IDs of the members entered in a draw at `at` (see entrantStatus). */
+async function activeMembers(guild, s, drawAt) {
+  return (await entrantStatus(guild, s, drawAt)).entered.map((r) => r.userId);
 }
 
 // Forget old activity so memory stays small.
@@ -323,7 +337,7 @@ async function drawPot(guild, s, potId, { now = Date.now(), adjustXp = null } = 
 
   if (amount < Math.max(1, s.minPot) || !prizes.length) {
     // Roll the XP over to the next draw.
-    await XpPot.updateOne({ _id: pot._id }, { $set: { status: 'rolled', entrants: entrants.length } });
+    await XpPot.updateOne({ _id: pot._id }, { $set: { status: 'rolled', entrants: entrants.length, entrantIds: entrants.slice(0, MAX_SAVED_ENTRANTS) } });
     await rollOver(amount);
     const embed = buildEmbed(pot, s, { phase: 'rolled', entrants: entrants.length });
     // Only a pot that was posted says so — quiet days (tiny pots) roll over silently.
@@ -335,7 +349,7 @@ async function drawPot(guild, s, potId, { now = Date.now(), adjustXp = null } = 
   const pay = adjustXp || require('./leveling').adjustXp;
   for (const w of winners) await pay(guild, w.userId, w.amount).catch((err) => console.error('[xpPot] payout failed:', err.message));
   const paid = amount - leftover;
-  await XpPot.updateOne({ _id: pot._id }, { $set: { winners, winnerId: winners[0].userId, won: paid, leftover, entrants: entrants.length } });
+  await XpPot.updateOne({ _id: pot._id }, { $set: { winners, winnerId: winners[0].userId, won: paid, leftover, entrants: entrants.length, entrantIds: entrants.slice(0, MAX_SAVED_ENTRANTS) } });
   await rollOver(leftover);
   const embed = buildEmbed(pot, s, { phase: 'done', entrants: entrants.length, winners, leftover });
   if (msg) await msg.edit({ content: null, embeds: [embed] }).catch(() => null);
@@ -429,6 +443,38 @@ async function currentPot(guild, now = Date.now()) {
   return { settings: s, pot, drawAt: at, entrants: entrants.length, top: topContributors(pot) };
 }
 
+/**
+ * Who's entered in the pot that's filling now (as if drawn now, or at the draw if it's past), plus
+ * who's close. With `last: true`, the last drawn pot's entrants instead.
+ */
+async function potEntrants(guild, { now = Date.now(), last = false } = {}) {
+  const s = potSettings(await GuildConfig.findOne({ guildId: guild.id }).lean());
+  if (last) {
+    const pot = await XpPot.findOne({ guildId: guild.id, status: { $in: ['done', 'rolled'] } }).sort({ drawAt: -1 }).lean();
+    if (!pot) return { settings: s, pot: null, entered: [], close: [] };
+    const name = (id) => guild.members.cache.get(id)?.displayName || null;
+    const won = new Map((pot.winners || []).map((w) => [w.userId, w]));
+    const entered = (pot.entrantIds || []).map((id) => ({ userId: id, name: name(id), won: won.get(id)?.amount || 0, place: won.get(id)?.place || null }));
+    entered.sort((a, b) => (a.place || 99) - (b.place || 99));
+    return { settings: s, pot, entered, close: [], total: pot.entrants || entered.length };
+  }
+  const cur = await currentPot(guild, now);
+  const at = new Date(Math.min(now, cur.drawAt.getTime()));
+  const status = await entrantStatus(guild, s, at);
+  const byMessages = (a, b) => (b.messages || 0) - (a.messages || 0) || String(a.name).localeCompare(String(b.name));
+  return {
+    settings: s,
+    pot: cur.pot,
+    drawAt: cur.drawAt,
+    // Before the last hour starts, this is who would be entered if it were drawn right now.
+    windowOpen: now >= cur.drawAt.getTime() - s.windowMinutes * 60000,
+    entered: status.entered.sort(byMessages),
+    close: status.close.sort(byMessages),
+    estimated: status.estimated,
+    total: status.entered.length
+  };
+}
+
 async function recentPots(guildId, limit = 7) {
   return XpPot.find({ guildId, status: { $in: ['done', 'rolled'] } }).sort({ drawAt: -1 }).limit(limit).lean();
 }
@@ -510,6 +556,8 @@ module.exports = {
   addToOpenPot,
   noteChat,
   activeMembers,
+  entrantStatus,
+  potEntrants,
   topContributors,
   buildEmbed,
   postPot,
