@@ -16,7 +16,8 @@ const XpPotSchema = new mongoose.Schema(
     winnerId: { type: String, default: null }, // 1st place
     won: { type: Number, default: 0 }, // total paid out
     leftover: { type: Number, default: 0 }, // didn't fit the prizes — rolled over to the next pot
-    entrants: { type: Number, default: 0 }
+    entrants: { type: Number, default: 0 },
+    entrantIds: { type: [String], default: [] } // who was entered when it was drawn (first 500)
   },
   { timestamps: true }
 );

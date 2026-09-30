@@ -318,7 +318,7 @@
         <% if (can('gambling')) { %>
         <div class="card">
           <h3>💰 Daily XP Pot <%- sideToggle('xpPot', !!ovPot.enabled) %></h3>
-          <p class="muted"><%= ovPot.enabled ? `Gambling losses → drawn at ${String(ovPot.drawHour ?? 0).padStart(2, '0')}:00 UTC in ${ovCh(ovPot.channelId) || 'no channel'} · up to ${ovPot.maxWinners ?? 10} winners, 1st gets up to ${Number(ovPot.maxPrize ?? 3000).toLocaleString('en-US')} XP` : 'Off — gambling losses fill a pot that active chatters share each night.' %></p>
+          <p class="muted"><%= ovPot.enabled ? `Gambling losses → drawn at ${String(ovPot.drawHour ?? 0).padStart(2, '0')}:00 UTC in ${ovCh(ovPot.channelId) || 'no channel'} · up to ${ovPot.maxWinners ?? 5} winners, 1st gets up to ${Number(ovPot.maxPrize ?? 500).toLocaleString('en-US')} XP` : 'Off — gambling losses fill a pot that active chatters share each night.' %></p>
           <p class="muted"><%- ovLink('xpPot', 'Pot settings & winners') %></p>
         </div>
         <% } %>

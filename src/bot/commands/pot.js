@@ -11,6 +11,12 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('history').setDescription('Recent winners'))
   .addSubcommand((s) =>
     s
+      .setName('entrants')
+      .setDescription("Who's entered in the pot right now (and who's close)")
+      .addBooleanOption((o) => o.setName('last').setDescription('Show who was entered in the last draw instead'))
+  )
+  .addSubcommand((s) =>
+    s
       .setName('setup')
       .setDescription('(Staff) Where and when the pot is drawn — turns it on')
       .addChannelOption((o) => o.setName('channel').setDescription('Where the pot is posted').setRequired(true).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
@@ -18,10 +24,11 @@ const data = new SlashCommandBuilder()
       .addIntegerOption((o) => o.setName('countdown').setDescription('Minutes of live countdown before the draw (default 10)').setMinValue(1).setMaxValue(60))
       .addIntegerOption((o) => o.setName('messages').setDescription('Messages in the last hour to be entered (default 3)').setMinValue(1).setMaxValue(50))
       .addIntegerOption((o) => o.setName('min_pot').setDescription('Smaller pots roll over to tomorrow (default 100)').setMinValue(0).setMaxValue(1000000))
-      .addIntegerOption((o) => o.setName('top_prize').setDescription('Most XP 1st place can win (default 3,000); the rest goes to 2nd, 3rd…').setMinValue(10).setMaxValue(1000000))
-      .addIntegerOption((o) => o.setName('winners').setDescription('Most winners per draw (default 10); anything left rolls over').setMinValue(1).setMaxValue(25))
-      .addIntegerOption((o) => o.setName('pot_cap').setDescription('Most XP the pot holds (default 10,000); when full, it is drawn right away').setMinValue(100).setMaxValue(1000000))
-      .addIntegerOption((o) => o.setName('share').setDescription('% of each gambling loss that goes into the pot (default 100)').setMinValue(1).setMaxValue(100))
+      .addIntegerOption((o) => o.setName('top_prize').setDescription('Most XP 1st place can win (default 500); the rest goes to 2nd, 3rd…').setMinValue(10).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('winners').setDescription('Most winners per draw (default 5)').setMinValue(1).setMaxValue(25))
+      .addIntegerOption((o) => o.setName('pot_cap').setDescription('Most XP the pot holds (default 2,000); when full, it is drawn right away').setMinValue(100).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('share').setDescription('% of each gambling loss that goes into the pot (default 25)').setMinValue(1).setMaxValue(100))
+      .addIntegerOption((o) => o.setName('rollover').setDescription('% of leftover XP that carries to the next pot (default 50; the rest is gone)').setMinValue(0).setMaxValue(100))
       .addRoleOption((o) => o.setName('ping').setDescription('Role to ping when the countdown starts'))
   )
   .addSubcommand((s) =>
@@ -51,6 +58,58 @@ function winnersLine(p) {
   const more = winners.length > 3 ? ` · +${winners.length - 3} more` : '';
   return `${shown}${more} (**${fmt(p.won)} XP**, ${fmt(p.entrants)} entered)`;
 }
+// "<@a> (5) · <@b> (3) · …and 12 more", kept under Discord's 1,024-character field limit.
+function mentionList(rows, label) {
+  const parts = [];
+  let length = 0;
+  for (const r of rows) {
+    const part = `<@${r.userId}>${label(r)}`;
+    if (length + part.length + 30 > 1000) break;
+    parts.push(part);
+    length += part.length + 3;
+  }
+  const more = rows.length - parts.length;
+  return parts.join(' · ') + (more > 0 ? ` · …and ${fmt(more)} more` : '');
+}
+
+async function entrantsEmbed(guild, userId, last) {
+  const e = await pot.potEntrants(guild, { last });
+  const s = e.settings;
+  const embed = new EmbedBuilder().setColor(s.embed.color);
+  if (last) {
+    if (!e.pot) return embed.setTitle('🎟️ Last Daily XP Pot').setDescription('No pots have been drawn yet.');
+    const you = e.entered.find((r) => r.userId === userId);
+    embed
+      .setTitle(`🎟️ Entered in the ${e.pot.day} pot — ${fmt(e.total)}`)
+      .setDescription(
+        (e.pot.status === 'rolled' ? `🔁 ${fmt(e.pot.amount)} XP rolled over.` : `💰 ${fmt(e.pot.won)} XP paid out.`) +
+          (you ? `\n\nYou were entered${you.won ? ` and won **${fmt(you.won)} XP** 🎉` : '.'}` : '\n\nYou weren’t entered in that one.')
+      );
+    if (e.entered.length) embed.addFields({ name: 'Entered', value: mentionList(e.entered, (r) => (r.won ? ` 🏆 ${fmt(r.won)}` : '')) });
+    else if (e.total) embed.addFields({ name: 'Entered', value: `${fmt(e.total)} member(s) (the list wasn't saved for this pot)` });
+    return embed;
+  }
+  if (!s.enabled) return embed.setTitle('🎟️ Daily XP Pot').setDescription('💰 The Daily XP Pot is off in this server.');
+  const draw = `<t:${Math.floor(e.drawAt.getTime() / 1000)}:R>`;
+  const you = e.entered.find((r) => r.userId === userId) || e.close.find((r) => r.userId === userId);
+  let yours;
+  if (you && (you.messages === null || you.messages >= s.minMessages)) yours = `✅ **You're entered**${you.messages ? ` (${you.messages} messages)` : ''}. Keep chatting until the draw ${draw}.`;
+  else if (you) yours = `⏳ You have **${you.messages}/${s.minMessages}** messages. ${s.minMessages - you.messages} more (at least 20s apart) and you're in.`;
+  else yours = `❌ You're not entered yet. Send **${s.minMessages}+ messages** (at least 20s apart) in the ${s.windowMinutes} minutes before the draw ${draw}.`;
+  embed
+    .setTitle(`🎟️ Daily XP Pot entrants — ${fmt(e.total)}`)
+    .setDescription(
+      `${yours}\n\n` +
+        (e.windowOpen
+          ? `Counting messages from the last ${s.windowMinutes} minutes. The draw is ${draw}.`
+          : `The draw is ${draw}. Entries count from the last ${s.windowMinutes} minutes before it — this is who'd be in if it were drawn right now.`)
+    );
+  embed.addFields({ name: `✅ Entered (${fmt(e.entered.length)})`, value: e.entered.length ? mentionList(e.entered, (r) => (r.messages ? ` (${r.messages})` : '')) : 'Nobody yet — be the first to chat!' });
+  if (e.close.length) embed.addFields({ name: `⏳ Almost in (${fmt(e.close.length)})`, value: mentionList(e.close, (r) => ` (${r.messages}/${s.minMessages})`) });
+  if (e.estimated) embed.setFooter({ text: 'The bot restarted recently, so this is everyone who chatted in that time. Message counts come back as people talk.' });
+  return embed;
+}
+
 const isStaff = (i) => i.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
 
 async function execute(interaction) {
@@ -79,11 +138,13 @@ async function execute(interaction) {
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
   }
 
+  if (sub === 'entrants') return interaction.reply({ embeds: [await entrantsEmbed(guild, interaction.user.id, !!o.getBoolean('last'))], ephemeral: true, allowedMentions: { parse: [] } });
+
   if (!isStaff(interaction)) return reply('❌ You need **Manage Server** for that.');
 
   if (sub === 'setup') {
     const input = { enabled: true, channelId: o.getChannel('channel').id };
-    for (const [opt, key] of [['draw_hour', 'drawHour'], ['countdown', 'countdownMinutes'], ['messages', 'minMessages'], ['min_pot', 'minPot'], ['share', 'sharePercent'], ['top_prize', 'maxPrize'], ['winners', 'maxWinners'], ['pot_cap', 'maxPot']]) {
+    for (const [opt, key] of [['draw_hour', 'drawHour'], ['countdown', 'countdownMinutes'], ['messages', 'minMessages'], ['min_pot', 'minPot'], ['share', 'sharePercent'], ['top_prize', 'maxPrize'], ['winners', 'maxWinners'], ['pot_cap', 'maxPot'], ['rollover', 'rolloverPercent']]) {
       if (o.getInteger(opt) !== null) input[key] = o.getInteger(opt);
     }
     if (o.getRole('ping')) input.pingRoleId = o.getRole('ping').id;
@@ -95,7 +156,7 @@ async function execute(interaction) {
       `✅ **Daily XP Pot is on** in <#${s.channelId}>.\n` +
         `🎲 ${s.sharePercent}% of every gambling loss goes in · 📣 posted ${s.countdownMinutes} min before the draw · 🏆 drawn at **${String(s.drawHour).padStart(2, '0')}:00 UTC** (next: <t:${Math.floor(next.getTime() / 1000)}:R>)\n` +
         `💬 Entered: ${s.minMessages}+ messages in the last ${s.windowMinutes} min · pots under ${fmt(s.minPot)} XP roll over.\n` +
-        `🏆 Up to ${s.maxWinners} winner(s): 1st gets up to **${fmt(s.maxPrize)} XP**, each place after gets less (e.g. ${pot.describeLadder(s.maxPrize * 3, s.maxWinners, s).prizes.slice(0, 4).map(fmt).join(' → ')}…). The rest rolls over.\n` +
+        `🏆 Up to ${s.maxWinners} winner(s): 1st gets up to **${fmt(s.maxPrize)} XP**, each place after gets less (e.g. ${pot.describeLadder(s.maxPrize * 3, s.maxWinners, s).prizes.slice(0, 4).map(fmt).join(' → ')}…). ${s.rolloverPercent}% of what's left carries over.\n` +
         `🔥 The pot holds at most **${fmt(s.maxPot)} XP**; when it's full, it's drawn right away (${s.countdownMinutes} min countdown), whatever the time.\n` +
         `-# Style it with \`/pot look\` or on the dashboard: ${dashboardUrl(guild.id)}`
     );

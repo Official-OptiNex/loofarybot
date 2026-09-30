@@ -4,8 +4,11 @@
 // 1st place gets up to the top prize (3,000 XP by default), and each place after gets less than the
 // one above, from whatever's left. The number of winners is capped, and anything that doesn't fit
 // rolls over to tomorrow. No one active, or the pot is too small? It all rolls over.
-// The pot itself is capped too (10,000 XP by default): once it's full it's posted and drawn right
-// away, whatever the time, and further losses go into the next pot.
+// The pot itself is capped too (2,000 XP by default): once it's full it's posted and drawn right
+// away, whatever the time, and further losses go into the next pot (never further ahead than that).
+// Only part of what's left over carries to tomorrow (50% by default) — the rest is gone, so pots
+// can't snowball. The defaults are sized against leveling: chat pays ~20 XP a minute, level 10
+// takes 3,162 XP, so a 500 XP top prize is a nice boost, not a free level.
 const crypto = require('crypto');
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
@@ -19,7 +22,8 @@ const EDIT_EVERY_MS = 30 * 1000; // live embed refresh (the countdown itself tic
 const MESSAGE_GAP_MS = 20 * 1000; // messages closer together than this count once (no spam-to-enter)
 const LATE_LIMIT_MS = 12 * HOUR; // a draw missed while the bot was offline is still done within this
 const TIER_PERCENT = 70; // each place gets at most this % of the place above it
-const MIN_PRIZE = 10; // no prizes smaller than this — what's left rolls over instead
+const MIN_PRIZE = 10;
+const MAX_SAVED_ENTRANTS = 500; // who was entered is kept with each drawn pot (for /pot entrants) // no prizes smaller than this — what's left rolls over instead
 const MEDALS = ['🥇', '🥈', '🥉'];
 const placeLabel = (i) => MEDALS[i] || `**#${i + 1}**`;
 
@@ -33,7 +37,7 @@ const DEFAULT_DESCRIPTION =
   '💬 Chat in the server: **{min}+ messages in the last {window} minutes** before the draw and you’re entered automatically. No buttons, no cost.\n' +
   '🏆 Up to **{places} winners**, picked at random. 1st place gets up to **{max} XP**, and each place after gets less than the one above.\n' +
   '🔥 The pot tops out at **{cap} XP**. When it’s full, it’s drawn right away, whatever the time.\n' +
-  '🔁 Whatever doesn’t fit, or a pot nobody is active for, rolls over to tomorrow.';
+  '🔁 Some of what’s left (or a pot nobody is active for) carries over to tomorrow.';
 
 const DEFAULT_WIN_MESSAGE = '🎉 The **Daily XP Pot** has been drawn: **{pot} XP** to {count}!\n{winners}';
 const OLD_WIN_MESSAGE = '🎉 {winner} won the **Daily XP Pot** — **{pot} XP**! 💰'; // before tiered prizes
@@ -49,11 +53,12 @@ function potSettings(config) {
     countdownMinutes: int(p.countdownMinutes, 10, 1, 60),
     windowMinutes: int(p.windowMinutes, 60, 10, 240),
     minMessages: int(p.minMessages, 3, 1, 50),
-    sharePercent: int(p.sharePercent, 100, 1, 100),
+    sharePercent: int(p.sharePercent, 25, 1, 100),
     minPot: int(p.minPot, 100, 0, 1000000),
-    maxPrize: int(p.maxPrize, 3000, MIN_PRIZE, 1000000),
-    maxWinners: int(p.maxWinners, 10, 1, 25),
-    maxPot: int(p.maxPot, 10000, 100, 1000000),
+    maxPrize: int(p.maxPrize, 500, MIN_PRIZE, 1000000),
+    maxWinners: int(p.maxWinners, 5, 1, 25),
+    maxPot: int(p.maxPot, 2000, 100, 1000000),
+    rolloverPercent: int(p.rolloverPercent, 50, 0, 100),
     pingRoleId: p.pingRoleId || null,
     embed: {
       title: e.title || '💰 Daily XP Pot',
@@ -86,12 +91,15 @@ function prizeLadder(amount, entrants, s) {
   return { prizes, leftover: left };
 }
 
-/** "🥇 3,000 · 🥈 2,100 · 🥉 1,470" (+ what rolls over) — for the live post and previews. */
+/** How much of `xp` left over after a draw carries to the next pot (the rest is gone). */
+const carried = (s, xp) => Math.floor((Math.max(0, xp) * s.rolloverPercent) / 100);
+
+/** "🥇 500 · 🥈 350 · 🥉 245" (+ what carries over) — for the live post and previews. */
 function describeLadder(amount, entrants, s) {
   const { prizes, leftover } = prizeLadder(amount, entrants, s);
   if (!prizes.length) return { text: 'Not enough in the pot yet', prizes, leftover };
   let text = prizes.map((p, i) => `${placeLabel(i)} ${fmt(p)}`).join(' · ');
-  if (leftover > 0) text += `\n-# +${fmt(leftover)} XP rolls over to tomorrow`;
+  if (carried(s, leftover) > 0) text += `\n-# +${fmt(carried(s, leftover))} XP carries over to tomorrow`;
   return { text, prizes, leftover };
 }
 
@@ -127,7 +135,8 @@ async function addToOpenPot(guildId, s, amount, { userId = null, from = Date.now
   if (skipDay && dayKey(drawAt) === skipDay) drawAt = new Date(drawAt.getTime() + 24 * HOUR);
   let left = Math.floor(amount);
   let retries = 5;
-  for (let days = 0; days < 30 && left > 0; ) {
+  // This pot or the next one only — XP that fits in neither is gone (no snowballing into next week).
+  for (let days = 0; days < 2 && left > 0; ) {
     const day = dayKey(drawAt);
     const pot = await XpPot.findOne({ guildId, day }, { amount: 1, status: 1 }).lean();
     const open = !pot || ['collecting', 'posted'].includes(pot.status);
@@ -175,26 +184,39 @@ function noteChat(message) {
 }
 
 /**
- * Members active in the window before the draw: {min} messages (≥20s apart) in the last {window}
- * minutes. After a restart (no memory yet) it falls back to "earned chat XP in that window".
+ * Everyone who chatted in the {window} minutes before `at`, with how many of their messages count
+ * (≥20s apart): `entered` have {min}+, `close` have fewer. After a restart (no memory yet) it falls
+ * back to "earned chat XP in that window" — then message counts aren't known (`estimated`).
  */
-async function activeMembers(guild, s, drawAt) {
-  const from = drawAt.getTime() - s.windowMinutes * 60000;
-  const to = drawAt.getTime();
+async function entrantStatus(guild, s, at) {
+  const from = at.getTime() - s.windowMinutes * 60000;
+  const to = at.getTime();
   const g = activity.get(guild.id);
-  let ids = [];
-  if (g && g.size) {
-    for (const [userId, list] of g) if (list.filter((t) => t >= from && t <= to).length >= s.minMessages) ids.push(userId);
+  const estimated = !(g && g.size);
+  let rows = [];
+  if (!estimated) {
+    for (const [userId, list] of g) {
+      const messages = list.filter((t) => t >= from && t <= to).length;
+      if (messages) rows.push({ userId, messages });
+    }
   } else {
-    const rows = await UserLevel.find({ guildId: guild.id, lastMessageTimestamp: { $gte: from } }, { userId: 1 }).lean().catch(() => []);
-    ids = rows.map((r) => r.userId);
+    const found = await UserLevel.find({ guildId: guild.id, lastMessageTimestamp: { $gte: from } }, { userId: 1 }).lean().catch(() => []);
+    rows = found.map((r) => ({ userId: r.userId, messages: null }));
   }
-  const out = [];
-  for (const id of ids) {
-    const member = guild.members.cache.get(id) || (await guild.members.fetch(id).catch(() => null));
-    if (member && !member.user.bot) out.push(id);
+  const entered = [];
+  const close = [];
+  for (const r of rows) {
+    const member = guild.members.cache.get(r.userId) || (await guild.members.fetch(r.userId).catch(() => null));
+    if (!member || member.user.bot) continue;
+    const row = { ...r, name: member.displayName || member.user.username || r.userId };
+    (r.messages === null || r.messages >= s.minMessages ? entered : close).push(row);
   }
-  return out;
+  return { entered, close, estimated };
+}
+
+/** The IDs of the members entered in a draw at `at` (see entrantStatus). */
+async function activeMembers(guild, s, drawAt) {
+  return (await entrantStatus(guild, s, drawAt)).entered.map((r) => r.userId);
 }
 
 // Forget old activity so memory stays small.
@@ -236,10 +258,10 @@ function buildEmbed(pot, s, { phase = 'live', entrants = null, winners = [], lef
       { name: '💰 Paid out', value: `**${fmt(winners.reduce((t, w) => t + w.amount, 0))} XP**`, inline: true },
       { name: '🎟️ Entered', value: fmt(entrants || 0), inline: true }
     );
-    if (leftover > 0) embed.addFields({ name: '🔁 Rolled over', value: `${fmt(leftover)} XP → tomorrow`, inline: true });
+    if (carried(s, leftover) > 0) embed.addFields({ name: '🔁 Rolled over', value: `${fmt(carried(s, leftover))} XP → tomorrow`, inline: true });
   } else if (phase === 'rolled') {
     embed.addFields(
-      { name: '💰 Pot', value: `**${fmt(amount)} XP** → tomorrow`, inline: true },
+      { name: '💰 Pot', value: carried(s, amount) ? `**${fmt(carried(s, amount))} XP** → tomorrow` : `${fmt(amount)} XP`, inline: true },
       { name: 'Why', value: amount < Math.max(s.minPot, MIN_PRIZE) ? `Under the ${fmt(Math.max(s.minPot, MIN_PRIZE))} XP minimum` : 'Nobody was active in the last hour', inline: true }
     );
   } else {
@@ -317,13 +339,16 @@ async function drawPot(guild, s, potId, { now = Date.now(), adjustXp = null } = 
   const amount = pot.amount || 0;
   const channel = (pot.channelId && guild.channels.cache.get(pot.channelId)) || potChannel(guild, s);
   const msg = pot.messageId ? await channel?.messages?.fetch(pot.messageId).catch(() => null) : null;
+  // Only part of what's left carries over (rolloverPercent); the rest is gone.
   const rollOver = (xp) =>
-    xp > 0 ? addToOpenPot(guild.id, s, xp, { from: Math.max(now, drawAt.getTime()), skipDay: pot.day }).catch((err) => console.warn('[xpPot] rollover failed:', err.message)) : null;
+    carried(s, xp) > 0
+      ? addToOpenPot(guild.id, s, carried(s, xp), { from: Math.max(now, drawAt.getTime()), skipDay: pot.day }).catch((err) => console.warn('[xpPot] rollover failed:', err.message))
+      : null;
   const { prizes, leftover } = prizeLadder(amount, entrants.length, s);
 
   if (amount < Math.max(1, s.minPot) || !prizes.length) {
     // Roll the XP over to the next draw.
-    await XpPot.updateOne({ _id: pot._id }, { $set: { status: 'rolled', entrants: entrants.length } });
+    await XpPot.updateOne({ _id: pot._id }, { $set: { status: 'rolled', entrants: entrants.length, entrantIds: entrants.slice(0, MAX_SAVED_ENTRANTS) } });
     await rollOver(amount);
     const embed = buildEmbed(pot, s, { phase: 'rolled', entrants: entrants.length });
     // Only a pot that was posted says so — quiet days (tiny pots) roll over silently.
@@ -335,7 +360,7 @@ async function drawPot(guild, s, potId, { now = Date.now(), adjustXp = null } = 
   const pay = adjustXp || require('./leveling').adjustXp;
   for (const w of winners) await pay(guild, w.userId, w.amount).catch((err) => console.error('[xpPot] payout failed:', err.message));
   const paid = amount - leftover;
-  await XpPot.updateOne({ _id: pot._id }, { $set: { winners, winnerId: winners[0].userId, won: paid, leftover, entrants: entrants.length } });
+  await XpPot.updateOne({ _id: pot._id }, { $set: { winners, winnerId: winners[0].userId, won: paid, leftover, entrants: entrants.length, entrantIds: entrants.slice(0, MAX_SAVED_ENTRANTS) } });
   await rollOver(leftover);
   const embed = buildEmbed(pot, s, { phase: 'done', entrants: entrants.length, winners, leftover });
   if (msg) await msg.edit({ content: null, embeds: [embed] }).catch(() => null);
@@ -368,7 +393,7 @@ async function tickGuild(client, config, now = Date.now()) {
   for (const pot of due) {
     if (now - new Date(pot.drawAt).getTime() > LATE_LIMIT_MS) {
       const claimed = await XpPot.updateOne({ _id: pot._id, status: { $in: ['collecting', 'posted'] } }, { $set: { status: 'rolled' } });
-      if (claimed.modifiedCount === 1 && pot.amount > 0) await addToOpenPot(guild.id, s, pot.amount, { from: now, skipDay: pot.day });
+      if (claimed.modifiedCount === 1 && carried(s, pot.amount) > 0) await addToOpenPot(guild.id, s, carried(s, pot.amount), { from: now, skipDay: pot.day });
       continue;
     }
     await drawPot(guild, s, pot._id, { now });
@@ -395,7 +420,28 @@ async function tick(client, now = Date.now()) {
   for (const c of configs) await tickGuild(client, c, now).catch((err) => console.error(`XP pot failed in ${c.guildId}:`, err.message));
 }
 
+// Before the rebalance the defaults were 100% of losses, a 3,000 XP top prize, 10 winners and a
+// 10,000 XP cap — far more than chat XP (level 10 is 3,162 XP), and rollovers snowballed. Servers
+// still on those old defaults move to the new ones, and open pots are trimmed to the new cap.
+const OLD_DEFAULTS = { sharePercent: 100, maxPrize: 3000, maxWinners: 10, maxPot: 10000 };
+const NEW_DEFAULTS = { sharePercent: 25, maxPrize: 500, maxWinners: 5, maxPot: 2000 };
+async function rebalance() {
+  const configs = await GuildConfig.find({ xpPot: { $exists: true }, 'xpPot.balanceVersion': { $ne: 2 } }, { guildId: 1, xpPot: 1 }).lean();
+  for (const c of configs) {
+    const set = { 'xpPot.balanceVersion': 2 };
+    for (const [k, old] of Object.entries(OLD_DEFAULTS)) {
+      if (c.xpPot?.[k] === undefined || c.xpPot?.[k] === null || c.xpPot[k] === old) set[`xpPot.${k}`] = NEW_DEFAULTS[k];
+    }
+    await GuildConfig.updateOne({ _id: c._id }, { $set: set });
+    const cap = set['xpPot.maxPot'] ?? potSettings(c).maxPot;
+    const open = await XpPot.find({ guildId: c.guildId, status: { $in: ['collecting', 'posted'] }, amount: { $gt: cap } }, { amount: 1, rolledOver: 1 }).lean();
+    for (const p of open) await XpPot.updateOne({ _id: p._id }, { $set: { amount: cap, rolledOver: Math.min(p.rolledOver || 0, cap) } });
+    if (Object.keys(set).length > 1 || open.length) console.log(`[xpPot] ${c.guildId}: rebalanced the Daily XP Pot (${Object.keys(set).length - 1} setting(s), ${open.length} pot(s) trimmed)`);
+  }
+}
+
 function startXpPot(client) {
+  rebalance().catch((err) => console.warn('[xpPot] rebalance failed:', err.message));
   setInterval(() => tick(client), TICK_MS);
 }
 
@@ -427,6 +473,38 @@ async function currentPot(guild, now = Date.now()) {
   const at = new Date(pot.drawAt || drawAt);
   const entrants = await activeMembers(guild, s, new Date(Math.min(now, at.getTime())));
   return { settings: s, pot, drawAt: at, entrants: entrants.length, top: topContributors(pot) };
+}
+
+/**
+ * Who's entered in the pot that's filling now (as if drawn now, or at the draw if it's past), plus
+ * who's close. With `last: true`, the last drawn pot's entrants instead.
+ */
+async function potEntrants(guild, { now = Date.now(), last = false } = {}) {
+  const s = potSettings(await GuildConfig.findOne({ guildId: guild.id }).lean());
+  if (last) {
+    const pot = await XpPot.findOne({ guildId: guild.id, status: { $in: ['done', 'rolled'] } }).sort({ drawAt: -1 }).lean();
+    if (!pot) return { settings: s, pot: null, entered: [], close: [] };
+    const name = (id) => guild.members.cache.get(id)?.displayName || null;
+    const won = new Map((pot.winners || []).map((w) => [w.userId, w]));
+    const entered = (pot.entrantIds || []).map((id) => ({ userId: id, name: name(id), won: won.get(id)?.amount || 0, place: won.get(id)?.place || null }));
+    entered.sort((a, b) => (a.place || 99) - (b.place || 99));
+    return { settings: s, pot, entered, close: [], total: pot.entrants || entered.length };
+  }
+  const cur = await currentPot(guild, now);
+  const at = new Date(Math.min(now, cur.drawAt.getTime()));
+  const status = await entrantStatus(guild, s, at);
+  const byMessages = (a, b) => (b.messages || 0) - (a.messages || 0) || String(a.name).localeCompare(String(b.name));
+  return {
+    settings: s,
+    pot: cur.pot,
+    drawAt: cur.drawAt,
+    // Before the last hour starts, this is who would be entered if it were drawn right now.
+    windowOpen: now >= cur.drawAt.getTime() - s.windowMinutes * 60000,
+    entered: status.entered.sort(byMessages),
+    close: status.close.sort(byMessages),
+    estimated: status.estimated,
+    total: status.entered.length
+  };
 }
 
 async function recentPots(guildId, limit = 7) {
@@ -464,6 +542,7 @@ function cleanSettings(guild, input) {
     if (input.maxPrize !== undefined) patch['xpPot.maxPrize'] = whole(input.maxPrize, MIN_PRIZE, 1000000, 'The 1st place prize');
     if (input.maxWinners !== undefined) patch['xpPot.maxWinners'] = whole(input.maxWinners, 1, 25, 'Winners');
     if (input.maxPot !== undefined) patch['xpPot.maxPot'] = whole(input.maxPot, 100, 1000000, 'The pot cap');
+    if (input.rolloverPercent !== undefined) patch['xpPot.rolloverPercent'] = whole(input.rolloverPercent, 0, 100, 'Rollover (%)');
     if (input.pingRoleId !== undefined) {
       const id = input.pingRoleId ? String(input.pingRoleId) : null;
       if (id && !guild.roles.cache.has(id)) return { error: 'That role is not in this server.' };
@@ -510,6 +589,8 @@ module.exports = {
   addToOpenPot,
   noteChat,
   activeMembers,
+  entrantStatus,
+  potEntrants,
   topContributors,
   buildEmbed,
   postPot,
@@ -517,6 +598,7 @@ module.exports = {
   tick,
   tickGuild,
   startXpPot,
+  rebalance,
   startNow,
   currentPot,
   recentPots,

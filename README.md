@@ -159,26 +159,39 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   spamming doesn't help. Bots never count. After a restart it falls back to members who earned
   chat XP in that hour.
 - **The draw, with tiered prizes:** winners are picked at random from the active members, and the
-  first one picked gets the biggest prize. 1st place gets up to the **top prize** (default 3,000 XP),
+  first one picked gets the biggest prize. 1st place gets up to the **top prize** (default 500 XP),
   and every place after gets at most 70% of the place above, from what's left. There are at most
-  **10 winners** (configurable, up to 25), never more than the people entered, and no prize under
-  10 XP. Whatever doesn't fit rolls over to tomorrow, so a night never pays out more than about
-  9,700 XP with the defaults. Examples:
-  - 800 XP pot → 🥇 800.
-  - 5,000 XP pot, 3 entered → 🥇 3,000 · 🥈 2,000.
-  - 20,000 XP pot, 10+ entered → 🥇 3,000 · 🥈 2,100 · 🥉 1,470 · 1,029 · 720 · 504 · 352 · 246 ·
-    172 · 120, and 10,287 rolls over.
+  **5 winners** (configurable, up to 25), never more than the people entered, and no prize under
+  10 XP. A night never pays out more than about 1,400 XP with the defaults. Examples:
+  - 300 XP pot → 🥇 300.
+  - 800 XP pot, 3 entered → 🥇 500 · 🥈 300.
+  - 2,000 XP pot (full), 5+ entered → 🥇 500 · 🥈 350 · 🥉 245 · 171 · 119, and 307 of the 615 left
+    carries over.
+- **Balanced against leveling:** with default leveling, chat pays about 20 XP a minute at most, and
+  level 10 takes 3,162 XP in total (level 20: 8,944). So the 500 XP top prize is about 25 minutes of
+  non-stop chatting — a nice boost, not a free level. Only **25%** of each gambling loss goes into
+  the pot (the rest is gone), so the pot fills slowly. The dashboard's pot card shows these numbers
+  for your server's own leveling settings.
 
   The post turns into the result listing every winner and prize, and a winner message pings them.
-- **Pot cap:** the pot holds at most **10,000 XP** (configurable). The moment it's full, it's
+- **Pot cap:** the pot holds at most **2,000 XP** (configurable). The moment it's full, it's
   posted and drawn after the usual countdown, whatever the time of day. Losses after that go into
-  the next pot, so no pot ever holds more than the cap.
-- **Rollovers:** if nobody's active, the pot rolls over to tomorrow. A pot under the minimum
-  (default 100 XP) rolls over quietly without being posted, so quiet days stay quiet. A draw missed
-  by 12+ hours (bot offline) also rolls over.
-- **Commands:** `/pot view` and `/pot history` for everyone. For staff:
+  the next pot; once that one is full too, extra losses are simply gone. Pots never snowball into
+  next week.
+- **Rollovers:** only **50%** (configurable) of what's left after a draw, or of a pot nobody was
+  active for, carries over to the next pot. The rest is gone. A pot under the minimum (default
+  100 XP) rolls over quietly without being posted, so quiet days stay quiet. A draw missed by 12+
+  hours (bot offline) rolls over the same way.
+- **Upgrading:** servers that were still on the old defaults (100% share, 3,000 top prize,
+  10 winners, 10,000 cap) are moved to the new ones automatically, and a pot already bigger than the
+  new cap is trimmed to it. Values you set yourself are kept.
+- **Who's entered:** `/pot entrants` shows everyone entered right now (with their message count), who's
+  almost in, and whether *you* are in. `/pot entrants last:true` shows who was entered in the last
+  draw. The dashboard's pot card has the same "Entered right now" list, and each of the Recent pots
+  can be expanded to see who was entered.
+- **Commands:** `/pot view`, `/pot history` and `/pot entrants` for everyone. For staff:
   - `/pot setup` (channel, draw hour, countdown, messages needed, minimum pot, share, top prize,
-    winners, pot cap, ping)
+    winners, pot cap, rollover, ping)
   - `/pot look` (title, text with `{pot}` `{draw}` `{min}` `{window}`, color, images, footer,
     winner message with `{winners}` `{winner}` `{count}` `{pot}` `{prize}` `{rollover}`)
   - `/pot draw` (post now and draw after the countdown, handy for testing)
