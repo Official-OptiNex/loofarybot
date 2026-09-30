@@ -1088,7 +1088,7 @@ router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, re
 router.post('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, res) => {
   const b = req.body || {};
   const input = {};
-  for (const k of ['enabled', 'channelId', 'drawHour', 'countdownMinutes', 'windowMinutes', 'minMessages', 'sharePercent', 'minPot', 'maxPrize', 'maxWinners', 'maxPot', 'pingRoleId', 'embed', 'winMessage']) if (b[k] !== undefined) input[k] = b[k];
+  for (const k of ['enabled', 'channelId', 'drawHour', 'countdownMinutes', 'windowMinutes', 'minMessages', 'sharePercent', 'minPot', 'maxPrize', 'maxWinners', 'maxPot', 'rolloverPercent', 'pingRoleId', 'embed', 'winMessage']) if (b[k] !== undefined) input[k] = b[k];
   const saved = await xpPot.saveSettings(req.guild, input);
   if (saved.error) return bad(res, saved.error);
   res.locals.audit = { section: 'Gambling', action: 'Updated the Daily XP Pot', detail: `${saved.settings.enabled ? 'On' : 'Off'} · draw ${String(saved.settings.drawHour).padStart(2, '0')}:00 UTC` };

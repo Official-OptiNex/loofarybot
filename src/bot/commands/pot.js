@@ -24,10 +24,11 @@ const data = new SlashCommandBuilder()
       .addIntegerOption((o) => o.setName('countdown').setDescription('Minutes of live countdown before the draw (default 10)').setMinValue(1).setMaxValue(60))
       .addIntegerOption((o) => o.setName('messages').setDescription('Messages in the last hour to be entered (default 3)').setMinValue(1).setMaxValue(50))
       .addIntegerOption((o) => o.setName('min_pot').setDescription('Smaller pots roll over to tomorrow (default 100)').setMinValue(0).setMaxValue(1000000))
-      .addIntegerOption((o) => o.setName('top_prize').setDescription('Most XP 1st place can win (default 3,000); the rest goes to 2nd, 3rd…').setMinValue(10).setMaxValue(1000000))
-      .addIntegerOption((o) => o.setName('winners').setDescription('Most winners per draw (default 10); anything left rolls over').setMinValue(1).setMaxValue(25))
-      .addIntegerOption((o) => o.setName('pot_cap').setDescription('Most XP the pot holds (default 10,000); when full, it is drawn right away').setMinValue(100).setMaxValue(1000000))
-      .addIntegerOption((o) => o.setName('share').setDescription('% of each gambling loss that goes into the pot (default 100)').setMinValue(1).setMaxValue(100))
+      .addIntegerOption((o) => o.setName('top_prize').setDescription('Most XP 1st place can win (default 500); the rest goes to 2nd, 3rd…').setMinValue(10).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('winners').setDescription('Most winners per draw (default 5)').setMinValue(1).setMaxValue(25))
+      .addIntegerOption((o) => o.setName('pot_cap').setDescription('Most XP the pot holds (default 2,000); when full, it is drawn right away').setMinValue(100).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('share').setDescription('% of each gambling loss that goes into the pot (default 25)').setMinValue(1).setMaxValue(100))
+      .addIntegerOption((o) => o.setName('rollover').setDescription('% of leftover XP that carries to the next pot (default 50; the rest is gone)').setMinValue(0).setMaxValue(100))
       .addRoleOption((o) => o.setName('ping').setDescription('Role to ping when the countdown starts'))
   )
   .addSubcommand((s) =>
@@ -143,7 +144,7 @@ async function execute(interaction) {
 
   if (sub === 'setup') {
     const input = { enabled: true, channelId: o.getChannel('channel').id };
-    for (const [opt, key] of [['draw_hour', 'drawHour'], ['countdown', 'countdownMinutes'], ['messages', 'minMessages'], ['min_pot', 'minPot'], ['share', 'sharePercent'], ['top_prize', 'maxPrize'], ['winners', 'maxWinners'], ['pot_cap', 'maxPot']]) {
+    for (const [opt, key] of [['draw_hour', 'drawHour'], ['countdown', 'countdownMinutes'], ['messages', 'minMessages'], ['min_pot', 'minPot'], ['share', 'sharePercent'], ['top_prize', 'maxPrize'], ['winners', 'maxWinners'], ['pot_cap', 'maxPot'], ['rollover', 'rolloverPercent']]) {
       if (o.getInteger(opt) !== null) input[key] = o.getInteger(opt);
     }
     if (o.getRole('ping')) input.pingRoleId = o.getRole('ping').id;
@@ -155,7 +156,7 @@ async function execute(interaction) {
       `✅ **Daily XP Pot is on** in <#${s.channelId}>.\n` +
         `🎲 ${s.sharePercent}% of every gambling loss goes in · 📣 posted ${s.countdownMinutes} min before the draw · 🏆 drawn at **${String(s.drawHour).padStart(2, '0')}:00 UTC** (next: <t:${Math.floor(next.getTime() / 1000)}:R>)\n` +
         `💬 Entered: ${s.minMessages}+ messages in the last ${s.windowMinutes} min · pots under ${fmt(s.minPot)} XP roll over.\n` +
-        `🏆 Up to ${s.maxWinners} winner(s): 1st gets up to **${fmt(s.maxPrize)} XP**, each place after gets less (e.g. ${pot.describeLadder(s.maxPrize * 3, s.maxWinners, s).prizes.slice(0, 4).map(fmt).join(' → ')}…). The rest rolls over.\n` +
+        `🏆 Up to ${s.maxWinners} winner(s): 1st gets up to **${fmt(s.maxPrize)} XP**, each place after gets less (e.g. ${pot.describeLadder(s.maxPrize * 3, s.maxWinners, s).prizes.slice(0, 4).map(fmt).join(' → ')}…). ${s.rolloverPercent}% of what's left carries over.\n` +
         `🔥 The pot holds at most **${fmt(s.maxPot)} XP**; when it's full, it's drawn right away (${s.countdownMinutes} min countdown), whatever the time.\n` +
         `-# Style it with \`/pot look\` or on the dashboard: ${dashboardUrl(guild.id)}`
     );

@@ -37,7 +37,9 @@ const paid=[]; const adjustXp=async(g,u,d)=>paid.push([u,d]);
   r=await P.saveSettings(guild,{drawHour:24}); assert.match(r.error,/0–23/);
   r=await P.saveSettings(guild,{embed:{color:'blue'}}); assert.match(r.error,/hex color/);
   r=await P.saveSettings(guild,{enabled:true,channelId:'pot',pingRoleId:'r1'});
-  assert.deepEqual([r.settings.drawHour,r.settings.countdownMinutes,r.settings.windowMinutes,r.settings.minMessages,r.settings.minPot,r.settings.sharePercent,r.settings.maxPrize,r.settings.maxWinners],[0,10,60,3,100,100,3000,10]);
+  assert.deepEqual([r.settings.drawHour,r.settings.countdownMinutes,r.settings.windowMinutes,r.settings.minMessages,r.settings.minPot,r.settings.sharePercent,r.settings.maxPrize,r.settings.maxWinners,r.settings.maxPot,r.settings.rolloverPercent],[0,10,60,3,100,25,500,5,2000,50],'defaults sized against leveling (level 10 = 3,162 XP)');
+  // The scenarios below were written for full-size pots: pin those settings explicitly.
+  await P.saveSettings(guild,{sharePercent:100,maxPrize:3000,maxWinners:10,maxPot:10000,rolloverPercent:100});
   assert.match((await P.saveSettings(guild,{maxPrize:5})).error,/1st place prize/); assert.match((await P.saveSettings(guild,{maxWinners:26})).error,/Winners/);
   assert.equal(P.nextDrawAt(at(15),0).getTime(),day0+D,'3pm → tonight at midnight');
   assert.equal(P.nextDrawAt(day0,0).getTime(),day0+D,'exactly midnight → the next one');
@@ -45,7 +47,7 @@ const paid=[]; const adjustXp=async(g,u,d)=>paid.push([u,d]);
   console.log('✓ settings validated; the pot is drawn at the end of the day (00:00 UTC by default)');
 
   // ---- tiered prizes: 1st gets up to the top prize, each place after ≤70% of the one above, capped places
-  const d=P.potSettings({xpPot:{}});
+  const d=P.potSettings({xpPot:{maxPrize:3000,maxWinners:10}}); // the ladder maths at the old, bigger sizes
   const L=(a,n,o={})=>P.prizeLadder(a,n,{...d,...o});
   assert.deepEqual(L(800,5),{prizes:[800],leftover:0},'a small pot all goes to 1st');
   assert.deepEqual(L(3500,1),{prizes:[3000],leftover:500},'1st never gets more than the top prize');
@@ -218,6 +220,43 @@ const paid=[]; const adjustXp=async(g,u,d)=>paid.push([u,d]);
   assert.equal(nxt().amount,2200+3430,'the rest rolls over to the next pot'); assert.equal(nxt().rolledOver,3430);
   await P.tick(client,FULL-5*60000); assert.equal(nxt().status,'collecting','tonight’s draw is the next pot’s, which isn’t due yet');
   console.log('✓ the pot caps at 10,000 XP: once full it’s posted and drawn right away (10-min countdown), and the overflow starts the next pot');
+
+  // ---- rebalanced: only part of what's left carries over; overflow never goes further than the next pot
+  await P.saveSettings(guild,{maxPrize:500,maxWinners:5,maxPot:2000,rolloverPercent:50,sharePercent:25,winMessage:''});
+  const RB=day0+40*D;
+  for (const x of rows.XpPot) if (['collecting','posted'].includes(x.status)) x.status='rolled';
+  const rb=P.potSettings(rows.GuildConfig[0]);
+  assert.deepEqual(P.prizeLadder(2000,12,rb),{prizes:[500,350,245,171,119],leftover:615},'full pot: 1,385 XP paid out at most');
+  assert.equal(P.describeLadder(2000,12,rb).text,'🥇 500 · 🥈 350 · 🥉 245 · **#4** 171 · **#5** 119\n-# +307 XP carries over to tomorrow');
+  await P.addLoss('g','ann',4000,RB-6*H); // 25% → 1,000 XP
+  assert.equal(pots().find(x=>x.day===dayKeyOf(RB)).amount,1000,'only 25% of a loss goes in');
+  await P.addLoss('g','ben',40000,RB-6*H); // 10,000 XP: 1,000 fills this pot, 2,000 the next, the rest is gone
+  assert.equal(pots().find(x=>x.day===dayKeyOf(RB)).amount,2000); assert.equal(pots().find(x=>x.day===dayKeyOf(RB+D)).amount,2000);
+  assert.equal(pots().find(x=>x.day===dayKeyOf(RB+2*D)),undefined,'never spills further than the next pot');
+  P._activity.clear(); for (const u of ['m0','m1','m2','m3','m4','m5']) for (let k=0;k<3;k++) say(u,RB-6*H-30*60000+k*60000);
+  paid.length=0; forced=[];
+  await P.tick(client,RB-6*H+1000); await P.tick(client,RB-6*H+11*60000); // full → drawn early
+  assert.deepEqual(paid.map(x=>x[1]),[500,350,245,171,119]);
+  assert.equal(pots().find(x=>x.day===dayKeyOf(RB+D)).amount,2000,'next pot was already full: the carry-over doesn’t push it past the cap');
+  // Nobody active → only half carries over.
+  for (const x of rows.XpPot) if (['collecting','posted'].includes(x.status)) x.status='rolled';
+  await M('XpPot').create({guildId:'g',day:dayKeyOf(RB+5*D),drawAt:new Date(RB+5*D),amount:800,status:'collecting'});
+  P._activity.clear(); rows.UserLevel.length=0;
+  await P.tick(client,RB+5*D+1000);
+  assert.equal(pots().find(x=>x.day===dayKeyOf(RB+6*D)).amount,400,'nobody won: 50% of 800 carries over, the rest is gone');
+  console.log('✓ rebalanced: 25% of losses, 500 XP top prize, 5 winners, 2,000 cap; only 50% of leftovers carry over, overflow reaches the next pot at most');
+
+  // ---- servers still on the old defaults are moved to the new ones; oversized open pots are trimmed
+  const cfg0=rows.GuildConfig[0];
+  cfg0.xpPot={...cfg0.xpPot,sharePercent:100,maxPrize:3000,maxWinners:10,maxPot:10000,balanceVersion:undefined};
+  await M('GuildConfig').create({guildId:'custom',xpPot:{enabled:true,maxPrize:800,maxPot:5000}}); rows.GuildConfig.find(c=>c.guildId==='custom').xpPot.balanceVersion=undefined;
+  await M('XpPot').create({guildId:'g',day:'2030-01-01',drawAt:new Date(Date.UTC(2030,0,1)),amount:9000,rolledOver:8000,status:'collecting'});
+  await P.rebalance();
+  assert.deepEqual([cfg0.xpPot.sharePercent,cfg0.xpPot.maxPrize,cfg0.xpPot.maxWinners,cfg0.xpPot.maxPot,cfg0.xpPot.balanceVersion],[25,500,5,2000,2]);
+  const kept=rows.GuildConfig.find(c=>c.guildId==='custom').xpPot; assert.deepEqual([kept.maxPrize,kept.maxPot],[800,5000],'values someone chose themselves are kept');
+  const big2=pots().find(x=>x.day==='2030-01-01'); assert.deepEqual([big2.amount,big2.rolledOver],[2000,2000],'an oversized open pot is trimmed to the new cap');
+  await P.rebalance(); assert.equal(cfg0.xpPot.maxPrize,500,'runs once');
+  console.log('✓ servers on the old defaults move to the rebalanced ones (custom values kept); oversized open pots are trimmed');
 
   // ---- preview / customised embed
   await P.saveSettings(guild,{embed:{title:'🍀 Lucky Pot',description:'Pot: {pot} — drawn {draw}',color:'#00FF00',imageUrl:'https://x.y/banner.png',footer:'gl'}});

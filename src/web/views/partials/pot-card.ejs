@@ -4,7 +4,7 @@
           <h3 style="margin:0;">💰 Daily XP Pot</h3>
           <span class="hero-status" id="potStatus" style="margin:0;"></span>
         </div>
-        <p class="muted" style="font-size:0.84rem; margin-top:0;">Every XP lost in <code>/gamble</code> goes into today’s pot, and it keeps growing until the draw. A few minutes before the end of the day it’s posted with a live countdown. Everyone who chatted in the last hour is entered automatically. Prizes are tiered: 1st place gets the most (up to the top prize), 2nd a bit less, 3rd less again, and so on. The pot holds up to a cap (10,000 XP by default), and when it’s full it’s drawn right away. Anything that doesn’t fit rolls over. Same as <code>/pot</code>.</p>
+        <p class="muted" style="font-size:0.84rem; margin-top:0;">Every XP lost in <code>/gamble</code> goes into today’s pot, and it keeps growing until the draw. A few minutes before the end of the day it’s posted with a live countdown. Everyone who chatted in the last hour is entered automatically. Prizes are tiered: 1st place gets the most (up to the top prize), 2nd a bit less, 3rd less again, and so on. The pot holds up to a cap (2,000 XP by default), and when it’s full it’s drawn right away. Only part of what’s left carries over, so pots don’t snowball. Same as <code>/pot</code>.</p>
         <div class="split">
           <div class="settings-card" style="padding:0;">
             <div class="setting-row">
@@ -47,6 +47,19 @@
               <div><div class="setting-title">Pot cap</div><div class="setting-help">The most XP the pot holds. When it’s full, it’s posted and drawn right away (after the countdown), whatever the time. Losses after that go into the next pot.</div></div>
               <div class="setting-control"><input type="number" id="potMaxPot" min="100" max="1000000" step="500"></div>
             </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Rollover</div><div class="setting-help">% of what’s left after a draw (or of a pot nobody won) that carries to the next pot. The rest is gone, so pots can’t snowball.</div></div>
+              <div class="setting-control"><input type="number" id="potRollover" min="0" max="100" step="5"></div>
+            </div>
+            <%
+              // Put the prizes in perspective: what chatting earns and what levels cost on this server.
+              const potXpPerMin = Math.round(((effectiveXp.xpMin + effectiveXp.xpMax) / 2) * (60000 / Math.max(effectiveXp.cooldownMs, 1000)));
+              const potLevelXp = (l) => Math.round(effectiveXp.levelXpBase * Math.pow(l, 1.5));
+            %>
+            <p class="muted" id="potScale" data-xp-per-min="<%= potXpPerMin %>" style="font-size:0.8rem; margin:0.2rem 0 0.6rem;">
+              📏 For scale: chatting earns about <strong><%= potXpPerMin %> XP a minute</strong> at most. Level 5 takes <%= potLevelXp(5).toLocaleString('en-US') %> XP in total, level 10 <%= potLevelXp(10).toLocaleString('en-US') %>, level 20 <%= potLevelXp(20).toLocaleString('en-US') %>.
+              <span id="potScalePrize"></span>
+            </p>
             <div class="setting-row stack">
               <div><div class="setting-title">Prize ladder</div><div class="setting-help">Try a pot size to see how it would be split.</div></div>
               <div class="setting-control" style="flex-direction:column; align-items:stretch;">

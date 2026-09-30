@@ -175,11 +175,13 @@ const GuildConfigSchema = new mongoose.Schema(
       countdownMinutes: { type: Number, default: 10 }, // the pot is posted this long before the draw
       windowMinutes: { type: Number, default: 60 }, // "active" = chatted in this window before the draw
       minMessages: { type: Number, default: 3 },
-      sharePercent: { type: Number, default: 100 }, // share of each gambling loss that goes into the pot
+      sharePercent: { type: Number, default: 25 }, // share of each gambling loss that goes into the pot (the rest is gone)
       minPot: { type: Number, default: 100 }, // smaller pots roll over to tomorrow
-      maxPrize: { type: Number, default: 3000 }, // 1st place's prize is capped here; each place after gets ≤70% of the one above
-      maxWinners: { type: Number, default: 10 }, // what doesn't fit these places rolls over to tomorrow
-      maxPot: { type: Number, default: 10000 }, // the pot never holds more; when it's full it's drawn right away
+      maxPrize: { type: Number, default: 500 }, // 1st place's prize is capped here; each place after gets ≤70% of the one above
+      maxWinners: { type: Number, default: 5 }, // what doesn't fit these places partly rolls over to tomorrow
+      maxPot: { type: Number, default: 2000 }, // the pot never holds more; when it's full it's drawn right away
+      rolloverPercent: { type: Number, default: 50 }, // how much of what's left carries to the next pot (the rest is gone)
+      balanceVersion: { type: Number, default: 2 }, // 2 = on the rebalanced defaults (see xpPot.rebalance)
       pingRoleId: { type: String, default: null },
       embed: {
         title: { type: String, default: '💰 Daily XP Pot' },
