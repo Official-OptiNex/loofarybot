@@ -2151,6 +2151,9 @@ function fillPot(s) {
   v('potWindow', s.windowMinutes);
   v('potShare', s.sharePercent);
   v('potMin', s.minPot);
+  v('potMaxPrize', s.maxPrize);
+  v('potMaxWinners', s.maxWinners);
+  v('potMaxPot', s.maxPot);
   v('potPing', s.pingRoleId || '');
   v('potTitle', s.embed.title);
   v('potColor', s.embed.color);
@@ -2172,10 +2175,35 @@ function readPot() {
     windowMinutes: v('potWindow'),
     sharePercent: v('potShare'),
     minPot: v('potMin'),
+    maxPrize: v('potMaxPrize'),
+    maxWinners: v('potMaxWinners'),
+    maxPot: v('potMaxPot'),
     pingRoleId: v('potPing') || null,
     embed: { title: v('potTitle'), color: v('potColor'), description: v('potDesc'), thumbnailUrl: v('potThumb'), imageUrl: v('potImage'), footer: v('potFooter') },
     winMessage: v('potWin')
   };
+}
+
+// Same split as the bot: 1st gets up to the top prize, each place after at most 70% of the one above,
+// no prize under 10 XP, at most `maxWinners` places; the rest rolls over.
+function potLadder(amount, places, maxPrize, pct) {
+  const prizes = [];
+  let left = Math.max(0, Math.floor(Number(amount) || 0));
+  let cap = Math.max(10, Number(maxPrize) || 3000);
+  while (prizes.length < places && left >= 10 && cap >= 10) {
+    const prize = Math.min(left, cap);
+    prizes.push(prize);
+    left -= prize;
+    cap = Math.floor((prize * pct) / 100);
+  }
+  return { prizes, leftover: left };
+}
+
+function ladderHtml(amount, places, f, pct) {
+  const { prizes, leftover } = potLadder(amount, places, f.maxPrize, pct);
+  if (!prizes.length) return '<span class="muted">Not enough in the pot yet</span>';
+  const medals = ['🥇', '🥈', '🥉'];
+  return prizes.map((p, i) => `${medals[i] || `<strong>#${i + 1}</strong>`} ${fmt(p)}`).join(' · ') + (leftover > 0 ? `<div class="muted" style="font-size:0.75rem;">+${fmt(leftover)} XP rolls over to tomorrow</div>` : '');
 }
 
 function renderPotPreview() {
@@ -2184,7 +2212,8 @@ function renderPotPreview() {
   const f = readPot();
   const drawAt = new Date(d.pot.drawAt);
   // Same default text and placeholders as the bot.
-  const vars = { pot: fmt(d.pot.amount), draw: fromNow(drawAt.getTime()), time: drawAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), min: f.minMessages, window: f.windowMinutes, entrants: fmt(d.entrants) };
+  const places = Math.min(Math.max(1, Number(f.maxWinners) || 10), 25);
+  const vars = { pot: fmt(d.pot.amount), draw: fromNow(drawAt.getTime()), time: drawAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), min: f.minMessages, window: f.windowMinutes, entrants: fmt(d.entrants), max: fmt(Number(f.maxPrize) || 3000), places, cap: fmt(Number(f.maxPot) || 10000) };
   const text = (f.embed.description.trim() || d.defaultDescription).replace(/\{(\w+)\}/g, (m, k) => (vars[k] !== undefined ? vars[k] : m));
   document.getElementById('potpEmbed').style.borderLeftColor = f.embed.color;
   document.getElementById('potpTitle').textContent = f.embed.title || '💰 Daily XP Pot';
@@ -2192,10 +2221,15 @@ function renderPotPreview() {
   const medals = ['🥇', '🥈', '🥉'];
   const top = d.top.length ? d.top.map((t, i) => `${medals[i]} ${pill('@' + (t.name || t.id))} — ${fmt(t.amount)} XP`).join('<br>') : 'Nobody has lost any XP yet… 👀';
   document.getElementById('potpFields').innerHTML = `
-    <div><div class="f-name">💰 Pot</div><strong>${fmt(d.pot.amount)} XP</strong>${d.pot.rolledOver ? `<div class="muted" style="font-size:0.75rem;">incl. ${fmt(d.pot.rolledOver)} rolled over</div>` : ''}</div>
+    <div><div class="f-name">💰 Pot</div><strong>${fmt(d.pot.amount)}</strong> / ${fmt(Number(f.maxPot) || 10000)} XP${d.pot.rolledOver ? `<div class="muted" style="font-size:0.75rem;">incl. ${fmt(d.pot.rolledOver)} rolled over</div>` : ''}</div>
     <div><div class="f-name">⏳ Draw</div>${esc(fromNow(drawAt.getTime()))}</div>
     <div><div class="f-name">🎟️ Entered so far</div>${fmt(d.entrants)}</div>
+    <div class="f-full"><div class="f-name">🏆 ${d.entrants ? 'Prizes right now' : 'Prizes'}</div>${ladderHtml(d.pot.amount, Math.min(d.entrants || places, places), f, d.tierPercent)}</div>
     <div class="f-full"><div class="f-name">📉 Top pot contributors</div>${top}</div>`;
+  const tryAmount = document.getElementById('potLadderAmount');
+  if (tryAmount.value === '') tryAmount.value = Number(f.maxPot) || 10000;
+  if (Number(tryAmount.value) > (Number(f.maxPot) || Infinity)) tryAmount.value = Number(f.maxPot);
+  document.getElementById('potLadder').innerHTML = ladderHtml(tryAmount.value, places, f, d.tierPercent);
   const img = (id, url) => {
     const el = document.getElementById(id);
     el.style.display = url ? '' : 'none';
@@ -2228,7 +2262,12 @@ async function loadPot() {
   ].join('');
   document.getElementById('potHistory').innerHTML = d.history.length
     ? d.history
-        .map((p) => `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);"><strong>${esc(p.day)}</strong> · ${p.status === 'done' ? `🏆 ${esc(p.winnerName || p.winnerId)} won <strong>${fmt(p.won)} XP</strong> <span class="muted">(${fmt(p.entrants)} entered)</span>` : `🔁 ${fmt(p.amount)} XP rolled over`}</div>`)
+        .map((p) => {
+          const medals = ['🥇', '🥈', '🥉'];
+          const who = p.winners.map((w, i) => `${medals[i] || `#${i + 1}`} ${esc(w.name || w.userId)} <strong>${fmt(w.amount)}</strong>`).join(' · ');
+          const rolled = p.leftover ? ` · 🔁 ${fmt(p.leftover)} rolled over` : '';
+          return `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);"><strong>${esc(p.day)}</strong> · ${p.status === 'done' ? `${who} <span class="muted">(${fmt(p.won)} XP paid, ${fmt(p.entrants)} entered${rolled})</span>` : `🔁 ${fmt(p.amount)} XP rolled over`}</div>`;
+        })
         .join('')
     : '<p class="muted" style="margin:0;">No pots drawn yet.</p>';
   renderPotPreview();
