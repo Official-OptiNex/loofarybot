@@ -1068,6 +1068,7 @@ router.get('/guilds/:guildId/gambling/pot', ...guard('gambling'), async (req, re
     defaultWinMessage: xpPot.DEFAULT_WIN_MESSAGE,
     tierPercent: xpPot.TIER_PERCENT,
     pot: { amount: cur.pot.amount || 0, rolledOver: cur.pot.rolledOver || 0, status: cur.pot.status || 'collecting', drawAt: cur.drawAt },
+    next: cur.next ? { amount: cur.next.amount || 0 } : null,
     entrants: cur.entrants,
     entrantList: { entered: who.entered.map(person), close: who.close.map(person), estimated: who.estimated, windowOpen: who.windowOpen, minMessages: cur.settings.minMessages },
     top: cur.top.map(([id, amount]) => ({ id, name: name(id), amount })),

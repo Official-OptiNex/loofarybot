@@ -258,6 +258,33 @@ const paid=[]; const adjustXp=async(g,u,d)=>paid.push([u,d]);
   await P.rebalance(); assert.equal(cfg0.xpPot.maxPrize,500,'runs once');
   console.log('✓ servers on the old defaults move to the rebalanced ones (custom values kept); oversized open pots are trimmed');
 
+  // ---- after the rebalance: pots queued far ahead (old 30-day spill), all full at the cap, swallowed
+  //      every new loss. They're cleared at startup, full pots are drawn one at a time, and the
+  //      pot view shows where new losses go while the current pot is full.
+  for (const x of rows.XpPot) if (['collecting','posted'].includes(x.status)) x.status='rolled';
+  await P.saveSettings(guild,{sharePercent:75,maxPot:2000});
+  const ST=day0+60*D, noonST=ST-12*H; const stPots=()=>pots().filter(x=>x.day>=dayKeyOf(ST)&&x.day<=dayKeyOf(ST+9*D));
+  for (let i=0;i<6;i++) await M('XpPot').create({guildId:'g',day:dayKeyOf(ST+i*D),drawAt:new Date(ST+i*D),amount:2000,rolledOver:2000,status:'collecting'});
+  await P.addLoss('g','ann',1000,noonST);
+  assert.deepEqual(stPots().map(x=>x.amount),[2000,2000,2000,2000,2000,2000],'(the bug) every pot full → the loss went nowhere');
+  assert.equal(await P.clearFarPots(noonST),4,'only tonight’s pot and the one after are kept');
+  assert.deepEqual(stPots().map(x=>x.day),[dayKeyOf(ST),dayKeyOf(ST+D)]);
+  // Only the first full pot starts its countdown; the one behind it waits its turn.
+  const nPosts=sent.length; await P.tick(client,noonST+1000); await P.tick(client,noonST+20000);
+  assert.equal(sent.length,nPosts+1,'one countdown at a time'); assert.equal(pots().find(x=>x.day===dayKeyOf(ST+D)).status,'collecting');
+  let view=await P.currentPot(guild,noonST+30000); assert.equal(view.pot.day,dayKeyOf(ST)); assert.equal(view.next.amount,2000);
+  assert.match(P.buildEmbed(view.pot,view.settings,{entrants:0,drawAt:view.drawAt,next:view.next}).data.fields.find(f=>f.name.includes('Next')).value,/2,000\*\* \/ 2,000 XP — new losses go here now \(full too/);
+  // Once tonight's pot is drawn, the next one (full) starts; after that, losses fill the pot again.
+  P._activity.clear(); for (const u of ['m0','m1','m2']) for (let k=0;k<3;k++) say(u,noonST-30*60000+k*60000);
+  await P.tick(client,noonST+11*60000); assert.equal(pots().find(x=>x.day===dayKeyOf(ST)).status,'done');
+  await P.tick(client,noonST+11*60000+15000); assert.equal(pots().find(x=>x.day===dayKeyOf(ST+D)).status,'posted','the next full pot starts its countdown');
+  await P.addLoss('g','ben',1000,noonST+12*60000);
+  view=await P.currentPot(guild,noonST+12*60000);
+  const after=pots().find(x=>x.day===dayKeyOf(ST+2*D));
+  assert.equal(after.contributors.get ? after.contributors.get('ben') : after.contributors.ben,750,'75% of the loss lands in the pot after it');
+  assert.equal(view.next.amount,after.amount,'and /pot view shows that pot filling');
+  console.log('✓ pots queued far ahead are cleared; full pots are drawn one at a time; /pot view shows the next pot filling while the current one is full');
+
   // ---- preview / customised embed
   await P.saveSettings(guild,{embed:{title:'🍀 Lucky Pot',description:'Pot: {pot} — drawn {draw}',color:'#00FF00',imageUrl:'https://x.y/banner.png',footer:'gl'}});
   const custom=P.buildEmbed({amount:1234,contributors:{a:5}},P.potSettings(rows.GuildConfig[0]),{entrants:4,drawAt:new Date(day0)}).data;

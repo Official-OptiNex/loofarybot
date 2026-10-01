@@ -135,8 +135,11 @@ async function addToOpenPot(guildId, s, amount, { userId = null, from = Date.now
   if (skipDay && dayKey(drawAt) === skipDay) drawAt = new Date(drawAt.getTime() + 24 * HOUR);
   let left = Math.floor(amount);
   let retries = 5;
-  // This pot or the next one only — XP that fits in neither is gone (no snowballing into next week).
-  for (let days = 0; days < 2 && left > 0; ) {
+  // The first open pot or the one after it only — XP that fits in neither is gone (no snowballing
+  // into next week). Days already drawn (e.g. a pot drawn early because it filled up) are skipped
+  // and don't count.
+  let openSeen = 0;
+  for (let steps = 0; steps < 10 && openSeen < 2 && left > 0; steps++) {
     const day = dayKey(drawAt);
     const pot = await XpPot.findOne({ guildId, day }, { amount: 1, status: 1 }).lean();
     const open = !pot || ['collecting', 'posted'].includes(pot.status);
@@ -159,8 +162,8 @@ async function addToOpenPot(guildId, s, amount, { userId = null, from = Date.now
       if (--retries < 0) break; // raced with other updates: look at this day again
       continue;
     }
+    if (open) openSeen++; // full
     drawAt = new Date(drawAt.getTime() + 24 * HOUR); // drawn already, or full — the next one
-    days++;
   }
   return left < amount;
 }
@@ -244,7 +247,7 @@ function fill(text, vars) {
 /**
  * The pot embed. phase: 'live' (countdown), 'done' (winner), 'rolled' (nobody won), 'preview'.
  */
-function buildEmbed(pot, s, { phase = 'live', entrants = null, winners = [], leftover = 0, drawAt = null } = {}) {
+function buildEmbed(pot, s, { phase = 'live', entrants = null, winners = [], leftover = 0, drawAt = null, next = null } = {}) {
   const at = drawAt || pot?.drawAt || new Date();
   const amount = pot?.amount || 0;
   const vars = { pot: fmt(amount), draw: ts(at), time: ts(at, 't'), min: s.minMessages, window: s.windowMinutes, entrants: entrants ?? '—', max: fmt(s.maxPrize), places: s.maxWinners, cap: fmt(s.maxPot) };
@@ -273,6 +276,7 @@ function buildEmbed(pot, s, { phase = 'live', entrants = null, winners = [], lef
     // Prizes as they'd be if drawn right now (with nobody entered yet: as if every place is filled).
     const ladder = describeLadder(amount, entrants ? entrants : s.maxWinners, s);
     embed.addFields({ name: entrants ? '🏆 Prizes right now' : '🏆 Prizes', value: ladder.text });
+    if (next) embed.addFields({ name: '⏭️ Next pot', value: `**${fmt(next.amount || 0)}** / ${fmt(s.maxPot)} XP — new losses go here now${(next.amount || 0) >= s.maxPot ? ' (full too: more losses are lost until a pot is drawn)' : ''}` });
   }
   const top = topContributors(pot);
   embed.addFields({ name: '📉 Top pot contributors', value: top.length ? top.map(([id, v], i) => `${MEDALS[i]} <@${id}> — ${fmt(v)} XP`).join('\n') : 'Nobody has lost any XP yet… 👀' });
@@ -316,7 +320,9 @@ async function refreshLive(guild, s, pot, now = Date.now()) {
   const msg = await channel?.messages?.fetch(pot.messageId).catch(() => null);
   if (!msg) return;
   const entrants = (await activeMembers(guild, s, new Date(Math.min(now, new Date(pot.drawAt).getTime())))).length;
-  await msg.edit({ embeds: [buildEmbed(pot, s, { entrants })] }).catch(() => null);
+  // While this one counts down, new losses fill the next pot — show it so the numbers keep moving.
+  const next = (await XpPot.findOne({ guildId: guild.id, status: 'collecting', drawAt: { $gt: new Date(pot.drawAt) } }).sort({ drawAt: 1 }).lean()) || { amount: 0 };
+  await msg.edit({ embeds: [buildEmbed(pot, s, { entrants, next })] }).catch(() => null);
 }
 
 /** Picks `n` different members at random, in order (the first one picked gets 1st place). */
@@ -398,9 +404,10 @@ async function tickGuild(client, config, now = Date.now()) {
     }
     await drawPot(guild, s, pot._id, { now });
   }
-  // 2) A full pot starts its countdown right away, whatever the time.
-  const full = await XpPot.findOne({ guildId: guild.id, status: 'collecting', amount: { $gte: s.maxPot } }).sort({ drawAt: 1 }).lean();
-  if (full) await postPot(guild, s, new Date(now + s.countdownMinutes * 60000), now, full.day);
+  // 2) A full pot starts its countdown right away, whatever the time — one at a time, and only the
+  //    pot that's up next (a full pot behind it waits its turn instead of all being drawn at once).
+  const first = await XpPot.findOne({ guildId: guild.id, status: { $in: ['collecting', 'posted'] } }).sort({ drawAt: 1 }).lean();
+  if (first?.status === 'collecting' && first.amount >= s.maxPot) await postPot(guild, s, new Date(now + s.countdownMinutes * 60000), now, first.day);
   // 3) Countdown time: post the pot, then keep its numbers fresh.
   const drawAt = nextDrawAt(now, s.drawHour);
   if (now >= drawAt.getTime() - s.countdownMinutes * 60000) {
@@ -440,8 +447,30 @@ async function rebalance() {
   }
 }
 
+/**
+ * Pots only ever fill the next draw or the one after it. Older versions could spill XP into pots up
+ * to 30 days ahead; after the rebalance those sat full at the cap and swallowed new losses. They're
+ * removed (that XP was never meant to exist), keeping the next two draws.
+ */
+async function clearFarPots(now = Date.now()) {
+  const configs = await GuildConfig.find({ xpPot: { $exists: true } }, { guildId: 1, xpPot: 1 }).lean();
+  let removed = 0;
+  for (const c of configs) {
+    const limit = nextDrawAt(now, potSettings(c).drawHour).getTime() + 24 * HOUR + HOUR; // the next draw and the one after
+    const far = await XpPot.find({ guildId: c.guildId, status: { $in: ['collecting', 'posted'] }, drawAt: { $gt: new Date(limit) } }, { _id: 1, day: 1, amount: 1 }).lean();
+    for (const p of far) {
+      await XpPot.deleteOne({ _id: p._id, status: { $in: ['collecting', 'posted'] } });
+      removed++;
+    }
+    if (far.length) console.log(`[xpPot] ${c.guildId}: removed ${far.length} pot(s) queued too far ahead (${far.map((p) => `${p.day}: ${p.amount}`).join(', ')})`);
+  }
+  return removed;
+}
+
 function startXpPot(client) {
-  rebalance().catch((err) => console.warn('[xpPot] rebalance failed:', err.message));
+  rebalance()
+    .then(() => clearFarPots())
+    .catch((err) => console.warn('[xpPot] rebalance failed:', err.message));
   setInterval(() => tick(client), TICK_MS);
 }
 
@@ -469,10 +498,13 @@ async function currentPot(guild, now = Date.now()) {
   const config = await GuildConfig.findOne({ guildId: guild.id }).lean();
   const s = potSettings(config);
   const drawAt = nextDrawAt(now, s.drawHour);
-  const pot = (await XpPot.findOne({ guildId: guild.id, status: { $in: ['collecting', 'posted'] } }).sort({ drawAt: 1 }).lean()) || { amount: 0, contributors: {}, drawAt, status: 'collecting' };
+  const open = await XpPot.find({ guildId: guild.id, status: { $in: ['collecting', 'posted'] } }).sort({ drawAt: 1 }).limit(2).lean();
+  const pot = open[0] || { amount: 0, contributors: {}, drawAt, status: 'collecting' };
+  // When this pot is full or counting down, new losses fill the one after it — show that one too.
+  const next = pot.status === 'posted' || pot.amount >= s.maxPot ? open[1] || { amount: 0, rolledOver: 0 } : null;
   const at = new Date(pot.drawAt || drawAt);
   const entrants = await activeMembers(guild, s, new Date(Math.min(now, at.getTime())));
-  return { settings: s, pot, drawAt: at, entrants: entrants.length, top: topContributors(pot) };
+  return { settings: s, pot, next, drawAt: at, entrants: entrants.length, top: topContributors(pot) };
 }
 
 /**
@@ -599,6 +631,7 @@ module.exports = {
   tickGuild,
   startXpPot,
   rebalance,
+  clearFarPots,
   startNow,
   currentPot,
   recentPots,

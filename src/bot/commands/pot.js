@@ -121,7 +121,7 @@ async function execute(interaction) {
   if (sub === 'view') {
     const cur = await pot.currentPot(guild);
     if (!cur.settings.enabled) return reply('💰 The Daily XP Pot is off in this server.');
-    const embed = pot.buildEmbed(cur.pot, cur.settings, { entrants: cur.entrants, drawAt: cur.drawAt });
+    const embed = pot.buildEmbed(cur.pot, cur.settings, { entrants: cur.entrants, drawAt: cur.drawAt, next: cur.next });
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
   }
 
