@@ -2281,7 +2281,8 @@ async function loadPot() {
   document.getElementById('potStatus').innerHTML = [
     `<span class="status-chip ${s.enabled ? 'good' : 'off'}"><span class="dot"></span>${s.enabled ? 'On' : 'Off'}</span>`,
     `<span class="status-chip"><span class="dot"></span>💰 ${fmt(d.pot.amount)} XP in today’s pot</span>`,
-    s.enabled ? `<span class="status-chip"><span class="dot"></span>${d.pot.status === 'posted' ? '⏱️ counting down now' : `drawn ${esc(fromNow(new Date(d.pot.drawAt).getTime()))}`}</span>` : ''
+    s.enabled ? `<span class="status-chip"><span class="dot"></span>${d.pot.status === 'posted' ? '⏱️ counting down now' : `drawn ${esc(fromNow(new Date(d.pot.drawAt).getTime()))}`}</span>` : '',
+    d.next ? `<span class="status-chip"><span class="dot"></span>⏭️ next pot ${fmt(d.next.amount)} XP${d.next.amount >= s.maxPot ? ' (full)' : ''}</span>` : ''
   ].join('');
   renderPotEntrants(d);
   document.getElementById('potHistory').innerHTML = d.history.length
