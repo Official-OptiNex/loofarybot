@@ -574,12 +574,19 @@
     } else {
       body.channelId = $('channel').value;
       if (!body.channelId) return showToast('❌ Pick a channel first.');
+      const forum = forumById(body.channelId);
+      if (forum) {
+        body.postTitle = $('postTitle').value.trim();
+        if (!body.postTitle) return showToast('❌ Give the forum post a title.');
+        body.tagIds = [...document.querySelectorAll('#forumTags input:checked')].map((i) => i.value);
+        if (forum.requireTag && !body.tagIds.length) return showToast('❌ This forum requires a tag — pick at least one.');
+      }
     }
     const btn = $('sendBtn');
     btn.disabled = true;
     try {
       const data = await api('POST', `/dashboard/${guildId}/embed/send`, body);
-      showToast(data.edited ? '✅ Message updated.' : '✅ Sent!');
+      showToast(data.edited ? '✅ Message updated.' : data.forum ? '✅ Forum post created!' : '✅ Sent!');
       if (!editing && data.url) {
         $('editUrl').value = data.url; // so "Edit a bot message" can fix a typo right away
       }
@@ -589,6 +596,45 @@
       btn.disabled = false;
     }
   };
+
+  /* ------------------------------------------------------------ forum channels */
+
+  let forumList = [];
+  try {
+    forumList = JSON.parse(($('forumData') || {}).textContent || '[]');
+  } catch (e) {
+    forumList = [];
+  }
+  const forumById = (id) => forumList.find((f) => f.id === id) || null;
+
+  // Picking a forum asks for a post title and its tags (at most 5, as Discord allows).
+  function renderForumRow() {
+    const forum = forumById($('channel').value);
+    $('forumRow').style.display = forum ? '' : 'none';
+    if (!forum) return;
+    $('forumTagsWrap').style.display = forum.tags.length ? '' : 'none';
+    $('forumTagHint').textContent = forum.requireTag ? '(pick at least one, up to 5)' : '(optional, up to 5)';
+    $('forumTags').innerHTML = '';
+    forum.tags.forEach((t) => {
+      const label = document.createElement('label');
+      label.className = 'mention-pill';
+      label.style.cssText = 'cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; margin:0; padding:0.25rem 0.55rem;';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.value = t.id;
+      box.style.cssText = 'width:auto; margin:0;';
+      box.addEventListener('change', () => {
+        const picked = document.querySelectorAll('#forumTags input:checked');
+        if (picked.length > 5) {
+          box.checked = false;
+          showToast('❌ Up to 5 tags.');
+        }
+      });
+      label.append(box, document.createTextNode(`${t.emoji ? t.emoji + ' ' : ''}${t.name}`));
+      $('forumTags').append(label);
+    });
+  }
+  if ($('channel')) $('channel').addEventListener('change', renderForumRow);
 
   /* ------------------------------------------------------------ welcome tie-in */
 

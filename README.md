@@ -559,6 +559,10 @@ amount, the announcement channel, or turns them off.
   timestamp. The live preview matches Discord's layout, including inline fields (3 per row, or
   2 next to a thumbnail) and headings, quotes, lists, spoilers and links. Fields and embeds can
   be reordered and duplicated; each embed shows a live 6,000-character counter.
+  - **Forum channels:** forums are listed under "Forums" in the channel picker. Sending to one
+    creates a new forum post with your message as its first post. You give it a title and pick
+    its tags (up to 5, at least one if the forum requires tags). LoofaryBot needs Create Posts and
+    Embed Links there. The post's link works with **Edit a bot message**, so you can fix it later.
   - **Templates are saved in Discord's own JSON format** (`{ content, embeds }`), so they move
     freely between LoofaryBot, Discohook and webhooks. Older templates are converted when loaded.
   - **Import:** paste JSON or pick a file. Accepted: Discohook's JSON editor, a Discohook backup
