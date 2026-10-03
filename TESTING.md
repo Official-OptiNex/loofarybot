@@ -163,6 +163,15 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
       duplicate items or reset how many were sold.
 - [ ] Every save shows up in **Server settings → Change history**.
 
+## 8b. Embed Builder → forum channels
+- [ ] Embed Builder → **Send to channel**: your forum channels are listed under "Forums".
+- [ ] Pick a forum → **Post title** and its **Tags** appear. Sending without a title (or without a
+      tag in a forum that requires one) shows an error and posts nothing.
+- [ ] Fill in a title, tick a tag, Send → "✅ Forum post created!" and a new post appears in the forum
+      with that title, tag and your embed.
+- [ ] Switch to **Edit a bot message** (the post's link is already filled in), change the text, send →
+      the post's first message updates.
+
 ## 9. Free-tier health (check every week or two)
 - [ ] Logs → Settings → Storage: **Database** well under 75% of 512 MB, **Bot memory** under ~80% of
       512 MB.

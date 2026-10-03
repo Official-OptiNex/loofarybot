@@ -40,8 +40,11 @@ for (const [config, welcome] of [[{}, new WelcomeConfig({guildId:'1'}).toObject(
   fs.writeFileSync(require('os').tmpdir()+'/loofary-render-guild-mod.html', html);
   console.log('mod view ok', /id="tab-settings"/.test(html)?'SETTINGS LEAKED':'no settings panel', (html.match(/class="nav-item/g)||[]).length+' nav items');
 }
-const eb=ejs.render(fs.readFileSync(root+'src/web/views/embedBuilder.ejs','utf8'),{guild,channels:base.channels,bot:base.bot,...{botName:'LoofaryBot',botAvatar:'',inviteUrl:'x',user:null}},{filename:root+'src/web/views/embedBuilder.ejs'});
+const forums=[{id:'f1',name:'announcements</script>',requireTag:true,tags:[{id:'t1',name:'News',emoji:'📰'}]}];
+const eb=ejs.render(fs.readFileSync(root+'src/web/views/embedBuilder.ejs','utf8'),{guild,channels:base.channels,forums,bot:base.bot,...{botName:'LoofaryBot',botAvatar:'',inviteUrl:'x',user:null}},{filename:root+'src/web/views/embedBuilder.ejs'});
 for (const m of eb.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Function(m[1]); console.log('embed builder ok');
+if (!/data-forum="1">💬 announcements&lt;\/script&gt;/.test(eb) || !/Forums \(creates a new post\)/.test(eb)) throw new Error('forum channels missing from the embed builder');
+JSON.parse(eb.match(/<script type="application\/json" id="forumData">([\s\S]*?)<\/script>/)[1]); console.log('embed builder lists forum channels (escaped)');
 const S=require('os').tmpdir()+'/loofary-render-';
 const site={botName:'LoofaryBot',botAvatar:'https://cdn.discordapp.com/embed/avatars/0.png',inviteUrl:'https://discord.com/oauth2/authorize?x=1'};
 const { publicCommands } = require(root+'src/web/utils/site');

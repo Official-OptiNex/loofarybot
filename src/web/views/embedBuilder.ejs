@@ -58,8 +58,21 @@
             <label for="channel">Send to channel</label>
             <select id="channel">
               <option value="">— Select a channel —</option>
+              <% if (forums.length) { %><optgroup label="Text channels"><% } %>
               <% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %>
+              <% if (forums.length) { %></optgroup><optgroup label="Forums (creates a new post)">
+              <% forums.forEach(f => { %><option value="<%= f.id %>" data-forum="1">💬 <%= f.name %></option><% }) %>
+              </optgroup><% } %>
             </select>
+            <div id="forumRow" style="display:none; margin-top:0.6rem;">
+              <label for="postTitle">Post title</label>
+              <input id="postTitle" maxlength="100" placeholder="What's this post about?" autocomplete="off">
+              <div id="forumTagsWrap" style="margin-top:0.5rem;">
+                <label>Tags <span class="muted" id="forumTagHint" style="font-weight:400;"></span></label>
+                <div id="forumTags" style="display:flex; flex-wrap:wrap; gap:0.35rem;"></div>
+              </div>
+            </div>
+            <script type="application/json" id="forumData"><%- JSON.stringify(forums).replace(/</g, '\\u003c') %></script>
           </div>
           <div id="sendEditRow" style="display:none;">
             <label for="editUrl">Message link</label>
