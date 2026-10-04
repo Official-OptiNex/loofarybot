@@ -87,5 +87,24 @@ function msg(user,content,ch='general',extra={}){ const c=guild.channels.cache.g
   assert.equal(await A.handleAutomodEdit(old,{...old}),false,'nothing changed');
   assert.equal(await A.handleAutomodEdit(old,edited),true); assert.equal(rows.ModCase.at(-1).type,'timeout');
   console.log('✓ links edited into a message are caught too');
+
+  // ---- adult / NSFW sites: on by default, a big list + .xxx/.porn TLDs + obvious words; NSFW channels skip it
+  assert.ok(L.NSFW_DOMAINS.length>=400,'a big built-in list');
+  for (const u of ['https://www.pornhub.com/view_video.php?viewkey=1','https://onlyfans.com/x','https://de.xhamster.com','https://nhentai.net/g/1','https://rule34.xxx/','https://anything.porn','https://free-porn-tube.net','https://p0rnhub-clips.net','https://hot-milfs.org','https://sexcams24.biz','https://nude-pics.net','https://reddit.com/r/gonewild/comments/x','https://www.reddit.com/r/NSFW_GIF'])
+    assert.equal(L.checkContent(u)?.reason,'an adult (NSFW) site',u);
+  for (const u of ['https://essex.ac.uk','https://www.middlesex.edu','https://unisex-clothing.com','https://denuded-trees.org','https://www.reddit.com/r/gaming','https://reddit.com/r/Essex','https://en.wikipedia.org/wiki/Pornography','https://github.com/xxxxx/repo'])
+    assert.equal(L.checkContent(u),null,u);
+  assert.equal(L.checkContent('https://pornhub.com',{nsfw:false}),null); assert.equal(L.checkContent('https://pornhub.com',{allow:['pornhub.com']}),null,'the approved list wins');
+  r=await A.saveSettings(guild,{rules:{unsafeLinks:{mode:'unsafe'}}}); assert.equal(r.settings.unsafeLinks.nsfw,true,'on by default');
+  A._lastStrike.clear(); const n0=rows.ModCase.length;
+  assert.equal(await A.handleAutomod(msg('vip','lol https://www.xvideos.com/video123'),cfg()),true);
+  assert.equal(rows.ModCase.length,n0+1); assert.equal(rows.ModCase.at(-1).type,'warn','a normal strike, not the scam mute'); assert.match(sent.at(-1).m.payload.content,/🔞 .*adult \(NSFW\) links aren’t allowed here/);
+  const nsfwRoom=guild.channels.cache.get('memes'); nsfwRoom.nsfw=true; A._lastStrike.clear();
+  assert.equal(await A.handleAutomod(msg('vip','https://www.xvideos.com/video123','memes'),cfg()),false,'channels marked NSFW skip the adult check');
+  assert.equal(await A.handleAutomod(msg('vip','https://bit.ly/abc','memes'),cfg()),true,'…but the other checks still apply there');
+  nsfwRoom.nsfw=false;
+  r=await A.saveSettings(guild,{rules:{unsafeLinks:{nsfw:false}}}); assert.equal(r.settings.unsafeLinks.nsfw,false);
+  A._lastStrike.clear(); assert.equal(await A.handleAutomod(msg('vip','https://www.xvideos.com/video123'),cfg()),false,'can be turned off');
+  console.log('✓ adult / NSFW links removed by default (list, .xxx/.porn, words, NSFW subreddits) with a 🔞 note; NSFW channels skip it; can be turned off');
   process.exit(0);
 })().catch(e=>{console.error(e);process.exit(1);});

@@ -2,8 +2,10 @@
 // API keys or paid services. It catches the usual Discord scams: sites pretending to be Discord /
 // Steam / Roblox ("free Nitro"), link shorteners that hide where they go, raw IP addresses,
 // lookalike letters (punycode), direct downloads of programs, and masked links whose text shows a
-// different site than where they really go. Well-known sites are allowed; each server can add its
-// own allow and block lists, or only allow approved sites.
+// different site than where they really go — and adult / NSFW sites (a big built-in list, the
+// adult-only TLDs, and obvious words in the address). Well-known sites are allowed; each server can
+// add its own allow and block lists, or only allow approved sites.
+const { NSFW_DOMAINS } = require('./data/nsfwDomains');
 
 // Well-known sites that are fine to post (a subdomain counts too: clips.twitch.tv, en.wikipedia.org).
 const SAFE_DOMAINS = [
@@ -45,6 +47,27 @@ const RISKY_FILES = /\.(exe|scr|bat|cmd|msi|msix|apk|jar|vbs|vbe|jse|wsf|ps1|lnk
 const FILE_LIKE_TLDS = ['zip', 'mov'];
 // Text that comes with "free Nitro" scams.
 const SCAM_TEXT = /\b(free\s*(discord\s*)?nitro|nitro\s*(for\s*)?free|steam\s*gift|free\s*(steam|robux|skins?)|(gift|nitro)\b.{0,40}\b(claim|first\s*\d+))\b/i;
+
+// Adult / NSFW: TLDs that exist only for adult sites, and words that give a site away. "sex" and
+// "nude" only count at the start of a word in the address, so essex.ac.uk, unisex-shop.com or
+// denuded-trees.org are fine.
+const NSFW_TLDS = ['xxx', 'porn', 'sex', 'adult'];
+const NSFW_WORDS = /porn|xxx|hentai|nsfw|xvideo|xnxx|xhamster|onlyfans|camgirl|camsex|sexcam|livesex|freesex|milf|rule34|gonewild|erotic|fetish|bdsm|gangbang|blowjob|cumshot|shemale|escorts?|fuckbook|jerkoff/;
+const NSFW_LABEL = /^sex|sexy|^nudes?(?!t)/;
+
+/** Is this an adult site? Also checks the subreddit of a reddit link (reddit.com/r/gonewild). */
+function isNsfw(host, parsed) {
+  if (onAny(host, NSFW_DOMAINS)) return true;
+  const labels = host.split('.');
+  if (NSFW_TLDS.includes(labels.at(-1))) return true;
+  const name = labels.slice(0, -1);
+  if (name.some((l) => NSFW_WORDS.test(deLeet(l)) || l.split('-').some((w) => NSFW_LABEL.test(deLeet(w))))) return true;
+  if (onDomain(host, 'reddit.com') || host === 'redd.it') {
+    const sub = (parsed.pathname.match(/^\/(?:r|u|user)\/([^/]+)/i) || [])[1];
+    if (sub && (NSFW_WORDS.test(sub.toLowerCase()) || sub.toLowerCase().split(/[-_]/).some((w) => NSFW_LABEL.test(w)))) return true;
+  }
+  return false;
+}
 
 // Discord only makes http(s) links clickable. <…> just stops the preview, so it's handled the same.
 const URL_RE = /https?:\/\/[^\s<>()"'`]+(?:\([^\s)]*\)[^\s<>()"'`]*)*/gi;
@@ -115,7 +138,7 @@ function extractLinks(content) {
  * `scam` marks the clear-cut scam cases (fake brands, disguised links) — those can skip the warnings.
  */
 function classifyLink(link, opts = {}) {
-  const o = { allow: [], block: [], shorteners: true, ipLinks: true, files: true, ...opts };
+  const o = { allow: [], block: [], shorteners: true, ipLinks: true, files: true, nsfw: true, ...opts };
   const { url, host, text } = link;
   if (!host) return { verdict: 'unsafe', reason: "a broken link that can't be checked", scam: false };
   let parsed;
@@ -139,6 +162,10 @@ function classifyLink(link, opts = {}) {
     }
   }
   if (o.files && RISKY_FILES.test(decodeURIComponent(parsed.pathname).replace(/\/+$/, ''))) return { verdict: 'unsafe', reason: 'a direct download of a program or script', scam: false };
+
+  // Adult sites (before the well-known list, so a NSFW subreddit is caught too). The server's
+  // approved list wins, and NSFW channels pass nsfw: false.
+  if (o.nsfw && !onAny(host, o.allow) && isNsfw(host, parsed)) return { verdict: 'unsafe', reason: 'an adult (NSFW) site', scam: false, nsfw: true };
 
   if (onAny(host, o.allow) || onAny(host, SAFE_DOMAINS)) return { verdict: 'safe', reason: 'a well-known site', scam: false };
 
@@ -183,11 +210,11 @@ function checkContent(content, opts = {}) {
   const scamText = SCAM_TEXT.test(String(content || ''));
   for (const link of links) {
     const r = classifyLink(link, opts);
-    if (r.verdict === 'unsafe') return { link: link.url, host: link.host, reason: r.reason, scam: r.scam, unapproved: false };
+    if (r.verdict === 'unsafe') return { link: link.url, host: link.host, reason: r.reason, scam: r.scam, unapproved: false, nsfw: !!r.nsfw };
     if (r.verdict === 'unknown' && scamText) return { link: link.url, host: link.host, reason: 'posted with a “free Nitro / gift” scam message', scam: true, unapproved: false };
     if (r.verdict === 'unknown' && opts.mode === 'allowlist') return { link: link.url, host: link.host, reason: "not on this server's approved sites", scam: false, unapproved: true };
   }
   return null;
 }
 
-module.exports = { SAFE_DOMAINS, SHORTENERS, hostOf, cleanDomains, extractLinks, classifyLink, checkContent, editDistance };
+module.exports = { SAFE_DOMAINS, SHORTENERS, NSFW_DOMAINS, isNsfw, hostOf, cleanDomains, extractLinks, classifyLink, checkContent, editDistance };

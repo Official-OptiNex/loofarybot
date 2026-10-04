@@ -55,6 +55,7 @@ const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName('block').setDescription('Add a site to the block list (or remove it if it’s there)').setMaxLength(200))
       .addBooleanOption((o) => o.setName('shorteners').setDescription('Remove link shorteners like bit.ly (default on)'))
       .addBooleanOption((o) => o.setName('downloads').setDescription('Remove links to programs like .exe/.apk (default on)'))
+      .addBooleanOption((o) => o.setName('nsfw').setDescription('Remove adult / NSFW sites (default on; NSFW channels skip it)'))
       .addBooleanOption((o) => o.setName('scam_mute').setDescription('Mute straight away for scam links, skipping the warnings (default on)'))
   )
   .addSubcommand((s) =>
@@ -137,13 +138,13 @@ async function execute(interaction) {
       if (t.error) return reply(`❌ ${t.error}`);
       u[key] = t.list;
     }
-    for (const [opt, key] of [['shorteners', 'shorteners'], ['downloads', 'files'], ['scam_mute', 'scamMute']]) if (o.getBoolean(opt) !== null) u[key] = o.getBoolean(opt);
+    for (const [opt, key] of [['shorteners', 'shorteners'], ['downloads', 'files'], ['nsfw', 'nsfw'], ['scam_mute', 'scamMute']]) if (o.getBoolean(opt) !== null) u[key] = o.getBoolean(opt);
     const saved = await automod.saveSettings(guild, Object.keys(u).length ? { rules: { unsafeLinks: { enabled: true, ...u } } } : {});
     if (saved.error) return reply(`❌ ${saved.error}`);
     const n = saved.settings.unsafeLinks;
     return reply(
       `${lines.length ? `✅ ${lines.join('\n')}\n\n` : ''}🛡️ **Link safety** is ${n.enabled ? 'on' : 'off'}${s.enabled ? '' : ' (auto-mod itself is off — `/automod toggle`)'}.\n` +
-        `Mode: **${n.mode === 'allowlist' ? 'only approved sites' : 'remove unsafe links'}** · shorteners ${n.shorteners ? 'removed' : 'allowed'} · downloads ${n.files ? 'removed' : 'allowed'} · scam links ${n.scamMute ? 'mute straight away' : 'count as a warning'}\n` +
+        `Mode: **${n.mode === 'allowlist' ? 'only approved sites' : 'remove unsafe links'}** · shorteners ${n.shorteners ? 'removed' : 'allowed'} · downloads ${n.files ? 'removed' : 'allowed'} · adult sites ${n.nsfw ? 'removed' : 'allowed'} · scam links ${n.scamMute ? 'mute straight away' : 'count as a warning'}\n` +
         `Approved: ${n.allow.length ? n.allow.join(', ') : '— (well-known sites are always fine)'}\nBlocked: ${n.block.length ? n.block.join(', ') : '—'}`
     );
   }
@@ -166,7 +167,7 @@ async function execute(interaction) {
       walls: `> ${cfg.maxLines} lines or repeated text`,
       mentions: `${cfg.max}+ mentions${cfg.everyone ? ', @everyone' : ''}`,
       invites: 'other servers',
-      unsafeLinks: cfg.mode === 'allowlist' ? 'only approved sites' : 'scams, shorteners, downloads',
+      unsafeLinks: cfg.mode === 'allowlist' ? 'only approved sites' : `scams, shorteners, downloads${cfg.nsfw ? ', adult sites' : ''}`,
       links: `${cfg.max}+ links`,
       caps: `${cfg.percent}%+ caps`
     }[key];

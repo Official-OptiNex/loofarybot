@@ -231,6 +231,7 @@ const GuildConfigSchema = new mongoose.Schema(
         shorteners: { type: Boolean, default: true },
         ipLinks: { type: Boolean, default: true },
         files: { type: Boolean, default: true },
+        nsfw: { type: Boolean, default: true }, // adult / NSFW sites (NSFW channels skip it)
         scamMute: { type: Boolean, default: true }
       },
       links: { enabled: { type: Boolean, default: false }, max: { type: Number, default: 4 } },
