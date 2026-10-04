@@ -201,6 +201,14 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] Switch to **Edit a bot message** (the post's link is already filled in), change the text, send →
       the post's first message updates.
 
+## 8b-2. Embed Builder → JSON editor
+- [ ] Build a message, then open the **📝 JSON editor** panel → it shows the current message as JSON.
+- [ ] Keep it open and edit the builder above (change the content or a title) → the JSON updates live.
+- [ ] Change the JSON (e.g. the title) and press **Apply to builder** → the builder and preview update
+      to match, and "✓ Applied to the builder" shows.
+- [ ] Paste invalid JSON and Apply → an "Invalid JSON…" message shows and the builder is unchanged.
+- [ ] Press **Format** on messy JSON → it pretty-prints. **Copy** copies the JSON to the clipboard.
+
 ## 8c. Bot Chat (💬 top bar → talk through the bot)
 - [ ] Open **Bot Chat** and pick a channel → the last ~25 messages appear, newest at the bottom, and
       refresh on their own every few seconds. The bot's own messages are marked **BOT · you**.

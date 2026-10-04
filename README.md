@@ -610,6 +610,11 @@ amount, the announcement channel, or turns them off.
     `?data=` share link, or a LoofaryBot export. Imported messages can be opened in the editor or
     saved as templates. Name clashes are renamed unless **Overwrite** is on.
   - **Export:** download or copy the current message's JSON, or download every template at once.
+  - **JSON editor:** a collapsible panel under the builder shows the current message as live,
+    editable JSON (Discord / Discohook format). It stays in sync as you edit above; type or paste
+    JSON and press **Apply** to push it back into the builder. **Format** pretty-prints and
+    **Copy** copies it. Invalid JSON or an over-limit embed is reported inline and leaves the
+    builder untouched.
   - **Clear all** starts a new message from scratch. Drafts autosave in your browser and come
     back after a refresh. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.
   - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,
