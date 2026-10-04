@@ -102,16 +102,12 @@ async function collect(guildId, userId, s, now = Date.now()) {
   return { state, gained };
 }
 
-/** Buys one level of an upgrade, paying from the bank. */
-async function buyUpgrade(guildId, userId, id, s, now = Date.now()) {
+/** Buys one level of an upgrade, paying from the bank. Spends collected bubbles only — the player
+ * has to Collect their pending bubbles first (so the Collect step actually means something). */
+async function buyUpgrade(guildId, userId, id, s) {
   const u = UPGRADE_BY_ID[id];
   if (!u) return { error: 'No such upgrade.' };
   const state = await getFactory(guildId, userId);
-  // Bank what's accrued first, so a long-idle player can spend it without a separate collect.
-  const gained = pendingBubbles(state, s, now);
-  state.bank += gained;
-  state.lifetime += gained;
-  state.lastTick = now;
   const level = levelOf(state, id);
   if (u.max && level >= u.max) return { error: `${u.name} is already maxed (${u.max}).`, state };
   const cost = upgradeCost(id, level);
@@ -128,10 +124,7 @@ async function buyUpgrade(guildId, userId, id, s, now = Date.now()) {
  */
 async function cashout(guild, userId, s, { now = Date.now(), adjustXp = null } = {}) {
   const state = await getFactory(guild.id, userId);
-  const gained = pendingBubbles(state, s, now);
-  state.bank += gained;
-  state.lifetime += gained;
-  state.lastTick = now;
+  // Cash out collected bubbles only — pending bubbles must be Collected first.
   if (s.dailyXpCap <= 0) {
     await state.save();
     return { error: 'Cashing out is turned off on this server.', state };
@@ -199,7 +192,14 @@ const rowFor = (userId, s) =>
   );
 
 function upgradesView(state, s, userId, now = Date.now()) {
-  const embed = new EmbedBuilder().setColor('#4AB3F4').setTitle('⬆️ Upgrades').setDescription(`You have **${fmt(state.bank)} 🫧** to spend.`);
+  const pending = pendingBubbles(state, s, now);
+  const embed = new EmbedBuilder()
+    .setColor('#4AB3F4')
+    .setTitle('⬆️ Upgrades')
+    .setDescription(
+      `You have **${fmt(state.bank)} 🫧** to spend.` +
+        (pending > 0 ? `\n-# 📦 ${fmt(pending)} 🫧 waiting — hit **← Back**, then **Collect**, to spend them.` : '')
+    );
   const rows = [];
   let current = new ActionRowBuilder();
   for (const u of UPGRADES) {
@@ -247,7 +247,7 @@ async function handleIdleInteraction(interaction) {
     return interaction.editReply({ embeds: [factoryEmbed(state, s, { name })], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
   }
   if (action === 'upgrades') {
-    const { state } = await collect(interaction.guild.id, interaction.user.id, s);
+    const state = await getFactory(interaction.guild.id, interaction.user.id);
     const { embed, rows } = upgradesView(state, s, interaction.user.id);
     return interaction.update({ embeds: [embed], components: rows }).catch(() => null);
   }
@@ -264,8 +264,8 @@ async function handleIdleInteraction(interaction) {
     embed.setFooter({ text: res.error ? `⚠️ ${res.error}` : `💧 Cashed out ${fmt(res.xp)} XP for ${fmt(res.spent)} 🫧.` });
     return interaction.update({ embeds: [embed], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
   }
-  // home / refresh
-  const { state } = await collect(interaction.guild.id, interaction.user.id, s);
+  // home / refresh — just re-render (no auto-collect; the Collect button banks pending)
+  const state = await getFactory(interaction.guild.id, interaction.user.id);
   return interaction.update({ embeds: [factoryEmbed(state, s, { name })], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
 }
 
