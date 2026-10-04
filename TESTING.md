@@ -102,6 +102,19 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
       both work.
 - [ ] Dashboard: **Recent purchases** lists what was bought, and Logs has *XP shop purchases*.
 
+## 5b. Bubble Factory idle game (`/idle`, dashboard **Leveling → 🫧 Bubble Factory**)
+Turn it on first (dashboard Leveling tab, or it's off by default).
+- [ ] `/idle play` → your factory embed with **Collect / Upgrades / Cash out → XP / ↻** buttons.
+- [ ] Wait a bit (or it accrues), press **Collect** → a short bubble animation, then your bank goes up.
+- [ ] **Upgrades** → buy 🧽 Scrubber → your rate goes up; a buy you can't afford is refused, no change.
+- [ ] Earn/collect enough, then **Cash out → XP** → your XP goes up (check `/levels rank`), up to the
+      daily cap. Cashing out again after the cap → "you've hit today's cap".
+- [ ] Set **Daily XP cap** to 0 on the dashboard → the Cash out button is disabled (bubbles only).
+- [ ] Someone else clicking your factory's buttons → "that's someone else's factory".
+- [ ] `/idle top` and the dashboard's **Biggest factories** list the same people.
+- [ ] Dashboard: the 🫧 header bubbles animate; changing a number and saving sticks; the sidebar
+      **Bubble Factory** switch and the card's switch stay in sync.
+
 ## 6. Daily XP Pot (`/pot`, dashboard **Gambling → 💰 Daily XP Pot**)
 - [ ] `/pot setup channel:#gambling` (or on the dashboard) → "Daily XP Pot is on", with the next
       draw time.

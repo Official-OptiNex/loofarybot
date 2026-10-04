@@ -26,7 +26,7 @@ const router = express.Router();
 // they've been given. null = available to anyone with dashboard access.
 const MODULE_PAGES = {
   tickets: 'tickets', welcome: 'welcome', honeypot: 'honeypot', leveling: 'leveling', autorole: 'autorole', gambling: 'gambling', logs: 'logs', alerts: 'alerts', shop: 'shop',
-  automod: 'moderation', xpPot: 'gambling', birthdays: 'engagement', counting: 'engagement', starboard: 'engagement', chatdrops: 'leveling'
+  automod: 'moderation', xpPot: 'gambling', birthdays: 'engagement', counting: 'engagement', starboard: 'engagement', chatdrops: 'leveling', idle: 'leveling'
 };
 function pageFor(req) {
   const tail = (req.route?.path || '').replace('/guilds/:guildId', '').replace(/^\//, '');
@@ -663,7 +663,7 @@ const MODULE_FIELDS = {
   shop: 'shopEnabled'
 };
 // module key -> the bot module whose saveSettings({ enabled }) handles the switch.
-const OWN_SETTINGS_MODULES = { automod: 'automod', xpPot: 'xpPot', birthdays: 'birthdays', counting: 'counting', starboard: 'starboard', chatdrops: 'chatDrops' };
+const OWN_SETTINGS_MODULES = { automod: 'automod', xpPot: 'xpPot', birthdays: 'birthdays', counting: 'counting', starboard: 'starboard', chatdrops: 'chatDrops', idle: 'idleGame' };
 
 router.post('/guilds/:guildId/modules/:module', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   try {

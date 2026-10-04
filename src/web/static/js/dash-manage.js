@@ -149,7 +149,7 @@ function onManageTabShown(tab) {
     attachMemberPicker(document.getElementById('pgUser'));
   }
   if (tab === 'leaderboard') attachMemberPicker(document.getElementById('mxUser'));
-  if (tab === 'leveling') loadChatDrops();
+  if (tab === 'leveling') { loadChatDrops(); loadIdle(); }
   if (tab === 'gambling') {
     loadGambleStats();
     loadPot();
@@ -2357,3 +2357,59 @@ async function potDrawNow() {
     el.addEventListener('change', renderPotPreview);
   });
 })();
+
+/* ------------------------------------------------------------------ Bubble Factory (idle game) */
+const idleState = { loaded: false };
+function fmtN(n) { return Number(n || 0).toLocaleString('en-US'); }
+
+async function loadIdle() {
+  if (!document.getElementById('idleCard')) return;
+  let d;
+  try {
+    d = await manageApi('GET', 'leveling/idle');
+  } catch (err) {
+    document.getElementById('idleTop').innerHTML = `<p class="muted">❌ ${esc(err.message)}</p>`;
+    return;
+  }
+  const s = d.settings;
+  const v = (id, val) => (document.getElementById(id).value = val ?? '');
+  if (!idleState.loaded) {
+    document.getElementById('idleEnabled').checked = !!s.enabled;
+    v('idleBaseRate', s.baseRate);
+    v('idleOffline', s.offlineHours);
+    v('idlePerXp', s.bubblesPerXp);
+    v('idleCap', s.dailyXpCap);
+    idleState.loaded = true;
+  }
+  document.getElementById('idleStatus').innerHTML = [
+    `<span class="status-chip ${s.enabled ? 'good' : 'off'}"><span class="dot"></span>${s.enabled ? 'On' : 'Off'}</span>`,
+    `<span class="status-chip"><span class="dot"></span>${s.dailyXpCap > 0 ? `${fmtN(s.dailyXpCap)} XP/day cap` : 'cash-out off'}</span>`,
+    `<span class="status-chip"><span class="dot"></span>${fmtN(s.bubblesPerXp)} 🫧 = 1 XP</span>`
+  ].join('');
+  document.getElementById('idleTop').innerHTML = d.top.length
+    ? d.top
+        .map((r, i) => {
+          const who = esc(r.name || r.userId);
+          const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
+          return `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);">${medal} <strong>${who}</strong> <span class="muted">· ${fmtN(r.lifetime)} 🫧 lifetime · ${fmtN(r.rate)}/hr</span></div>`;
+        })
+        .join('')
+    : '<p class="muted" style="margin:0;">No factories yet — members start one with <code>/idle</code>.</p>';
+}
+
+async function saveIdle() {
+  const v = (id) => document.getElementById(id).value;
+  const body = {
+    enabled: document.getElementById('idleEnabled').checked,
+    baseRate: v('idleBaseRate'),
+    offlineHours: v('idleOffline'),
+    bubblesPerXp: v('idlePerXp'),
+    dailyXpCap: v('idleCap')
+  };
+  const data = await withButton(document.getElementById('idleSaveBtn'), () => manageApi('POST', 'leveling/idle', body), '🫧 Bubble Factory saved.');
+  if (data) {
+    syncModuleSwitch('idle', data.settings.enabled);
+    idleState.loaded = false;
+    loadIdle();
+  }
+}

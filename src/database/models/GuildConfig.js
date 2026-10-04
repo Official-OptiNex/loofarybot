@@ -193,6 +193,15 @@ const GuildConfigSchema = new mongoose.Schema(
       },
       winMessage: { type: String, default: null } // null = the built-in message listing every winner
     },
+    // The Bubble Factory idle game (/idle, dashboard Leveling → Bubble Factory). Bubbles are its own
+    // currency; cashing out to XP is capped per day so levels stay sane. See idleGame.js.
+    idleGame: {
+      enabled: { type: Boolean, default: false },
+      baseRate: { type: Number, default: 60 }, // bubbles per hour at level 0
+      offlineHours: { type: Number, default: 8 }, // how long production banks while away
+      bubblesPerXp: { type: Number, default: 10 }, // bubbles needed for 1 XP at cash-out
+      dailyXpCap: { type: Number, default: 300 } // most XP a member can cash out per UTC day (0 = cash-out off)
+    },
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
     gamblingFreePlayEnabled: { type: Boolean, default: true },

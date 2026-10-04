@@ -50,6 +50,7 @@ const starboardCommand = require('../commands/starboard');
 const automodCommand = require('../commands/automod');
 const shopCommand = require('../commands/shop');
 const potCommand = require('../commands/pot');
+const idleCommand = require('../commands/idle');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -81,7 +82,8 @@ const ALL_COMMANDS = [
   starboardCommand,
   automodCommand,
   shopCommand,
-  potCommand
+  potCommand,
+  idleCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
