@@ -14,6 +14,7 @@ const { registerTicketEvents } = require('./src/bot/cogs/modules/tickets');
 const { registerStarboardEvents } = require('./src/bot/cogs/modules/starboard');
 const { registerCountingEvents } = require('./src/bot/cogs/modules/counting');
 const { registerServerLogEvents } = require('./src/bot/cogs/modules/serverLogs');
+const { registerAutomodEvents } = require('./src/bot/cogs/modules/automod');
 
 const { registerProcessHandlers } = require('./src/bot/utils/errorReporter');
 
@@ -32,6 +33,7 @@ async function main() {
   registerStarboardEvents(client);
   registerCountingEvents(client);
   registerServerLogEvents(client);
+  registerAutomodEvents(client);
 
   await client.login(BOT_TOKEN);
 

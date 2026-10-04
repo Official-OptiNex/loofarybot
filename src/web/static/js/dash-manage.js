@@ -1818,7 +1818,7 @@ function renderBirthdayPreview() {
 /* ------------------------------------------------------------------ Auto-mod (Moderation tab) */
 
 const amState = { loaded: false };
-const AM_RULES = ['flood', 'duplicates', 'walls', 'mentions', 'invites', 'links', 'caps'];
+const AM_RULES = ['flood', 'duplicates', 'walls', 'mentions', 'invites', 'unsafeLinks', 'links', 'caps'];
 
 function fillAutomod(s) {
   const v = (id, val) => (document.getElementById(id).value = val ?? '');
@@ -1834,6 +1834,13 @@ function fillAutomod(s) {
   v('amMentionMax', s.mentions.max);
   v('amLinkMax', s.links.max);
   v('amCapsPct', s.caps.percent);
+  v('amLinkMode', s.unsafeLinks.mode);
+  c('amLinkScamMute', s.unsafeLinks.scamMute);
+  c('amLinkShort', s.unsafeLinks.shorteners);
+  c('amLinkIp', s.unsafeLinks.ipLinks);
+  c('amLinkFiles', s.unsafeLinks.files);
+  v('amLinkAllow', s.unsafeLinks.allow.join('\n'));
+  v('amLinkBlock', s.unsafeLinks.block.join('\n'));
   v('amWarnings', s.warnings);
   v('amMute', s.muteMinutes);
   v('amReset', s.strikeResetHours);
@@ -1881,6 +1888,16 @@ function readAutomod() {
   Object.assign(rules.mentions, { max: v('amMentionMax'), everyone: c('am_everyone') });
   rules.links.max = v('amLinkMax');
   rules.caps.percent = v('amCapsPct');
+  const lines = (id) => v(id).split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  Object.assign(rules.unsafeLinks, {
+    mode: v('amLinkMode'),
+    scamMute: c('amLinkScamMute'),
+    shorteners: c('amLinkShort'),
+    ipLinks: c('amLinkIp'),
+    files: c('amLinkFiles'),
+    allow: lines('amLinkAllow'),
+    block: lines('amLinkBlock')
+  });
   return {
     enabled: c('amEnabled'),
     rules,
@@ -1891,6 +1908,21 @@ function readAutomod() {
     exemptRoleIds: [...document.querySelectorAll('.am-role:checked')].map((el) => el.value),
     exemptChannelIds: [...document.querySelectorAll('.am-channel:checked')].map((el) => el.value)
   };
+}
+
+// "Test a link" with the settings currently on screen (not yet saved).
+async function testAutomodLink() {
+  const out = document.getElementById('amLinkResult');
+  const url = document.getElementById('amLinkTest').value.trim();
+  if (!url) return (out.textContent = 'Paste a link first.');
+  try {
+    const r = await manageApi('POST', 'moderation/automod/checklink', { url, unsafeLinks: readAutomod().rules.unsafeLinks });
+    out.innerHTML = r.allowed
+      ? `✅ <strong>Allowed</strong> — ${esc(r.host || url)}`
+      : `🛡️ <strong>Removed</strong> — ${esc(r.reason)}${r.scam ? ' (scam: ' + (r.scamMute ? 'mutes straight away' : 'counts as a warning') + ')' : r.unapproved ? ' (no strike)' : ''}`;
+  } catch (err) {
+    out.textContent = `❌ ${err.message}`;
+  }
 }
 
 async function saveAutomod() {

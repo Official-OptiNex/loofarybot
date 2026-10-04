@@ -22,6 +22,7 @@ const tickets = require('../../bot/cogs/modules/tickets');
 const levelColors = require('../../bot/cogs/modules/levelColors');
 const birthdays = require('../../bot/cogs/modules/birthdays');
 const automod = require('../../bot/cogs/modules/automod');
+const linkSafety = require('../../bot/cogs/modules/linkSafety');
 const shop = require('../../bot/cogs/modules/shop');
 const xpPot = require('../../bot/cogs/modules/xpPot');
 const ShopItem = require('../../database/models/ShopItem');
@@ -508,6 +509,20 @@ router.post('/guilds/:guildId/moderation/automod', ...guard('moderation'), async
   if (saved.error) return bad(res, saved.error);
   res.locals.audit = { section: 'Moderation', action: 'Updated auto-mod', detail: `${saved.settings.enabled ? 'On' : 'Off'} · ${saved.settings.warnings} warning(s) → ${saved.settings.muteMinutes} min mute` };
   res.json({ ok: true, settings: saved.settings });
+});
+
+// Dashboard "Test a link": runs the link check with the settings on screen (not saved yet).
+router.post('/guilds/:guildId/moderation/automod/checklink', ...guard('moderation'), async (req, res) => {
+  const b = req.body || {};
+  const raw = String(b.url || '').trim().slice(0, 500);
+  if (!raw) return bad(res, 'Paste a link first.');
+  const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const u = b.unsafeLinks || {};
+  const s = automod.automodSettings({
+    automod: { unsafeLinks: { ...u, allow: linkSafety.cleanDomains(u.allow || []), block: linkSafety.cleanDomains(u.block || []) } }
+  }).unsafeLinks;
+  const found = linkSafety.checkContent(url, s);
+  res.json(found ? { allowed: false, host: found.host, reason: found.reason, scam: found.scam, unapproved: found.unapproved, scamMute: s.scamMute } : { allowed: true, host: linkSafety.hostOf(url) });
 });
 
 router.post('/guilds/:guildId/moderation/lockdown', ...guard('moderation'), async (req, res) => {

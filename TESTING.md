@@ -50,6 +50,19 @@ Turn it on first. The defaults are fine.
 - [ ] Moderation → Cases shows the auto-mod warnings and timeout as numbered cases, and **Recent
       catches** lists them.
 - [ ] `/automod status` shows the rules and recent catches.
+- [ ] **Unsafe links** (on by default with auto-mod):
+  - [ ] 👤 Post `https://www.youtube.com/watch?v=dQw4w9WgXcQ` and `https://github.com` → they stay.
+  - [ ] 👤 Post `https://bit.ly/3xyz` → removed with a warning ("that link was removed — it doesn't
+        look safe").
+  - [ ] 👤 Wait 15s, then post `https://discord-nitro.gift/claim` → removed and **muted straight
+        away** (scam link). Remove the timeout afterwards.
+  - [ ] 👤 Post "hi", then edit it to `hi https://steamcommunlty.com/gift` → the edited message is
+        removed too.
+  - [ ] `/automod checklink url:dlscord.com` → "would be removed — a misspelled copy of discord".
+        The dashboard's **Test a link** gives the same answer.
+  - [ ] `/automod links mode:Every link except approved sites allow:example.com`, then 👤 post
+        `https://example.com` (stays) and `https://randomblog.net` (removed with a short note and
+        no strike). Switch back with `/automod links mode:Only unsafe links`.
 
 ## 4. Logs (Logs → Settings)
 Set a log channel if you want to see them in Discord, too.

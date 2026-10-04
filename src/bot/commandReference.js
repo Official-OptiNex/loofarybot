@@ -112,7 +112,8 @@ module.exports = [
     blurb: 'Warnings, timeouts, kicks and bans with a case history, plus logs, lockdowns and cleanup tools.',
     tab: 'moderation',
     commands: [
-      { usage: '/automod toggle · rule', perm: 'Manage Server', description: 'Spam protection: floods, repeated messages, text walls, mass mentions, invites (plus optional link and caps spam).' },
+      { usage: '/automod toggle · rule', perm: 'Manage Server', description: 'Spam protection: floods, repeated messages, text walls, mass mentions, invites, unsafe/scam links (plus optional link and caps spam).' },
+      { usage: '/automod links · checklink', perm: 'Manage Server', description: 'Link safety: block unsafe links only or allow only approved sites, approved/blocked lists, and test what happens to a link.' },
       { usage: '/automod punishment · exempt · status', perm: 'Manage Server', description: 'Warnings before the mute (default 2, then 1 hour), roles/channels that skip it, and recent catches.' },
       { usage: '/logs set', perm: 'Manage Server', description: 'Choose the channel that receives server logs.' },
       { usage: '/logs toggle', perm: 'Manage Server', description: 'Switch individual log types on or off — messages, members, bans, channels, roles, threads, invites, emoji, server settings, commands and more.' },

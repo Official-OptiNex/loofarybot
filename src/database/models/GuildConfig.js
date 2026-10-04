@@ -221,6 +221,18 @@ const GuildConfigSchema = new mongoose.Schema(
       walls: { enabled: { type: Boolean, default: true }, maxLines: { type: Number, default: 30 } },
       mentions: { enabled: { type: Boolean, default: true }, max: { type: Number, default: 5 }, everyone: { type: Boolean, default: true } },
       invites: { enabled: { type: Boolean, default: true } },
+      // Scam / unsafe links (see linkSafety.js). mode 'unsafe' = block unsafe links only,
+      // 'allowlist' = only the well-known sites plus `allow` may be linked.
+      unsafeLinks: {
+        enabled: { type: Boolean, default: true },
+        mode: { type: String, enum: ['unsafe', 'allowlist'], default: 'unsafe' },
+        allow: { type: [String], default: [] },
+        block: { type: [String], default: [] },
+        shorteners: { type: Boolean, default: true },
+        ipLinks: { type: Boolean, default: true },
+        files: { type: Boolean, default: true },
+        scamMute: { type: Boolean, default: true }
+      },
       links: { enabled: { type: Boolean, default: false }, max: { type: Number, default: 4 } },
       caps: { enabled: { type: Boolean, default: false }, percent: { type: Number, default: 80 }, minLength: { type: Number, default: 15 } },
       warnings: { type: Number, default: 2 }, // warnings before the timeout
