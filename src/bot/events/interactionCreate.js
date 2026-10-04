@@ -18,6 +18,7 @@ function routeButton(interaction) {
   if (id.startsWith('poll:')) return handleVote(interaction);
   if (id.startsWith('tk:')) return handleTicketButton(interaction); // support tickets
   if (id.startsWith('shop:')) return require('../cogs/modules/shop').handleShopInteraction(interaction); // XP shop
+  if (id.startsWith('idle:')) return require('../cogs/modules/idleGame').handleIdleInteraction(interaction); // Bubble Factory idle game
   if (id.startsWith('xpd:')) return handleDropButton(interaction); // chat XP drops
   if (id.startsWith('gwd:')) return giveawayForm.handleDraftButton(interaction, interaction.client); // /loof create form
   return handleButtonInteraction(interaction); // giveaways & drops

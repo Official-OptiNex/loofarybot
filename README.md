@@ -199,6 +199,22 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 - The dashboard has the same settings, a live embed preview, a prize-ladder calculator (type a pot
   size to see the split), the current pot and recent winners.
 
+### Bubble Factory (`/idle`, dashboard **Leveling → 🫧 Bubble Factory**, off until turned on)
+A relaxed idle game with **no gambling** — a nicer fit for members who don't like the gambling side,
+and it stays separate (you can toggle gambling off and leave this on, or run both).
+- Each member's factory makes **🫧 Bubbles** over time, even while they're away, up to an **offline
+  cap** (8h by default; the 🛁 Bigger Tub upgrade extends it).
+- **Upgrades** cost Bubbles and raise your rate — 🧽 Scrubber, 🧴 Fancy Soap, 🚿 Jet Nozzles,
+  🛁 Bigger Tub, ✨ Extra Shine. Costs grow geometrically, so there's always a next goal, and the
+  whole upgrade loop uses Bubbles — never XP — so it can't inflate levels.
+- **Cash out** Bubbles into real **XP** at a set rate (10 🫧 = 1 XP by default), **capped per day**
+  (300 XP/day by default). The daily cap is what keeps levels sane — even a maxed factory just hits
+  the cap faster. Set the cap to `0` to make it bubbles-only (no XP at all).
+- `/idle play` opens your factory (buttons to Collect, Upgrade, Cash out). `/idle top` is the
+  factory leaderboard; `/idle help` explains it. Collecting plays a little filling-bubble animation.
+- The dashboard (Leveling tab) turns it on and sets the rate, offline hours, cash-out rate and daily
+  cap, and shows the biggest factories — with an animated bubble header for flair.
+
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.
 - `coinflip` — 50/50, pays `2 × (1 − edge)`.
@@ -594,6 +610,11 @@ amount, the announcement channel, or turns them off.
     `?data=` share link, or a LoofaryBot export. Imported messages can be opened in the editor or
     saved as templates. Name clashes are renamed unless **Overwrite** is on.
   - **Export:** download or copy the current message's JSON, or download every template at once.
+  - **JSON editor:** a collapsible panel under the builder shows the current message as live,
+    editable JSON (Discord / Discohook format). It stays in sync as you edit above; type or paste
+    JSON and press **Apply** to push it back into the builder. **Format** pretty-prints and
+    **Copy** copies it. Invalid JSON or an over-limit embed is reported inline and leaves the
+    builder untouched.
   - **Clear all** starts a new message from scratch. Drafts autosave in your browser and come
     back after a refresh. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.
   - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,

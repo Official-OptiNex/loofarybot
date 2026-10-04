@@ -31,6 +31,7 @@ const LogEntry = require('../../database/models/LogEntry');
 const counting = require('../../bot/cogs/modules/counting');
 const starboard = require('../../bot/cogs/modules/starboard');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
+const idleGame = require('../../bot/cogs/modules/idleGame');
 const { parseDuration } = require('../../bot/utils/duration');
 
 const router = express.Router();
@@ -736,6 +737,23 @@ router.post('/guilds/:guildId/cases/settings', ...guard('moderation'), async (re
   await config.save();
   res.locals.audit = { section: 'Moderation', action: 'Updated warning escalation', detail: `${rules.length} rule(s) · DMs ${config.modDmEnabled ? 'on' : 'off'}` };
   res.json({ ok: true, escalation: rules });
+});
+
+// ---------------------------------------------------------------- Bubble Factory idle game (Leveling tab)
+router.get('/guilds/:guildId/leveling/idle', ...guard('leveling'), async (req, res) => {
+  const config = await getOrCreateConfig(req.guild.id);
+  const top = await idleGame.leaderboard(req.guild, { limit: 10 });
+  res.json({ settings: idleGame.idleSettings(config), top });
+});
+
+router.post('/guilds/:guildId/leveling/idle', ...guard('leveling'), async (req, res) => {
+  const b = req.body || {};
+  const input = {};
+  for (const k of ['enabled', 'baseRate', 'offlineHours', 'bubblesPerXp', 'dailyXpCap']) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await idleGame.saveSettings(req.guild, input);
+  if (saved.error) return bad(res, saved.error);
+  res.locals.audit = { section: 'Leveling', action: 'Updated the Bubble Factory', detail: `${saved.settings.enabled ? 'On' : 'Off'} · cap ${saved.settings.dailyXpCap} XP/day` };
+  res.json({ ok: true, settings: saved.settings });
 });
 
 // ---------------------------------------------------------------- Member XP (/levels givexp · takexp · resetxp)

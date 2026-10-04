@@ -267,6 +267,7 @@
     });
     $('totalHint').textContent = `${state.embeds.length}/10 embeds · ${total.toLocaleString()} characters`;
     saveDraft(state);
+    syncJsonFromBuilder();
   }
 
   /* ------------------------------------------------------------ editor events (delegated) */
@@ -340,6 +341,9 @@
 
   $('content').addEventListener('input', onEdit);
   LoofMentions.attach($('content'), { onChange: onEdit });
+
+  // JSON editor: fill it from the builder whenever the panel is opened.
+  $('jsonPanel').addEventListener('toggle', () => { if ($('jsonPanel').open) syncJsonFromBuilder(); });
 
   document.querySelectorAll('input[name="sendMode"]').forEach((r) =>
     r.addEventListener('change', () => {
@@ -528,6 +532,46 @@
   function currentJson() {
     return JSON.stringify(E.normalizeMessage(readState()), null, 2);
   }
+
+  // --- Live JSON editor. It mirrors the builder, and "Apply" parses it back into the builder. ---
+  // The live sync never clobbers the box while the user is typing in it (it's the focused element).
+  function syncJsonFromBuilder() {
+    const el = $('jsonEditor');
+    if (!el || !$('jsonPanel').open || document.activeElement === el) return;
+    el.value = currentJson();
+  }
+  function setJsonStatus(msg, ok) {
+    const el = $('jsonStatus');
+    if (el) {
+      el.textContent = msg || '';
+      el.style.color = msg ? (ok ? 'var(--good, #3ba55d)' : 'var(--danger, #ed4245)') : '';
+    }
+  }
+  window.applyJson = () => {
+    const el = $('jsonEditor');
+    let parsed;
+    try {
+      parsed = JSON.parse(el.value);
+    } catch (err) {
+      return setJsonStatus(`Invalid JSON: ${err.message}`, false);
+    }
+    const message = E.normalizeMessage(parsed);
+    const errors = E.validateMessage(message);
+    if (errors.length) return setJsonStatus(errors[0], false);
+    el.blur(); // so the re-sync below isn't blocked by the box still being focused
+    renderEditor(toEditorState(message)); // repaints the builder + preview, and re-syncs the JSON
+    setJsonStatus('✓ Applied to the builder', true);
+    showToast('✅ Applied the JSON to the builder.');
+  };
+  window.formatJson = () => {
+    const el = $('jsonEditor');
+    try {
+      el.value = JSON.stringify(JSON.parse(el.value), null, 2);
+      setJsonStatus('✓ Formatted', true);
+    } catch (err) {
+      setJsonStatus(`Invalid JSON: ${err.message}`, false);
+    }
+  };
   window.exportCurrent = () => {
     const blob = new Blob([currentJson()], { type: 'application/json' });
     const a = document.createElement('a');

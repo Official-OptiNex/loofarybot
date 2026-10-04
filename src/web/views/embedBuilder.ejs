@@ -105,6 +105,18 @@
           <button class="btn" type="button" id="sendBtn" onclick="sendMessage()">🚀 Send</button>
         </div>
         <p class="muted" style="font-size:0.78rem;">Welcome messages use the text and the first embed (no fields) and support <code>{user}</code>, <code>{username}</code>, <code>{server}</code>, <code>{membercount}</code>, and <code>{avatar}</code> as the thumbnail. Shortcut: <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.</p>
+
+        <details class="card eb-card eb-json" id="jsonPanel">
+          <summary>📝 JSON editor <span class="muted" style="font-weight:400;">· edit the raw message (Discord / Discohook format)</span></summary>
+          <p class="muted" style="font-size:0.78rem; margin:0.5rem 0;">This stays in sync with the builder above. Edit it and press <strong>Apply</strong> to update the builder, or paste JSON from Discohook. <code>{ "content": …, "embeds": [ … ] }</code>.</p>
+          <textarea id="jsonEditor" rows="12" spellcheck="false" autocomplete="off" autocapitalize="off" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem; white-space:pre;"></textarea>
+          <div class="field-row" style="margin:0.5rem 0 0; align-items:center;">
+            <button class="btn small" type="button" onclick="applyJson()">Apply to builder</button>
+            <button class="btn secondary small" type="button" onclick="formatJson()">Format</button>
+            <button class="btn secondary small" type="button" onclick="copyJson()">Copy</button>
+            <span class="muted" id="jsonStatus" style="font-size:0.78rem; margin-left:auto;"></span>
+          </div>
+        </details>
       </div>
 
       <div class="sticky-preview">

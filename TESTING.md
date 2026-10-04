@@ -102,6 +102,19 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
       both work.
 - [ ] Dashboard: **Recent purchases** lists what was bought, and Logs has *XP shop purchases*.
 
+## 5b. Bubble Factory idle game (`/idle`, dashboard **Leveling → 🫧 Bubble Factory**)
+Turn it on first (dashboard Leveling tab, or it's off by default).
+- [ ] `/idle play` → your factory embed with **Collect / Upgrades / Cash out → XP / ↻** buttons.
+- [ ] Wait a bit (or it accrues), press **Collect** → a short bubble animation, then your bank goes up.
+- [ ] **Upgrades** → buy 🧽 Scrubber → your rate goes up; a buy you can't afford is refused, no change.
+- [ ] Earn/collect enough, then **Cash out → XP** → your XP goes up (check `/levels rank`), up to the
+      daily cap. Cashing out again after the cap → "you've hit today's cap".
+- [ ] Set **Daily XP cap** to 0 on the dashboard → the Cash out button is disabled (bubbles only).
+- [ ] Someone else clicking your factory's buttons → "that's someone else's factory".
+- [ ] `/idle top` and the dashboard's **Biggest factories** list the same people.
+- [ ] Dashboard: the 🫧 header bubbles animate; changing a number and saving sticks; the sidebar
+      **Bubble Factory** switch and the card's switch stay in sync.
+
 ## 6. Daily XP Pot (`/pot`, dashboard **Gambling → 💰 Daily XP Pot**)
 - [ ] `/pot setup channel:#gambling` (or on the dashboard) → "Daily XP Pot is on", with the next
       draw time.
@@ -187,6 +200,14 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
       with that title, tag and your embed.
 - [ ] Switch to **Edit a bot message** (the post's link is already filled in), change the text, send →
       the post's first message updates.
+
+## 8b-2. Embed Builder → JSON editor
+- [ ] Build a message, then open the **📝 JSON editor** panel → it shows the current message as JSON.
+- [ ] Keep it open and edit the builder above (change the content or a title) → the JSON updates live.
+- [ ] Change the JSON (e.g. the title) and press **Apply to builder** → the builder and preview update
+      to match, and "✓ Applied to the builder" shows.
+- [ ] Paste invalid JSON and Apply → an "Invalid JSON…" message shows and the builder is unchanged.
+- [ ] Press **Format** on messy JSON → it pretty-prints. **Copy** copies the JSON to the clipboard.
 
 ## 8c. Bot Chat (💬 top bar → talk through the bot)
 - [ ] Open **Bot Chat** and pick a channel → the last ~25 messages appear, newest at the bottom, and
