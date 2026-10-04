@@ -155,5 +155,8 @@ module.exports = function registerReadyEvent(client) {
 
     // Delete old log history and other finished data so the database stays small.
     require('../cogs/modules/storage').startStorageCleanup(client);
+
+    // Bubble Factory: DM members once when their offline tub fills up (so bubbles aren't wasted).
+    require('../cogs/modules/idleGame').startFullAlertLoop(client);
   });
 };

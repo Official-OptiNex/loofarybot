@@ -961,6 +961,17 @@
               <div><div class="setting-title">Daily XP cap</div><div class="setting-help">Most XP one member can cash out per day (resets midnight UTC). <strong>This keeps levels sane</strong> — set <code>0</code> to turn cash-out off entirely (bubbles stay just a fun toy).</div></div>
               <div class="setting-control"><input type="number" id="idleCap" min="0" max="100000"><span class="muted">XP/day</span></div>
             </div>
+
+            <div class="idle-group-label">🔔 "Tub is full" alerts</div>
+            <div class="setting-row">
+              <div><div class="setting-title">Nudge when full</div><div class="setting-help">DM a member once when their offline storage fills up, so they come collect before production is wasted.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="idleFullAlerts"><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Fallback channel</div><div class="setting-help">Where to ping a member if their DMs are closed. Leave unset to only try DMs.</div></div>
+              <div class="setting-control"><select id="idleAlertChannel"><%- channelOptions(config.idleGame && config.idleGame.fullAlertChannelId, 'DMs only') %></select></div>
+            </div>
+
             <div class="savebar" style="position:static;"><button class="btn" id="idleSaveBtn" onclick="saveIdle()">Save Bubble Factory</button></div>
           </div>
 
