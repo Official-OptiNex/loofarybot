@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot Chat | <%= guild.name %></title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
+</head>
+<body class="site">
+  <%- include('partials/site-bar') %>
+
+  <main class="site-main eb-main">
+    <div class="page-heading">
+      <div>
+        <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
+        <h1 style="font-size:1.45rem; margin-top:0.2rem;">💬 Bot Chat</h1>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Talk through <%= botName %> in a channel, and see its recent messages. Mentions won't ping (use the Embed Builder for announcements). Every message is in Change history.</p>
+      </div>
+    </div>
+
+    <div class="card eb-card" style="max-width:780px;">
+      <div class="eb-row">
+        <label for="bcChannel">Channel</label>
+        <div class="field-row" style="margin:0;">
+          <select id="bcChannel">
+            <option value="">— Select a channel —</option>
+            <% channels.forEach(c => { %><option value="<%= c.id %>"><%= c.type === 'thread' ? '🧵 ' : '#' %><%= c.name %><%= c.parent ? ' (' + c.parent + ')' : '' %></option><% }) %>
+          </select>
+          <button class="btn secondary small" type="button" id="bcRefresh" onclick="bcRefresh()" title="Refresh the feed">↻</button>
+        </div>
+        <% if (!channels.length) { %><p class="muted" style="font-size:0.8rem; margin:0.4rem 0 0;">LoofaryBot can't talk in any channel here yet — give it View Channel and Send Messages.</p><% } %>
+      </div>
+
+      <div id="bcFeed" class="bc-feed" aria-live="polite">
+        <p class="muted" style="margin:0; text-align:center; padding:1.5rem 0;">Pick a channel to see its recent messages.</p>
+      </div>
+
+      <div id="bcReplyBar" class="bc-reply-bar" style="display:none;">
+        <span id="bcReplyText" class="muted"></span>
+        <button type="button" class="bc-reply-x" onclick="bcClearReply()" aria-label="Cancel reply">✕</button>
+      </div>
+
+      <div class="field-row bc-composer" style="margin:0.6rem 0 0; align-items:flex-end;">
+        <textarea id="bcInput" rows="2" maxlength="2000" placeholder="Message… (Enter to send, Shift+Enter for a new line)" disabled></textarea>
+        <button class="btn" id="bcSend" onclick="bcSend()" disabled>Send</button>
+      </div>
+      <div class="muted" style="font-size:0.75rem; margin-top:0.3rem;"><span id="bcCount">0</span>/2000</div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    window.BC_CONFIG = { guildId: '<%= guild.id %>' };
+  </script>
+  <script src="/js/bot-chat.js"></script>
+</body>
+</html>

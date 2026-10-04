@@ -188,6 +188,17 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
 - [ ] Switch to **Edit a bot message** (the post's link is already filled in), change the text, send →
       the post's first message updates.
 
+## 8c. Bot Chat (💬 top bar → talk through the bot)
+- [ ] Open **Bot Chat** and pick a channel → the last ~25 messages appear, newest at the bottom, and
+      refresh on their own every few seconds. The bot's own messages are marked **BOT · you**.
+- [ ] Type a message and press Enter (or Send) → it posts in the channel as the bot and shows in the
+      feed. **Server settings → Change history** has a "Spoke through the bot" entry.
+- [ ] Put `@everyone` in a message and send → it posts but **does not ping** anyone.
+- [ ] Hover a message → **↩** reply button. Click it, type, send → the bot's message is a reply to
+      that one in Discord.
+- [ ] A moderator **without** the Bot Chat page doesn't see the 💬 icon and can't open the page; give
+      them "Bot Chat" in **Server settings → Dashboard access** and they can.
+
 ## 9. Free-tier health (check every week or two)
 - [ ] Logs → Settings → Storage: **Database** well under 75% of 512 MB, **Bot memory** under ~80% of
       512 MB.

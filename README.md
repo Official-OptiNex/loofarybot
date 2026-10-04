@@ -598,6 +598,11 @@ amount, the announcement channel, or turns them off.
     back after a refresh. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.
   - **Edit a bot message:** paste a message link to update something LoofaryBot already posted,
     or copy any message in the server into the editor.
+- **Bot Chat** (💬 icon in the dashboard top bar): talk through LoofaryBot in any channel, with a
+  short live feed of that channel's recent messages (refreshes every few seconds) and a reply button
+  on each message. Plain messages only — to keep it from being a mass-ping tool, @everyone/@here and
+  role pings are stripped (use the Embed Builder for announcements). Every message is saved to
+  Change history. Admins have it; moderators can be given the "Bot Chat" page in Server Settings.
 
 ## 7. Staying inside the free tiers
 
