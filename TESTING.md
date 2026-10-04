@@ -104,10 +104,17 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
 
 ## 5b. Bubble Factory idle game (`/idle`, dashboard **Leveling → 🫧 Bubble Factory**)
 Turn it on first (dashboard Leveling tab, or it's off by default).
-- [ ] `/idle play` → a clean factory embed: a **Ready to collect** progress bar, a "next upgrade"
+- [ ] **First run:** `/idle play` on a fresh factory shows a **Start** screen (it isn't running yet).
+      Press **▶️ Start** (or `/idle start`) → the factory opens and begins making bubbles.
+- [ ] `/idle stop` (or the **⏸️ Pause** button) pauses it — `/idle play` shows the Start/Resume screen
+      and the bar stops growing. **Resume** → it runs again (accrual restarts from now, banked bubbles kept).
+- [ ] `/idle play` (running) → a clean factory embed: a **Ready to collect** progress bar, a "next upgrade"
       nudge, Bank / Production / Storage / Cash out / Lifetime / Upgrades fields, and
-      **Collect / Upgrades / Cash out → XP / Refresh** buttons. The bar is > 0 after some time has
+      **Collect / Upgrades / Cash out → XP / Refresh / Pause** buttons. The bar is > 0 after some time has
       passed (opening does **not** auto-collect).
+- [ ] **Full-tub alert:** leave a factory until its bar hits 100% (or lower the offline cap) → within a
+      few minutes the bot **DMs you once** to come collect. With DMs closed and a **Fallback channel** set
+      on the dashboard, it pings you there instead. Collecting resets it so you can be alerted again later.
 - [ ] Press **Refresh** → the bank stays the same and the collect bar keeps growing — bubbles only
       move to the bank when you press **Collect**.
 - [ ] Press **Collect** → a short bubble animation, then your bank goes up and **To collect** resets to 0.
@@ -123,9 +130,9 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       `/idle admin give @user amount:500` adds 500 🫧 to their bank; `/idle admin take @user amount:200`
       removes 200; `/idle admin reset @user` wipes their factory. Each replies with the new balance.
 - [ ] Dashboard: the 🫧 header bubbles animate; the **At these settings** preview tiles update live as
-      you change a number (before saving); the **Upgrade tree** expands; changing a number and saving
-      sticks; the sidebar **Bubble Factory** switch and the card's switch stay in sync; no sideways
-      scroll on mobile.
+      you change a number (before saving); the **Upgrade tree** expands; the **"Tub is full" alerts**
+      toggle and **Fallback channel** save and reload correctly; changing a number and saving sticks;
+      the sidebar **Bubble Factory** switch and the card's switch stay in sync; no sideways scroll on mobile.
 
 ## 6. Daily XP Pot (`/pot`, dashboard **Gambling → 💰 Daily XP Pot**)
 - [ ] `/pot setup channel:#gambling` (or on the dashboard) → "Daily XP Pot is on", with the next

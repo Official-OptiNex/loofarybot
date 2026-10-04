@@ -202,10 +202,16 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 ### Bubble Factory (`/idle`, dashboard **Leveling → 🫧 Bubble Factory**, off until turned on)
 A relaxed idle game with **no gambling** — a nicer fit for members who don't like the gambling side,
 and it stays separate (you can toggle gambling off and leave this on, or run both).
-- Each member's factory makes **🫧 Bubbles** over time, even while they're away, up to an **offline
+- **Opt-in:** a factory does nothing until the member **starts** it (`/idle start`, or the ▶️ Start
+  button on `/idle play`). They can **pause** any time with `/idle stop` (banked bubbles are kept;
+  production just stops until they start again).
+- Each running factory makes **🫧 Bubbles** over time, even while the member's away, up to an **offline
   cap** (8h by default; the 🛁 Bigger Tub upgrade extends it). Bubbles wait as "to collect" until the
   member presses **Collect** — only then do they land in the bank to spend. (Opening or refreshing
   the factory just shows what's waiting; it doesn't auto-collect.)
+- **"Tub is full" alerts:** when a member's offline storage fills up, the bot **DMs them once** to come
+  collect before production is wasted (falls back to a configurable channel if their DMs are closed).
+  Admins can toggle this and set the fallback channel on the dashboard.
 - **Upgrades** cost Bubbles and raise your rate — 🧽 Scrubber, 🧴 Fancy Soap, 🚿 Jet Nozzles,
   🛁 Bigger Tub, ✨ Extra Shine. Costs grow geometrically, so there's always a next goal, and the
   whole upgrade loop uses Bubbles — never XP — so it can't inflate levels.
@@ -217,13 +223,15 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
   **Collect / Upgrades / Cash out → XP / Refresh**. `/idle top` is the factory leaderboard;
   `/idle help` is a step-by-step guide with the full upgrade tree. Collecting plays a filling-bubble
   animation.
-- **Staff commands** (`/idle admin …`, needs Manage Server): `toggle` turns the game on/off,
+- `/idle start` / `/idle stop` start and pause your own factory. **Staff commands**
+  (`/idle admin …`, needs Manage Server): `toggle` turns the game on/off server-wide,
   `give @user <amount>` rewards bubbles straight into someone's bank, `take @user <amount>` removes
   them, and `reset @user` wipes a factory back to a fresh start.
 - The dashboard (Leveling tab) turns it on and sets base production, offline hours, cash-out rate and
-  daily cap — grouped into **Core** and **Cash-out** sections with a live **"At these settings"**
-  preview (level-0 output, full-tub size, daily cap in bubbles, time to earn the cap), an **upgrade
-  tree** reference, and the **biggest factories** leaderboard, all under an animated bubble header.
+  daily cap — grouped into **Core**, **Cash-out** and **"Tub is full" alerts** sections with a live
+  **"At these settings"** preview (level-0 output, full-tub size, daily cap in bubbles, time to earn
+  the cap), an **upgrade tree** reference, and the **biggest factories** leaderboard, all under an
+  animated bubble header.
 
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.

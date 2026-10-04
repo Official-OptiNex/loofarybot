@@ -31,7 +31,9 @@ function idleSettings(config) {
     baseRate: int(g.baseRate, 60, 1, 100000), // bubbles/hour at level 0
     offlineHours: int(g.offlineHours, 8, 1, 72), // base offline accrual cap
     bubblesPerXp: int(g.bubblesPerXp, 10, 1, 100000), // bubbles needed for 1 XP at cash-out
-    dailyXpCap: int(g.dailyXpCap, 300, 0, 100000) // most XP one member can cash out per UTC day
+    dailyXpCap: int(g.dailyXpCap, 300, 0, 100000), // most XP one member can cash out per UTC day
+    fullAlerts: g.fullAlerts !== false, // DM a member once when their tub fills (default on)
+    fullAlertChannelId: g.fullAlertChannelId || null // fallback channel when DMs are closed
   };
 }
 
@@ -70,9 +72,10 @@ function offlineCapHours(state, s) {
   return s.offlineHours + 2 * levelOf(state, 'tub');
 }
 
-/** Bubbles waiting to be collected right now (capped by the offline window). */
+/** Bubbles waiting to be collected right now (capped by the offline window). A paused/never-started
+ * factory makes nothing — the member has to start it first with /idle start (or the Start button). */
 function pendingBubbles(state, s, now = Date.now()) {
-  if (!state.lastTick) return 0;
+  if (!state.active || !state.lastTick) return 0;
   const hours = Math.min((now - state.lastTick) / HOUR, offlineCapHours(state, s));
   return Math.max(0, Math.floor(hours * ratePerHour(state, s)));
 }
@@ -91,6 +94,26 @@ async function getFactory(guildId, userId) {
   return doc;
 }
 
+/** Starts (or resumes) a member's factory so it begins making bubbles from now. */
+async function startFactory(guildId, userId, now = Date.now()) {
+  const state = await getFactory(guildId, userId);
+  const already = state.active;
+  state.active = true;
+  state.lastTick = now; // accrual starts fresh — no back-pay for time spent paused
+  state.fullNotified = false;
+  await state.save();
+  return { state, already };
+}
+
+/** Pauses a member's factory. Banked bubbles are kept; production stops until they start again. */
+async function stopFactory(guildId, userId) {
+  const state = await getFactory(guildId, userId);
+  const already = !state.active;
+  state.active = false;
+  await state.save();
+  return { state, already };
+}
+
 /** Banks pending bubbles into the factory and returns how many were collected. */
 async function collect(guildId, userId, s, now = Date.now()) {
   const state = await getFactory(guildId, userId);
@@ -98,6 +121,7 @@ async function collect(guildId, userId, s, now = Date.now()) {
   state.bank += gained;
   state.lifetime += gained;
   state.lastTick = now;
+  state.fullNotified = false; // the tub just drained — eligible for a fresh "full" alert later
   await state.save();
   return { state, gained };
 }
@@ -170,6 +194,61 @@ async function adminAdjustBubbles(guildId, userId, delta) {
 /** Wipes a member's factory (bank, upgrades, lifetime) back to a fresh start. */
 async function resetFactory(guildId, userId) {
   await IdleFactory.deleteOne({ guildId, userId });
+}
+
+// ---------------------------------------------------------------- "Tub is full" alerts
+
+/** DMs a member once that their factory is full; falls back to the configured channel if DMs are
+ * closed. Returns true if anything was delivered. */
+async function notifyFull(client, guild, s, userId) {
+  const body = `🫧 Your **Bubble Factory** in **${guild.name}** is **full** — run \`/idle play\` and hit **Collect** before you waste production!`;
+  try {
+    const user = await client.users.fetch(userId);
+    await user.send({ content: body });
+    return true;
+  } catch {
+    const ch = s.fullAlertChannelId && guild.channels.cache.get(s.fullAlertChannelId);
+    if (ch && ch.isTextBased?.()) {
+      await ch.send({ content: `<@${userId}> ${body}`, allowedMentions: { users: [userId] } }).catch(() => null);
+      return true;
+    }
+    return false;
+  }
+}
+
+/**
+ * Finds active factories whose tubs have filled up and nudges their owners once. Only scans guilds
+ * that have the game and alerts on; uses lean, projected reads so it's cheap on the free tier.
+ */
+async function runFullAlertSweep(client, now = Date.now()) {
+  const configs = await GuildConfig.find({ 'idleGame.enabled': true }, { guildId: 1, idleGame: 1 }).lean();
+  let notified = 0;
+  for (const cfg of configs) {
+    const s = idleSettings(cfg);
+    if (!s.fullAlerts) continue;
+    const guild = client.guilds.cache.get(cfg.guildId);
+    if (!guild) continue;
+    const factories = await IdleFactory.find(
+      { guildId: cfg.guildId, active: true, fullNotified: { $ne: true } },
+      { userId: 1, lastTick: 1, upgrades: 1 }
+    ).lean();
+    for (const f of factories) {
+      const capBubbles = ratePerHour(f, s) * offlineCapHours(f, s);
+      if (capBubbles <= 0 || pendingBubbles({ ...f, active: true }, s, now) < capBubbles) continue;
+      // Mark first so a delivery hiccup never turns into a repeat ping next sweep.
+      await IdleFactory.updateOne({ guildId: cfg.guildId, userId: f.userId }, { $set: { fullNotified: true } });
+      if (await notifyFull(client, guild, s, f.userId).catch(() => false)) notified++;
+    }
+  }
+  return notified;
+}
+
+/** Runs the full-tub sweep on an interval (default every 15 min). Returns the timer. */
+function startFullAlertLoop(client, intervalMs = 15 * 60000) {
+  const tick = () => runFullAlertSweep(client).catch((err) => console.error('[idle] full-alert sweep failed:', err.message));
+  const timer = setInterval(tick, intervalMs);
+  timer.unref?.();
+  return timer;
 }
 
 // ---------------------------------------------------------------- Embeds & buttons
@@ -246,8 +325,29 @@ const rowFor = (userId, s) =>
     new ButtonBuilder().setCustomId(`idle:collect:${userId}`).setLabel('Collect').setEmoji('🫧').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`idle:upgrades:${userId}`).setLabel('Upgrades').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`idle:cashout:${userId}`).setLabel('Cash out → XP').setEmoji('💧').setStyle(ButtonStyle.Success).setDisabled(s.dailyXpCap <= 0),
-    new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`idle:stop:${userId}`).setLabel('Pause').setEmoji('⏸️').setStyle(ButtonStyle.Secondary)
   );
+
+/** The screen shown before a member starts their factory (or after they pause it). */
+function startView(state, s, userId, name) {
+  const started = !!(state && state.lifetime);
+  const embed = new EmbedBuilder()
+    .setColor(BLUE)
+    .setTitle(`🫧 ${name ? `${name}'s ` : ''}Bubble Factory`)
+    .setDescription(
+      (started
+        ? 'Your factory is **paused** — it isn’t making bubbles right now.\n\n'
+        : 'Welcome to your very own **Bubble Factory**! It isn’t running yet.\n\n') +
+        'Press **▶️ Start** (or run `/idle start`) to fire it up. It makes 🫧 Bubbles around the clock — even while you’re away — and you pop back to **collect** and **upgrade**.\n\n' +
+        `-# Makes **${fmt(s.baseRate)} 🫧/hr** to begin with · stores up to **${fmt(s.offlineHours)}h** while you’re gone.`
+    );
+  if (started) embed.addFields({ name: '🫧 In the bank', value: `**${fmt(state.bank)}** waiting for you`, inline: false });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`idle:start:${userId}`).setLabel(started ? 'Resume' : 'Start my factory').setEmoji('▶️').setStyle(ButtonStyle.Success)
+  );
+  return { embed, row };
+}
 
 function upgradesView(state, s, userId, now = Date.now()) {
   const pending = pendingBubbles(state, s, now);
@@ -300,6 +400,25 @@ async function handleIdleInteraction(interaction) {
   const s = idleSettings(await getCachedConfig(interaction.guild.id));
   if (!s.enabled) return interaction.reply({ content: '🫧 The Bubble Factory is turned off here.', ephemeral: true }).catch(() => null);
   const name = interaction.member?.displayName || interaction.user.username;
+
+  if (action === 'start') {
+    const { state } = await startFactory(interaction.guild.id, interaction.user.id);
+    return interaction.update({ embeds: [factoryEmbed(state, s, { name })], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
+  }
+  if (action === 'stop') {
+    const { state } = await stopFactory(interaction.guild.id, interaction.user.id);
+    const { embed, row } = startView(state, s, interaction.user.id, name);
+    return interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+  }
+
+  // Everything below needs a running factory — send paused members to the Start screen.
+  {
+    const check = await getFactory(interaction.guild.id, interaction.user.id);
+    if (!check.active) {
+      const { embed, row } = startView(check, s, interaction.user.id, name);
+      return interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+    }
+  }
 
   if (action === 'collect') {
     const { state, gained } = await collect(interaction.guild.id, interaction.user.id, s);
@@ -369,6 +488,8 @@ function cleanSettings(input) {
     if (input.offlineHours !== undefined) patch['idleGame.offlineHours'] = whole(input.offlineHours, 1, 72, 'Offline storage (hours)');
     if (input.bubblesPerXp !== undefined) patch['idleGame.bubblesPerXp'] = whole(input.bubblesPerXp, 1, 100000, 'Bubbles per XP');
     if (input.dailyXpCap !== undefined) patch['idleGame.dailyXpCap'] = whole(input.dailyXpCap, 0, 100000, 'Daily XP cap');
+    if (input.fullAlerts !== undefined) patch['idleGame.fullAlerts'] = !!input.fullAlerts;
+    if (input.fullAlertChannelId !== undefined) patch['idleGame.fullAlertChannelId'] = input.fullAlertChannelId || null;
   } catch (err) {
     return { error: err.message };
   }
@@ -392,12 +513,17 @@ module.exports = {
   pendingBubbles,
   xpLeftToday,
   getFactory,
+  startFactory,
+  stopFactory,
   collect,
   buyUpgrade,
   cashout,
   adminAdjustBubbles,
   resetFactory,
+  runFullAlertSweep,
+  startFullAlertLoop,
   factoryEmbed,
+  startView,
   rowFor,
   upgradesView,
   handleIdleInteraction,

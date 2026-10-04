@@ -10,6 +10,8 @@ const data = new SlashCommandBuilder()
   .setDescription('The Bubble Factory — a chill idle game: make bubbles, upgrade, cash out to XP')
   .setDMPermission(false)
   .addSubcommand((s) => s.setName('play').setDescription('Open your Bubble Factory'))
+  .addSubcommand((s) => s.setName('start').setDescription('Start (or resume) your factory so it makes bubbles'))
+  .addSubcommand((s) => s.setName('stop').setDescription('Pause your factory (your banked bubbles are kept)'))
   .addSubcommand((s) => s.setName('top').setDescription('The biggest factories in the server'))
   .addSubcommand((s) => s.setName('help').setDescription('How the Bubble Factory works'))
   .addSubcommandGroup((g) =>
@@ -121,6 +123,19 @@ async function execute(interaction) {
 
   if (!s.enabled) return reply('🫧 The Bubble Factory is off in this server. An admin can turn it on with `/idle admin toggle` or the dashboard.');
 
+  const name = interaction.member?.displayName || interaction.user.username;
+
+  if (sub === 'start') {
+    const { state, already } = await idle.startFactory(guild.id, interaction.user.id);
+    if (already) return reply('🫧 Your factory is already running — open it with `/idle play`.');
+    return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: [idle.rowFor(interaction.user.id, s)], ephemeral: true });
+  }
+
+  if (sub === 'stop') {
+    const { already } = await idle.stopFactory(guild.id, interaction.user.id);
+    return reply(already ? '🫧 Your factory isn’t running — start it with `/idle start`.' : '⏸️ Factory paused. Your banked bubbles are safe — resume any time with `/idle start`.');
+  }
+
   if (sub === 'top') {
     const rows = await idle.leaderboard(guild, { limit: 10 });
     const medal = (i) => ['🥇', '🥈', '🥉'][i] || `**${i + 1}.**`;
@@ -135,9 +150,12 @@ async function execute(interaction) {
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
   }
 
-  // play — show the factory with its pending bubbles waiting; the Collect button banks them.
+  // play — if the factory isn't running yet, show the Start screen; otherwise the factory itself.
   const state = await idle.getFactory(guild.id, interaction.user.id);
-  const name = interaction.member?.displayName || interaction.user.username;
+  if (!state.active) {
+    const { embed, row } = idle.startView(state, s, interaction.user.id, name);
+    return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  }
   return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: [idle.rowFor(interaction.user.id, s)], ephemeral: true });
 }
 

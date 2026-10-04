@@ -2435,6 +2435,9 @@ async function loadIdle() {
     v('idleOffline', s.offlineHours);
     v('idlePerXp', s.bubblesPerXp);
     v('idleCap', s.dailyXpCap);
+    document.getElementById('idleFullAlerts').checked = s.fullAlerts !== false;
+    const ch = document.getElementById('idleAlertChannel');
+    if (ch) ch.value = s.fullAlertChannelId || '';
     idleState.loaded = true;
   }
   // Live preview recomputes as the admin edits any input.
@@ -2470,7 +2473,9 @@ async function saveIdle() {
     baseRate: v('idleBaseRate'),
     offlineHours: v('idleOffline'),
     bubblesPerXp: v('idlePerXp'),
-    dailyXpCap: v('idleCap')
+    dailyXpCap: v('idleCap'),
+    fullAlerts: document.getElementById('idleFullAlerts').checked,
+    fullAlertChannelId: v('idleAlertChannel') || null
   };
   const data = await withButton(document.getElementById('idleSaveBtn'), () => manageApi('POST', 'leveling/idle', body), '🫧 Bubble Factory saved.');
   if (data) {

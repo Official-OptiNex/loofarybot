@@ -22,9 +22,10 @@ const H=3600000;
   assert.deepEqual([0,1,2].map((l)=>I.upgradeCost('scrubber',l)),[100,155,241],'geometric cost curve');
   assert.equal(I.offlineCapHours({upgrades:new Map([['tub',3]])},s),8+6,'bigger tub extends offline storage');
   const now=Date.UTC(2027,0,2,12);
-  assert.equal(I.pendingBubbles({upgrades:new Map(),lastTick:now-2*H},s,now),120,'2h at 60/hr');
-  assert.equal(I.pendingBubbles({upgrades:new Map(),lastTick:now-100*H},s,now),8*60,'capped at the offline window (8h)');
-  assert.equal(I.pendingBubbles({upgrades:new Map(),lastTick:0},s,now),0,'a brand-new factory has nothing pending');
+  assert.equal(I.pendingBubbles({active:true,upgrades:new Map(),lastTick:now-2*H},s,now),120,'2h at 60/hr');
+  assert.equal(I.pendingBubbles({active:true,upgrades:new Map(),lastTick:now-100*H},s,now),8*60,'capped at the offline window (8h)');
+  assert.equal(I.pendingBubbles({active:true,upgrades:new Map(),lastTick:0},s,now),0,'a brand-new factory has nothing pending');
+  assert.equal(I.pendingBubbles({active:false,upgrades:new Map(),lastTick:now-2*H},s,now),0,'a paused/never-started factory makes nothing');
   assert.equal(I.xpLeftToday({cashoutDay:'2027-01-02',cashoutXpToday:120},s,now),180);
   assert.equal(I.xpLeftToday({cashoutDay:'2027-01-01',cashoutXpToday:300},s,now),300,'yesterday’s cash-outs don’t count today');
   console.log('✓ economy maths: rate (flat + shine), geometric costs, offline cap, pending, daily cap left');
@@ -37,15 +38,27 @@ const H=3600000;
   assert.equal(r.settings.enabled,true);
   console.log('✓ settings validated and saved');
 
-  // ---- collect banks pending bubbles
-  let f=await I.getFactory('g','ann'); f.lastTick=now-4*H; await f.save();
+  // ---- start / stop (the factory is opt-in and makes nothing until started)
+  let f0=await I.getFactory('g','ann');
+  assert.equal(!!f0.active,false,'a brand-new factory is not running yet');
+  f0.lastTick=now-4*H; await f0.save();
+  assert.equal((await I.collect('g','ann',s,now)).gained,0,'a stopped factory banks nothing');
+  const started=await I.startFactory('g','ann',now);
+  assert.equal(started.already,false); assert.equal(started.state.active,true,'start turns it on and resets accrual');
+  const stopped=await I.stopFactory('g','ann');
+  assert.equal(stopped.state.active,false,'stop pauses it (bank kept)');
+  assert.equal((await I.stopFactory('g','ann')).already,true,'stopping an already-paused factory is a no-op');
+  console.log('✓ start/stop: opt-in, resets accrual on start, pauses on stop');
+
+  // ---- collect banks pending bubbles (once running)
+  let f=await I.getFactory('g','ann'); f.active=true; f.lastTick=now-4*H; await f.save();
   let c=await I.collect('g','ann',s,now);
   assert.equal(c.gained,240); assert.equal(c.state.bank,240); assert.equal(c.state.lifetime,240);
   c=await I.collect('g','ann',s,now); assert.equal(c.gained,0,'nothing new right after collecting');
   console.log('✓ collect banks the pending bubbles (and nothing extra right after)');
 
   // ---- buying upgrades spends the (already-collected) bank, and does NOT auto-collect pending
-  f=await I.getFactory('g','ann'); f.bank=1000; f.lastTick=now-4*H; await f.save(); // 240 pending, uncollected
+  f=await I.getFactory('g','ann'); f.active=true; f.bank=1000; f.lastTick=now-4*H; await f.save(); // 240 pending, uncollected
   let b=await I.buyUpgrade('g','ann','scrubber',s,now);
   assert.equal(b.newLevel,1); assert.equal(b.cost,100); assert.equal(b.state.bank,900,'spent from bank; pending left untouched');
   assert.equal(I.pendingBubbles(b.state,s,now),360,'4h still pending (lastTick not reset), now at the upgraded 90/hr rate');
@@ -58,7 +71,7 @@ const H=3600000;
 
   // ---- cashing out → XP, capped per day
   const paid=[]; const adjustXp=async(gu,u,d)=>paid.push([u,d]);
-  f=await I.getFactory('g','ann'); f.bank=5000; f.upgrades={}; f.markModified('upgrades'); f.cashoutDay=null; f.cashoutXpToday=0; f.lastTick=now-4*H; await f.save(); // 240 pending, uncollected
+  f=await I.getFactory('g','ann'); f.active=true; f.bank=5000; f.upgrades={}; f.markModified('upgrades'); f.cashoutDay=null; f.cashoutXpToday=0; f.lastTick=now-4*H; await f.save(); // 240 pending, uncollected
   let out=await I.cashout(guild,'ann',s,{now,adjustXp});
   assert.equal(out.xp,300,'capped at the 300 XP/day limit'); assert.equal(out.spent,3000); assert.equal(out.state.bank,2000,'cashed out from the bank only');
   assert.equal(I.pendingBubbles(out.state,s,now),240,'pending bubbles are NOT auto-cashed — collect first');
@@ -86,11 +99,33 @@ const H=3600000;
   assert.equal(fresh.bank,0); assert.equal(fresh.lifetime,0,'reset wipes the factory');
   console.log('✓ admin give/take clamps at 0 (lifetime unaffected by takes), and reset wipes a factory');
 
+  // ---- "tub is full" alert sweep: DM the owner once, fall back to a channel, never repeat
+  await M('IdleFactory').create({guildId:'g',userId:'cara',active:true,lastTick:now-100*H,upgrades:{}}); // full (8h cap)
+  const dmed=[]; const posted=[];
+  const chan={ isTextBased:()=>true, send:async(m)=>posted.push(m.content) };
+  const sweepGuild={ id:'g', name:'Guild', channels:{ cache:new Collection([['chan',chan]]) } };
+  let openDms=true;
+  const fakeClient={
+    guilds:{ cache:new Collection([['g',sweepGuild]]) },
+    users:{ fetch:async(uid)=>{ if(!openDms) throw new Error('DMs closed'); return { send:async(m)=>dmed.push([uid,m.content]) }; } }
+  };
+  let n=await I.runFullAlertSweep(fakeClient,now);
+  assert.equal(n,1,'one full factory notified'); assert.equal(dmed.at(-1)[0],'cara','DM went to the owner');
+  n=await I.runFullAlertSweep(fakeClient,now);
+  assert.equal(n,0,'already-notified factory is not pinged again');
+  // Channel fallback when DMs are closed.
+  await M('IdleFactory').create({guildId:'g',userId:'dan',active:true,lastTick:now-100*H,upgrades:{}});
+  await M('GuildConfig').updateOne({guildId:'g'},{$set:{'idleGame.fullAlertChannelId':'chan'}});
+  openDms=false;
+  n=await I.runFullAlertSweep(fakeClient,now);
+  assert.equal(n,1,'full factory with closed DMs still reached'); assert.match(posted.at(-1),/<@dan>/,'posted in the fallback channel');
+  console.log('✓ full-tub sweep DMs once, falls back to a channel, and never double-pings');
+
   // ---- leaderboard
   await M('IdleFactory').create({guildId:'g',userId:'ben',lifetime:50000,bank:0,upgrades:{scrubber:3}});
   const top=await I.leaderboard(guild,{now,limit:5});
   assert.equal(top[0].userId,'ben'); assert.equal(top[0].lifetime,50000); assert.equal(top[0].rate,60+90);
-  assert.equal(top[1].name,'Ann');
+  assert.ok(top.find((r)=>r.userId==='ann' && r.name==='Ann'),'member display names resolve from the guild cache');
   console.log('✓ leaderboard ranks factories by lifetime bubbles');
 
   // ---- the embed builds
