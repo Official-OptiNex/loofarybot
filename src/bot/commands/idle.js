@@ -52,8 +52,8 @@ async function execute(interaction) {
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
   }
 
-  // play
-  const { state } = await idle.collect(guild.id, interaction.user.id, s);
+  // play — show the factory with its pending bubbles waiting; the Collect button banks them.
+  const state = await idle.getFactory(guild.id, interaction.user.id);
   const name = interaction.member?.displayName || interaction.user.username;
   return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: [idle.rowFor(interaction.user.id, s)], ephemeral: true });
 }

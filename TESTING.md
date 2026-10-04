@@ -104,9 +104,14 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
 
 ## 5b. Bubble Factory idle game (`/idle`, dashboard **Leveling → 🫧 Bubble Factory**)
 Turn it on first (dashboard Leveling tab, or it's off by default).
-- [ ] `/idle play` → your factory embed with **Collect / Upgrades / Cash out → XP / ↻** buttons.
-- [ ] Wait a bit (or it accrues), press **Collect** → a short bubble animation, then your bank goes up.
+- [ ] `/idle play` → your factory embed with **Collect / Upgrades / Cash out → XP / ↻** buttons, and
+      a **To collect** count that's > 0 after some time has passed (opening does **not** auto-collect).
+- [ ] Press **↻** (refresh) → the bank stays the same and **To collect** keeps growing — bubbles only
+      move to the bank when you press **Collect**.
+- [ ] Press **Collect** → a short bubble animation, then your bank goes up and **To collect** resets to 0.
 - [ ] **Upgrades** → buy 🧽 Scrubber → your rate goes up; a buy you can't afford is refused, no change.
+      With uncollected bubbles waiting, the Upgrades view shows a "← Back, then Collect" hint and only
+      your collected bank is spendable.
 - [ ] Earn/collect enough, then **Cash out → XP** → your XP goes up (check `/levels rank`), up to the
       daily cap. Cashing out again after the cap → "you've hit today's cap".
 - [ ] Set **Daily XP cap** to 0 on the dashboard → the Cash out button is disabled (bubbles only).

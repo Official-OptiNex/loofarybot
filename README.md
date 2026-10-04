@@ -203,7 +203,9 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 A relaxed idle game with **no gambling** — a nicer fit for members who don't like the gambling side,
 and it stays separate (you can toggle gambling off and leave this on, or run both).
 - Each member's factory makes **🫧 Bubbles** over time, even while they're away, up to an **offline
-  cap** (8h by default; the 🛁 Bigger Tub upgrade extends it).
+  cap** (8h by default; the 🛁 Bigger Tub upgrade extends it). Bubbles wait as "to collect" until the
+  member presses **Collect** — only then do they land in the bank to spend. (Opening or refreshing
+  the factory just shows what's waiting; it doesn't auto-collect.)
 - **Upgrades** cost Bubbles and raise your rate — 🧽 Scrubber, 🧴 Fancy Soap, 🚿 Jet Nozzles,
   🛁 Bigger Tub, ✨ Extra Shine. Costs grow geometrically, so there's always a next goal, and the
   whole upgrade loop uses Bubbles — never XP — so it can't inflate levels.

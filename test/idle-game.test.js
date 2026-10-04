@@ -44,10 +44,11 @@ const H=3600000;
   c=await I.collect('g','ann',s,now); assert.equal(c.gained,0,'nothing new right after collecting');
   console.log('✓ collect banks the pending bubbles (and nothing extra right after)');
 
-  // ---- buying upgrades spends the bank
-  f=await I.getFactory('g','ann'); f.bank=1000; f.lastTick=now; await f.save();
+  // ---- buying upgrades spends the (already-collected) bank, and does NOT auto-collect pending
+  f=await I.getFactory('g','ann'); f.bank=1000; f.lastTick=now-4*H; await f.save(); // 240 pending, uncollected
   let b=await I.buyUpgrade('g','ann','scrubber',s,now);
-  assert.equal(b.newLevel,1); assert.equal(b.cost,100); assert.equal(b.state.bank,900);
+  assert.equal(b.newLevel,1); assert.equal(b.cost,100); assert.equal(b.state.bank,900,'spent from bank; pending left untouched');
+  assert.equal(I.pendingBubbles(b.state,s,now),360,'4h still pending (lastTick not reset), now at the upgraded 90/hr rate');
   assert.equal(I.ratePerHour(b.state,s),90,'rate went up');
   b=await I.buyUpgrade('g','ann','jets',s,now); assert.match(b.error,/costs/); assert.equal(b.state.bank,900,'a buy you can’t afford changes nothing');
   // Maxing a capped upgrade.
@@ -57,9 +58,10 @@ const H=3600000;
 
   // ---- cashing out → XP, capped per day
   const paid=[]; const adjustXp=async(gu,u,d)=>paid.push([u,d]);
-  f=await I.getFactory('g','ann'); f.bank=5000; f.upgrades={}; f.markModified('upgrades'); f.cashoutDay=null; f.cashoutXpToday=0; f.lastTick=now; await f.save();
+  f=await I.getFactory('g','ann'); f.bank=5000; f.upgrades={}; f.markModified('upgrades'); f.cashoutDay=null; f.cashoutXpToday=0; f.lastTick=now-4*H; await f.save(); // 240 pending, uncollected
   let out=await I.cashout(guild,'ann',s,{now,adjustXp});
-  assert.equal(out.xp,300,'capped at the 300 XP/day limit'); assert.equal(out.spent,3000); assert.equal(out.state.bank,2000);
+  assert.equal(out.xp,300,'capped at the 300 XP/day limit'); assert.equal(out.spent,3000); assert.equal(out.state.bank,2000,'cashed out from the bank only');
+  assert.equal(I.pendingBubbles(out.state,s,now),240,'pending bubbles are NOT auto-cashed — collect first');
   assert.deepEqual(paid.at(-1),['ann',300]);
   out=await I.cashout(guild,'ann',s,{now,adjustXp}); assert.match(out.error,/today's cash-out cap/i);
   // Next day the cap resets. (Pin bank/lastTick so no new bubbles accrue over the gap.)
