@@ -1,12 +1,13 @@
 // /automod — spam protection: turn it on, switch rules, and set warnings before the mute.
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const automod = require('../cogs/modules/automod');
+const linkSafety = require('../cogs/modules/linkSafety');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
 const { dashboardUrl } = require('../cogs/modules/help');
 
 const data = new SlashCommandBuilder()
   .setName('automod')
-  .setDescription('Spam protection — floods, repeats, text walls, mass mentions, invites')
+  .setDescription('Spam protection — floods, repeats, text walls, mass mentions, invites, unsafe links')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false)
   .addSubcommand((s) =>
@@ -39,6 +40,25 @@ const data = new SlashCommandBuilder()
       .setDescription('Let a role or channel skip auto-mod (run again to undo)')
       .addRoleOption((o) => o.setName('role').setDescription('A role to exempt'))
       .addChannelOption((o) => o.setName('channel').setDescription('A channel to exempt'))
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('links')
+      .setDescription('Link safety: which links are allowed')
+      .addStringOption((o) =>
+        o.setName('mode').setDescription('What to remove').addChoices(
+          { name: 'Only unsafe links (scams, shorteners, downloads…)', value: 'unsafe' },
+          { name: 'Every link except approved sites', value: 'allowlist' }
+        )
+      )
+      .addStringOption((o) => o.setName('allow').setDescription('Add a site to the approved list (or remove it if it’s there), e.g. example.com').setMaxLength(200))
+      .addStringOption((o) => o.setName('block').setDescription('Add a site to the block list (or remove it if it’s there)').setMaxLength(200))
+      .addBooleanOption((o) => o.setName('shorteners').setDescription('Remove link shorteners like bit.ly (default on)'))
+      .addBooleanOption((o) => o.setName('downloads').setDescription('Remove links to programs like .exe/.apk (default on)'))
+      .addBooleanOption((o) => o.setName('scam_mute').setDescription('Mute straight away for scam links, skipping the warnings (default on)'))
+  )
+  .addSubcommand((s) =>
+    s.setName('checklink').setDescription('Check whether a link would be allowed').addStringOption((o) => o.setName('url').setDescription('The link').setRequired(true).setMaxLength(500))
   )
   .addSubcommand((s) => s.setName('status').setDescription('Rules, punishments and recent catches'));
 
@@ -99,6 +119,43 @@ async function execute(interaction) {
     return reply(saved.error ? `❌ ${saved.error}` : `✅ ${lines.join('\n')}`);
   }
 
+  if (sub === 'links') {
+    const L = s.unsafeLinks;
+    const u = {};
+    const lines = [];
+    if (o.getString('mode')) u.mode = o.getString('mode');
+    const toggle = (list, raw, label) => {
+      const [d] = linkSafety.cleanDomains([raw]);
+      if (!d) return { error: `“${raw}” isn’t a website address (try example.com).` };
+      const has = list.includes(d);
+      lines.push(has ? `Removed **${d}** from the ${label} list.` : `Added **${d}** to the ${label} list.`);
+      return { list: has ? list.filter((x) => x !== d) : [...list, d] };
+    };
+    for (const [opt, key, label] of [['allow', 'allow', 'approved'], ['block', 'block', 'block']]) {
+      if (!o.getString(opt)) continue;
+      const t = toggle(L[key], o.getString(opt), label);
+      if (t.error) return reply(`❌ ${t.error}`);
+      u[key] = t.list;
+    }
+    for (const [opt, key] of [['shorteners', 'shorteners'], ['downloads', 'files'], ['scam_mute', 'scamMute']]) if (o.getBoolean(opt) !== null) u[key] = o.getBoolean(opt);
+    const saved = await automod.saveSettings(guild, Object.keys(u).length ? { rules: { unsafeLinks: { enabled: true, ...u } } } : {});
+    if (saved.error) return reply(`❌ ${saved.error}`);
+    const n = saved.settings.unsafeLinks;
+    return reply(
+      `${lines.length ? `✅ ${lines.join('\n')}\n\n` : ''}🛡️ **Link safety** is ${n.enabled ? 'on' : 'off'}${s.enabled ? '' : ' (auto-mod itself is off — `/automod toggle`)'}.\n` +
+        `Mode: **${n.mode === 'allowlist' ? 'only approved sites' : 'remove unsafe links'}** · shorteners ${n.shorteners ? 'removed' : 'allowed'} · downloads ${n.files ? 'removed' : 'allowed'} · scam links ${n.scamMute ? 'mute straight away' : 'count as a warning'}\n` +
+        `Approved: ${n.allow.length ? n.allow.join(', ') : '— (well-known sites are always fine)'}\nBlocked: ${n.block.length ? n.block.join(', ') : '—'}`
+    );
+  }
+
+  if (sub === 'checklink') {
+    const raw = o.getString('url').trim();
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const bad = linkSafety.checkContent(url, s.unsafeLinks);
+    if (!bad) return reply(`✅ <${url}> would be **allowed**.`);
+    return reply(`🛡️ <${url}> would be **removed** — ${bad.reason}.${bad.scam && s.unsafeLinks.scamMute ? ' It counts as a scam, so the sender is muted straight away.' : bad.unapproved ? ' (No strike — it just isn’t on the approved list.)' : ''}`);
+  }
+
   const recent = await automod.recentActions(guild.id, 5);
   const ruleLine = (key) => {
     const r = automod.RULES[key];
@@ -109,6 +166,7 @@ async function execute(interaction) {
       walls: `> ${cfg.maxLines} lines or repeated text`,
       mentions: `${cfg.max}+ mentions${cfg.everyone ? ', @everyone' : ''}`,
       invites: 'other servers',
+      unsafeLinks: cfg.mode === 'allowlist' ? 'only approved sites' : 'scams, shorteners, downloads',
       links: `${cfg.max}+ links`,
       caps: `${cfg.percent}%+ caps`
     }[key];

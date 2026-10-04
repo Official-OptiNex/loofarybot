@@ -307,6 +307,23 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
   - 📣 **Mention spam:** 5+ people or roles in one message, or trying @everyone/@here without
     permission.
   - 🔗 **Invites to other servers.** Invites to your own server are fine.
+  - 🛡️ **Unsafe links** (on by default once auto-mod is on). Works offline, with no paid service.
+    Well-known sites (YouTube, Twitch, GitHub, Tenor, Reddit, Spotify, Steam, Wikipedia…) are always
+    fine. These are removed:
+    - sites pretending to be Discord, Steam, Roblox, PayPal or Epic ("discord-nitro.gift",
+      "steamcommunlty.com", "dlscord.com") and lookalike letters (punycode)
+    - disguised links: `[discord.com/gift](https://scam.site)`, or `https://discord.com@scam.site`
+    - "free Nitro / Steam gift" messages with an unknown link
+    - link shorteners (bit.ly, tinyurl, grabify…), raw IP addresses, and direct downloads of
+      programs (.exe, .apk, .msi, .scr…), each of which can be allowed
+    - anything on the server's **block list**
+
+    Scam links (fake brands, disguised links) **mute straight away** by default, because they
+    usually come from hacked accounts. Other unsafe links get a normal strike. With **Only approved
+    sites** mode, every other link is removed too, with a short note and no strike. Sites on the
+    **approved list** (and their subdomains) are always allowed. Edited messages are checked too.
+    `/automod links` changes it, and `/automod checklink` (or **Test a link** on the dashboard)
+    shows what would happen to a link.
   - 🌐 **Link spam** and 🔠 **caps spam:** optional, off by default.
 
   Offending messages are deleted and the member gets a strike. By default that's **2 warnings,

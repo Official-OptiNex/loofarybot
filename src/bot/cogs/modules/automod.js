@@ -1,13 +1,15 @@
 // Auto-mod: catches spam without being twitchy about fast talkers. Rules: message floods, the same
-// message over and over, text walls, mass mentions, invites to other servers, and (optional) link
-// and caps spam. The offending messages are deleted and the member gets a strike — the first
+// message over and over, text walls, mass mentions, invites to other servers, unsafe links (scams,
+// shorteners, downloads — see linkSafety.js), and (optional) link and caps spam. The offending messages are deleted and the member gets a strike — the first
 // strikes are warnings, the next one is a timeout (default: 2 warnings, then a 1 hour mute).
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
 const ModCase = require('../../../database/models/ModCase');
 const { sendLog } = require('./logging');
+const linkSafety = require('./linkSafety');
 
 const RULES = {
+  unsafeLinks: { label: 'Unsafe link', emoji: '🛡️', notice: 'that link was removed — it doesn’t look safe' },
   flood: { label: 'Message spam', emoji: '🌊', notice: 'slow down — that’s a lot of messages at once' },
   duplicates: { label: 'Repeated messages', emoji: '🔁', notice: 'please don’t send the same message over and over' },
   walls: { label: 'Text wall', emoji: '🧱', notice: 'please don’t post walls of repeated text' },
@@ -37,6 +39,16 @@ function automodSettings(config) {
     walls: { enabled: a.walls?.enabled !== false, maxLines: num(a.walls?.maxLines, 30, 5, 200) },
     mentions: { enabled: a.mentions?.enabled !== false, max: num(a.mentions?.max, 5, 2, 50), everyone: a.mentions?.everyone !== false },
     invites: { enabled: a.invites?.enabled !== false },
+    unsafeLinks: {
+      enabled: a.unsafeLinks?.enabled !== false,
+      mode: a.unsafeLinks?.mode === 'allowlist' ? 'allowlist' : 'unsafe', // 'allowlist' = only approved sites
+      allow: Array.isArray(a.unsafeLinks?.allow) ? a.unsafeLinks.allow : [],
+      block: Array.isArray(a.unsafeLinks?.block) ? a.unsafeLinks.block : [],
+      shorteners: a.unsafeLinks?.shorteners !== false,
+      ipLinks: a.unsafeLinks?.ipLinks !== false,
+      files: a.unsafeLinks?.files !== false,
+      scamMute: a.unsafeLinks?.scamMute !== false // scam links (usually hacked accounts) skip the warnings
+    },
     links: { enabled: !!a.links?.enabled, max: num(a.links?.max, 4, 1, 30) },
     caps: { enabled: !!a.caps?.enabled, percent: num(a.caps?.percent, 80, 50, 100), minLength: num(a.caps?.minLength, 15, 5, 200) },
     warnings: num(a.warnings, 2, 0, 10),
@@ -85,9 +97,23 @@ async function inviteGuildId(client, code) {
   return guildId;
 }
 
+/**
+ * The unsafe-links rule on its own (also run when a message is edited). A scam link is `severe`
+ * (can skip straight to a mute); a link that's just not on the approved list (allowlist mode) is
+ * removed without a strike.
+ */
+function checkLinks(content, s) {
+  if (!s.unsafeLinks.enabled) return null;
+  const bad = linkSafety.checkContent(content, s.unsafeLinks);
+  if (!bad) return null;
+  return { rule: 'unsafeLinks', detail: `${bad.host || bad.link} — ${bad.reason}`, severe: bad.scam, noStrike: bad.unapproved };
+}
+
 /** Checks one message against the per-message rules. Returns { rule, detail } or null. */
 async function checkMessage(message, s) {
   const content = message.content || '';
+  const link = checkLinks(content, s);
+  if (link) return link;
   if (s.invites.enabled) {
     const codes = inviteCodes(content);
     for (const code of codes) {
@@ -173,13 +199,25 @@ async function punish(message, s, hit) {
   await deleteMessages(message, refs);
   history.set(key, []); // start fresh so the next message isn't counted as the same burst
 
+  const rule = RULES[hit.rule];
+  // A link that just isn't on the approved list: removed with a short note, no strike.
+  if (hit.noStrike) {
+    if (s.notify && message.channel?.send) {
+      const notice = await message.channel
+        .send({ content: `🔗 ${message.author}, only approved sites can be linked here (${hit.detail.split(' — ')[0]} isn’t one).`, allowedMentions: { users: [message.author.id] } })
+        .catch(() => null);
+      if (notice) setTimeout(() => notice.delete().catch(() => null), 8000);
+    }
+    return { action: 'deleted' };
+  }
+
   const now = Date.now();
   if (now - (lastStrike.get(key) || 0) < STRIKE_COOLDOWN_MS) return { action: 'deleted' };
   lastStrike.set(key, now);
 
-  const rule = RULES[hit.rule];
   const strikes = await recentStrikes(guild.id, message.author.id, s, now);
-  const mute = strikes >= s.warnings;
+  // Scam links usually come from hacked accounts: mute straight away (if the server wants that).
+  const mute = strikes >= s.warnings || (hit.severe && hit.rule === 'unsafeLinks' && s.unsafeLinks.scamMute);
   const { performAction } = require('./modCases');
   const result = await performAction(guild, {
     type: mute ? 'timeout' : 'warn',
@@ -227,6 +265,28 @@ async function punish(message, s, hit) {
     }
   }).catch(() => null);
   return { action, strikes: strikes + 1, error: result.error || null };
+}
+
+/** Edited messages: scammers sometimes post something harmless, then edit a link in. */
+async function handleAutomodEdit(oldMessage, message) {
+  if (!message.guild || message.partial || message.author?.bot || message.webhookId || message.system) return false;
+  if (oldMessage?.content === message.content) return false; // only an embed/preview changed
+  const { getCachedConfig } = require('../../../database/configCache');
+  const s = automodSettings(await getCachedConfig(message.guild.id));
+  if (!s.enabled || isExempt(message, s)) return false;
+  const hit = checkLinks(message.content, s);
+  if (!hit) return false;
+  await punish(message, s, hit);
+  return true;
+}
+
+function registerAutomodEvents(client) {
+  client.on('messageUpdate', async (oldMessage, newMessage) => {
+    if (!newMessage.guild) return;
+    if (newMessage.partial) newMessage = await newMessage.fetch().catch(() => null);
+    if (!newMessage) return;
+    await handleAutomodEdit(oldMessage, newMessage).catch((err) => console.error('Auto-mod (edit) failed:', err.message));
+  });
 }
 
 /**
@@ -277,6 +337,18 @@ function cleanSettings(guild, input) {
     if (r.mentions?.max !== undefined) patch['automod.mentions.max'] = whole(r.mentions.max, 2, 50, 'Mentions');
     bool('mentions.everyone', r.mentions?.everyone);
     bool('invites.enabled', r.invites?.enabled);
+    const u = r.unsafeLinks || {};
+    bool('unsafeLinks.enabled', u.enabled);
+    if (u.mode !== undefined) {
+      if (!['unsafe', 'allowlist'].includes(u.mode)) throw new Error('Link mode must be "unsafe" or "allowlist".');
+      patch['automod.unsafeLinks.mode'] = u.mode;
+    }
+    if (u.allow !== undefined) patch['automod.unsafeLinks.allow'] = linkSafety.cleanDomains(u.allow);
+    if (u.block !== undefined) patch['automod.unsafeLinks.block'] = linkSafety.cleanDomains(u.block);
+    bool('unsafeLinks.shorteners', u.shorteners);
+    bool('unsafeLinks.ipLinks', u.ipLinks);
+    bool('unsafeLinks.files', u.files);
+    bool('unsafeLinks.scamMute', u.scamMute);
     bool('links.enabled', r.links?.enabled);
     if (r.links?.max !== undefined) patch['automod.links.max'] = whole(r.links.max, 1, 30, 'Links');
     bool('caps.enabled', r.caps?.enabled);
@@ -320,6 +392,9 @@ module.exports = {
   capsRatio,
   inviteCodes,
   checkMessage,
+  checkLinks,
+  handleAutomodEdit,
+  registerAutomodEvents,
   checkHistory,
   isExempt,
   recentStrikes,

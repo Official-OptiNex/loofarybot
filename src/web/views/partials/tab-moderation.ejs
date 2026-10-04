@@ -110,6 +110,39 @@
               </div>
 
               <div class="setting-row">
+                <div><div class="setting-title">🛡️ Unsafe links</div><div class="setting-help">Removes scam links: sites pretending to be Discord, Steam or Roblox ("free Nitro"), lookalike addresses, link shorteners, raw IP addresses, program downloads and disguised links. Well-known sites (YouTube, Twitch, GitHub, Tenor…) are always fine. Edited messages are checked too.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="am_unsafeLinks"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title" style="padding-left:1.4rem;">↳ What to remove</div><div class="setting-help" style="padding-left:1.4rem;">"Only approved sites" removes every other link too — without a strike, just a short note.</div></div>
+                <div class="setting-control"><select id="amLinkMode"><option value="unsafe">Unsafe links only</option><option value="allowlist">Everything except approved sites</option></select></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title" style="padding-left:1.4rem;">↳ Scam links mute straight away</div><div class="setting-help" style="padding-left:1.4rem;">Fake Discord/Steam sites and disguised links usually come from hacked accounts, so they skip the warnings.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="amLinkScamMute"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title" style="padding-left:1.4rem;">↳ Also remove</div></div>
+                <div class="check-grid">
+                  <label class="check-pill"><input type="checkbox" id="amLinkShort"><span>Link shorteners (bit.ly…)</span></label>
+                  <label class="check-pill"><input type="checkbox" id="amLinkIp"><span>IP addresses</span></label>
+                  <label class="check-pill"><input type="checkbox" id="amLinkFiles"><span>Program downloads (.exe, .apk…)</span></label>
+                </div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title" style="padding-left:1.4rem;">↳ Approved sites</div><div class="setting-help" style="padding-left:1.4rem;">One per line, e.g. <code>example.com</code> (its subdomains count too). Always allowed.</div></div>
+                <textarea id="amLinkAllow" rows="3" placeholder="example.com"></textarea>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title" style="padding-left:1.4rem;">↳ Blocked sites</div><div class="setting-help" style="padding-left:1.4rem;">One per line. Always removed, even if they'd otherwise be fine.</div></div>
+                <textarea id="amLinkBlock" rows="3" placeholder="badsite.com"></textarea>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title" style="padding-left:1.4rem;">↳ Test a link</div><div class="setting-help" style="padding-left:1.4rem;" id="amLinkResult">Uses the settings above (before saving).</div></div>
+                <div class="setting-control"><input id="amLinkTest" placeholder="https://…" autocomplete="off"><button class="btn secondary small" type="button" onclick="testAutomodLink()">Check</button></div>
+              </div>
+
+              <div class="setting-row">
                 <div><div class="setting-title">🌐 Link spam</div><div class="setting-help">Lots of links in one message. Off by default.</div></div>
                 <div class="setting-control"><input type="number" id="amLinkMax" min="1" max="30" style="flex:0 0 58px; min-width:58px; padding-left:0.5rem; padding-right:0.3rem;" aria-label="Links"><span class="muted">+</span><label class="switch"><input type="checkbox" id="am_links"><span class="track"></span></label></div>
               </div>
