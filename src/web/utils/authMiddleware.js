@@ -23,7 +23,8 @@ const MOD_PAGES = {
   tickets: 'Tickets',
   engagement: 'Birthdays, Counting & Starboard',
   shop: 'XP Shop',
-  embed: 'Embed Builder'
+  embed: 'Embed Builder',
+  botchat: 'Bot Chat (speak as the bot)'
 };
 const DEFAULT_MOD_PAGES = ['leaderboard', 'commands', 'logviewer'];
 

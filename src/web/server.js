@@ -10,6 +10,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const apiRoutes = require('./routes/api');
 const manageRoutes = require('./routes/manage');
 const embedBuilderRoutes = require('./routes/embedBuilder');
+const botChatRoutes = require('./routes/botChat');
 const { siteLocals, botStats, publicCommands } = require('./utils/site');
 
 function startWebServer(client) {
@@ -59,6 +60,7 @@ function startWebServer(client) {
   app.use('/auth', authRoutes);
   app.use('/dashboard', dashboardRoutes);
   app.use('/dashboard', embedBuilderRoutes);
+  app.use('/dashboard', botChatRoutes);
   app.use('/api', apiRoutes);
   app.use('/api', manageRoutes);
 

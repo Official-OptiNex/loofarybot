@@ -142,6 +142,7 @@
         <div class="search-results" id="searchResults" role="listbox"></div>
       </div>
       <% if (can('embed')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/embed" title="Embed Builder" aria-label="Embed Builder"><%- icon('brush') %></a><% } %>
+      <% if (can('botchat')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/botchat" title="Bot Chat — talk through the bot" aria-label="Bot Chat"><%- icon('chat') %></a><% } %>
       <button class="appbar-icon" data-tab="logs" title="Server logs" aria-label="Server logs"><%- icon('bell') %><% if (!logChannelSet) { %><span class="badge-dot"></span><% } %></button>
       <div class="appbar-user">
         <div class="avatar-wrap"><img src="<%= viewer.avatarUrl %>" alt=""><span class="online"></span></div>
@@ -355,7 +356,8 @@
         <% } %>
         <div class="card">
           <h3>🖌️ Quick Links</h3>
-          <% if (can('embed')) { %><p class="muted"><a href="/dashboard/<%= guild.id %>/embed">Open the Embed Builder →</a></p><% } %>
+          <% if (can('embed')) { %><p class="muted"><a href="/dashboard/<%= guild.id %>/embed">🖌️ Open the Embed Builder →</a></p><% } %>
+          <% if (can('botchat')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/botchat">💬 Open Bot Chat (talk through the bot) →</a></p><% } %>
           <p class="muted" style="margin-top:0.4rem;">Use the tabs above to configure everything else.</p>
         </div>
       </div>
