@@ -923,40 +923,64 @@
 
       <!-- BUBBLE FACTORY (idle game — /idle) -->
       <% if (can('leveling')) { %>
-      <div class="card" id="idleCard" style="margin-top:1.25rem;">
-        <div class="idle-scene" aria-hidden="true"><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🧼</span></div>
-        <div class="list-toolbar" style="margin-bottom:0.4rem;">
-          <h3 style="margin:0;">🫧 Bubble Factory <span class="muted" style="font-weight:400; font-size:0.8rem;">· idle game, no gambling</span></h3>
-          <span class="hero-status" id="idleStatus"></span>
+      <div class="card idle-card" id="idleCard" style="margin-top:1.25rem;">
+        <div class="idle-hero">
+          <div class="idle-scene" aria-hidden="true"><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🫧</span><span>🧼</span><span>🫧</span></div>
+          <div class="idle-hero-body">
+            <div class="list-toolbar" style="margin-bottom:0.2rem;">
+              <h3 style="margin:0;">🫧 Bubble Factory <span class="muted" style="font-weight:400; font-size:0.8rem;">· idle game, no gambling</span></h3>
+              <span class="hero-status" id="idleStatus"></span>
+            </div>
+            <p class="muted" style="font-size:0.84rem; margin:0;">A chill alternative to gambling. Members run <code>/idle play</code> to make 🫧 Bubbles over time, <strong>collect</strong> them, buy upgrades, and cash bubbles out to XP — capped per day so levels stay sane.</p>
+          </div>
         </div>
-        <p class="muted" style="font-size:0.84rem; margin-top:0;">A chill alternative to gambling. Members run <code>/idle</code> to make 🫧 Bubbles over time, buy upgrades, and cash bubbles out to XP — capped per day so levels stay sane.</p>
-        <div class="split">
-          <div class="settings-card" style="padding:0;">
+
+        <div class="idle-grid">
+          <!-- settings -->
+          <div class="settings-card idle-settings">
+            <div class="idle-group-label">⚙️ Core</div>
             <div class="setting-row">
-              <div><div class="setting-title">Bubble Factory</div><div class="setting-help">Off by default.</div></div>
+              <div><div class="setting-title">Bubble Factory</div><div class="setting-help">Turn the whole game on or off. Off by default.</div></div>
               <div class="setting-control"><label class="switch"><input type="checkbox" id="idleEnabled"><span class="track"></span></label></div>
             </div>
             <div class="setting-row">
-              <div><div class="setting-title">Base rate</div><div class="setting-help">🫧 per hour at level 0 (upgrades add more).</div></div>
-              <div class="setting-control"><input type="number" id="idleBaseRate" min="1" max="100000"><span class="muted">/hr</span></div>
+              <div><div class="setting-title">Base production</div><div class="setting-help">🫧 made per hour at level 0. Upgrades stack on top of this.</div></div>
+              <div class="setting-control"><input type="number" id="idleBaseRate" min="1" max="100000"><span class="muted">🫧/hr</span></div>
             </div>
             <div class="setting-row">
-              <div><div class="setting-title">Offline storage</div><div class="setting-help">Hours of bubbles that bank while a member is away (the 🛁 Bigger Tub upgrade adds more).</div></div>
+              <div><div class="setting-title">Offline storage</div><div class="setting-help">How many hours of bubbles pile up while a member is away before the tub is full (the 🛁 Bigger Tub upgrade adds more).</div></div>
               <div class="setting-control"><input type="number" id="idleOffline" min="1" max="72"><span class="muted">h</span></div>
             </div>
+
+            <div class="idle-group-label">💧 Cash-out to XP</div>
             <div class="setting-row">
-              <div><div class="setting-title">Cash-out rate</div><div class="setting-help">How many 🫧 a member spends for 1 XP.</div></div>
+              <div><div class="setting-title">Exchange rate</div><div class="setting-help">How many 🫧 a member spends to earn 1 XP. Higher = XP is rarer.</div></div>
               <div class="setting-control"><input type="number" id="idlePerXp" min="1" max="100000"><span class="muted">🫧 = 1 XP</span></div>
             </div>
             <div class="setting-row">
-              <div><div class="setting-title">Daily XP cap</div><div class="setting-help">Most XP one member can cash out per day. <strong>Keeps levels sane</strong> — set <code>0</code> to turn cash-out off (bubbles only).</div></div>
+              <div><div class="setting-title">Daily XP cap</div><div class="setting-help">Most XP one member can cash out per day (resets midnight UTC). <strong>This keeps levels sane</strong> — set <code>0</code> to turn cash-out off entirely (bubbles stay just a fun toy).</div></div>
               <div class="setting-control"><input type="number" id="idleCap" min="0" max="100000"><span class="muted">XP/day</span></div>
             </div>
             <div class="savebar" style="position:static;"><button class="btn" id="idleSaveBtn" onclick="saveIdle()">Save Bubble Factory</button></div>
           </div>
-          <div>
-            <h3 style="margin-top:0;">🏭 Biggest factories</h3>
-            <div id="idleTop"><p class="muted">Loading…</p></div>
+
+          <!-- preview + leaderboard -->
+          <div class="idle-side">
+            <div class="idle-panel">
+              <div class="idle-panel-title">📊 At these settings</div>
+              <div class="idle-preview-grid" id="idlePreview"></div>
+              <p class="muted idle-context" id="idleContext"></p>
+            </div>
+
+            <details class="idle-panel idle-tree">
+              <summary class="idle-panel-title">🏭 Upgrade tree <span class="muted" style="font-weight:400;">· what members can buy</span></summary>
+              <div id="idleTree"></div>
+            </details>
+
+            <div class="idle-panel">
+              <div class="idle-panel-title">🥇 Biggest factories</div>
+              <div id="idleTop"><p class="muted" style="margin:0;">Loading…</p></div>
+            </div>
           </div>
         </div>
       </div>

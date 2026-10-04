@@ -2359,16 +2359,72 @@ async function potDrawNow() {
 })();
 
 /* ------------------------------------------------------------------ Bubble Factory (idle game) */
-const idleState = { loaded: false };
+const idleState = { loaded: false, wired: false };
 function fmtN(n) { return Number(n || 0).toLocaleString('en-US'); }
+
+// Mirrors the server's upgrade tree (idleGame.js UPGRADES) for the dashboard reference + preview.
+const IDLE_UPGRADES = [
+  { emoji: '🧽', name: 'Scrubber', base: 100, blurb: '+30 🫧/hr' },
+  { emoji: '🧴', name: 'Fancy Soap', base: 600, blurb: '+90 🫧/hr' },
+  { emoji: '🚿', name: 'Jet Nozzles', base: 3000, blurb: '+260 🫧/hr' },
+  { emoji: '🛁', name: 'Bigger Tub', base: 500, blurb: '+2h offline storage (max Lv 12)' },
+  { emoji: '✨', name: 'Extra Shine', base: 4000, blurb: '+10% to all bubbles (max Lv 15)' }
+];
+
+function idleInputs() {
+  const num = (id) => Number(document.getElementById(id).value) || 0;
+  return {
+    enabled: document.getElementById('idleEnabled').checked,
+    baseRate: num('idleBaseRate'),
+    offlineHours: num('idleOffline'),
+    bubblesPerXp: num('idlePerXp'),
+    dailyXpCap: num('idleCap')
+  };
+}
+
+// Recompute the "At these settings" preview tiles live from the inputs.
+function renderIdlePreview() {
+  const grid = document.getElementById('idlePreview');
+  if (!grid) return;
+  const s = idleInputs();
+  const storage = s.baseRate * s.offlineHours; // level-0 bubbles held at full
+  const capBubbles = s.dailyXpCap * s.bubblesPerXp; // 🫧 needed to hit the daily XP cap
+  const hoursForCap = s.baseRate > 0 ? capBubbles / s.baseRate : 0;
+  const tile = (k, v, sub) => `<div class="idle-tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  grid.innerHTML = [
+    tile('🪣 Level-0 output', `${fmtN(s.baseRate)}`, '🫧 per hour'),
+    tile('🛁 Full tub holds', `${fmtN(storage)}`, `🫧 · fills in ${fmtN(s.offlineHours)}h`),
+    s.dailyXpCap > 0
+      ? tile('💧 Daily XP cap', `${fmtN(s.dailyXpCap)} XP`, `= ${fmtN(capBubbles)} 🫧/day`)
+      : tile('💧 Cash-out', 'OFF', 'bubbles only, no XP'),
+    s.dailyXpCap > 0
+      ? tile('⏳ Cap takes', `${hoursForCap >= 10 ? Math.round(hoursForCap) : hoursForCap.toFixed(1)}h`, 'of level-0 output')
+      : tile('🏭 Upgrades', `${IDLE_UPGRADES.length}`, 'to buy with bubbles')
+  ].join('');
+  const ctx = document.getElementById('idleContext');
+  if (ctx) {
+    ctx.innerHTML = s.dailyXpCap > 0
+      ? `💡 For scale: chat earns ~20 XP/min and <strong>level 10 is ~3,162 XP total</strong>. A ${fmtN(s.dailyXpCap)} XP/day cap keeps the factory a gentle top-up, not a level machine.`
+      : '💡 With cash-out off, bubbles never become XP — the factory is a pure collect-and-upgrade toy.';
+  }
+}
+
+function renderIdleTree() {
+  const el = document.getElementById('idleTree');
+  if (!el) return;
+  el.innerHTML = IDLE_UPGRADES
+    .map((u) => `<div class="idle-tree-row"><span class="emo">${u.emoji}</span><span class="nm">${esc(u.name)}</span><span class="bl">· ${esc(u.blurb)}</span><span class="cost">from ${fmtN(u.base)} 🫧</span></div>`)
+    .join('');
+}
 
 async function loadIdle() {
   if (!document.getElementById('idleCard')) return;
+  renderIdleTree();
   let d;
   try {
     d = await manageApi('GET', 'leveling/idle');
   } catch (err) {
-    document.getElementById('idleTop').innerHTML = `<p class="muted">❌ ${esc(err.message)}</p>`;
+    document.getElementById('idleTop').innerHTML = `<p class="muted" style="margin:0;">❌ ${esc(err.message)}</p>`;
     return;
   }
   const s = d.settings;
@@ -2381,6 +2437,16 @@ async function loadIdle() {
     v('idleCap', s.dailyXpCap);
     idleState.loaded = true;
   }
+  // Live preview recomputes as the admin edits any input.
+  if (!idleState.wired) {
+    ['idleEnabled', 'idleBaseRate', 'idleOffline', 'idlePerXp', 'idleCap'].forEach((id) => {
+      const node = document.getElementById(id);
+      node.addEventListener('input', renderIdlePreview);
+      node.addEventListener('change', renderIdlePreview);
+    });
+    idleState.wired = true;
+  }
+  renderIdlePreview();
   document.getElementById('idleStatus').innerHTML = [
     `<span class="status-chip ${s.enabled ? 'good' : 'off'}"><span class="dot"></span>${s.enabled ? 'On' : 'Off'}</span>`,
     `<span class="status-chip"><span class="dot"></span>${s.dailyXpCap > 0 ? `${fmtN(s.dailyXpCap)} XP/day cap` : 'cash-out off'}</span>`,
@@ -2390,11 +2456,11 @@ async function loadIdle() {
     ? d.top
         .map((r, i) => {
           const who = esc(r.name || r.userId);
-          const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
-          return `<div style="font-size:0.85rem; padding:0.4rem 0; border-top:1px solid var(--border-card);">${medal} <strong>${who}</strong> <span class="muted">· ${fmtN(r.lifetime)} 🫧 lifetime · ${fmtN(r.rate)}/hr</span></div>`;
+          const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}`;
+          return `<div class="idle-board-row"><span class="rk">${medal}</span><span class="who">${who}</span><span class="stat">${fmtN(r.lifetime)} 🫧 · ${fmtN(r.rate)}/hr</span></div>`;
         })
         .join('')
-    : '<p class="muted" style="margin:0;">No factories yet — members start one with <code>/idle</code>.</p>';
+    : '<p class="muted" style="margin:0;">No factories yet — members start one with <code>/idle play</code>.</p>';
 }
 
 async function saveIdle() {
