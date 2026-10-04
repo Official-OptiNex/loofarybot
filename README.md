@@ -316,6 +316,13 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
     - "free Nitro / Steam gift" messages with an unknown link
     - link shorteners (bit.ly, tinyurl, grabify…), raw IP addresses, and direct downloads of
       programs (.exe, .apk, .msi, .scr…), each of which can be allowed
+    - 🔞 **adult / NSFW sites** (on by default): a built-in list of 450+ porn, cam, hentai, fan-site
+      and hookup domains (`src/bot/cogs/modules/data/nsfwDomains.js`), the adult-only TLDs
+      (.xxx, .porn, .sex, .adult), addresses built from obvious words ("porn", "hentai", "nsfw",
+      "xxx", "milf"…), and NSFW subreddits in reddit links. Normal addresses that just contain those
+      letters (essex.ac.uk, unisex shops) are fine. **Channels marked NSFW in Discord skip this
+      check**, and a site on the approved list is always allowed. These get a normal strike with a
+      🔞 "adult links aren't allowed here" note.
     - anything on the server's **block list**
 
     Scam links (fake brands, disguised links) **mute straight away** by default, because they

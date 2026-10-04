@@ -47,6 +47,7 @@ function automodSettings(config) {
       shorteners: a.unsafeLinks?.shorteners !== false,
       ipLinks: a.unsafeLinks?.ipLinks !== false,
       files: a.unsafeLinks?.files !== false,
+      nsfw: a.unsafeLinks?.nsfw !== false, // adult sites (channels marked NSFW in Discord skip this)
       scamMute: a.unsafeLinks?.scamMute !== false // scam links (usually hacked accounts) skip the warnings
     },
     links: { enabled: !!a.links?.enabled, max: num(a.links?.max, 4, 1, 30) },
@@ -102,17 +103,25 @@ async function inviteGuildId(client, code) {
  * (can skip straight to a mute); a link that's just not on the approved list (allowlist mode) is
  * removed without a strike.
  */
-function checkLinks(content, s) {
+function checkLinks(content, s, channel = null) {
   if (!s.unsafeLinks.enabled) return null;
-  const bad = linkSafety.checkContent(content, s.unsafeLinks);
+  // Channels marked NSFW in Discord (or threads inside one) can post adult links.
+  const nsfwChannel = !!(channel?.nsfw || channel?.parent?.nsfw);
+  const bad = linkSafety.checkContent(content, nsfwChannel ? { ...s.unsafeLinks, nsfw: false } : s.unsafeLinks);
   if (!bad) return null;
-  return { rule: 'unsafeLinks', detail: `${bad.host || bad.link} — ${bad.reason}`, severe: bad.scam, noStrike: bad.unapproved };
+  return {
+    rule: 'unsafeLinks',
+    detail: `${bad.host || bad.link} — ${bad.reason}`,
+    severe: bad.scam,
+    noStrike: bad.unapproved,
+    notice: bad.nsfw ? 'adult (NSFW) links aren’t allowed here' : null
+  };
 }
 
 /** Checks one message against the per-message rules. Returns { rule, detail } or null. */
 async function checkMessage(message, s) {
   const content = message.content || '';
-  const link = checkLinks(content, s);
+  const link = checkLinks(content, s, message.channel);
   if (link) return link;
   if (s.invites.enabled) {
     const codes = inviteCodes(content);
@@ -238,7 +247,7 @@ async function punish(message, s, hit) {
         ? ` Warning **${strikes + 1}/${s.warnings}**${strikes + 1 >= s.warnings ? ` — next time is a ${muteText} mute` : ''}.`
         : '';
     const notice = await message.channel
-      .send({ content: `${rule.emoji} ${message.author}, ${rule.notice}.${tail}`, allowedMentions: { users: [message.author.id] } })
+      .send({ content: `${hit.notice ? '🔞' : rule.emoji} ${message.author}, ${hit.notice || rule.notice}.${tail}`, allowedMentions: { users: [message.author.id] } })
       .catch(() => null);
     if (notice) setTimeout(() => notice.delete().catch(() => null), 8000);
   }
@@ -274,7 +283,7 @@ async function handleAutomodEdit(oldMessage, message) {
   const { getCachedConfig } = require('../../../database/configCache');
   const s = automodSettings(await getCachedConfig(message.guild.id));
   if (!s.enabled || isExempt(message, s)) return false;
-  const hit = checkLinks(message.content, s);
+  const hit = checkLinks(message.content, s, message.channel);
   if (!hit) return false;
   await punish(message, s, hit);
   return true;
@@ -348,6 +357,7 @@ function cleanSettings(guild, input) {
     bool('unsafeLinks.shorteners', u.shorteners);
     bool('unsafeLinks.ipLinks', u.ipLinks);
     bool('unsafeLinks.files', u.files);
+    bool('unsafeLinks.nsfw', u.nsfw);
     bool('unsafeLinks.scamMute', u.scamMute);
     bool('links.enabled', r.links?.enabled);
     if (r.links?.max !== undefined) patch['automod.links.max'] = whole(r.links.max, 1, 30, 'Links');

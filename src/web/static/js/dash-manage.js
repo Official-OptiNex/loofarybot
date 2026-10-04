@@ -1839,6 +1839,7 @@ function fillAutomod(s) {
   c('amLinkShort', s.unsafeLinks.shorteners);
   c('amLinkIp', s.unsafeLinks.ipLinks);
   c('amLinkFiles', s.unsafeLinks.files);
+  c('amLinkNsfw', s.unsafeLinks.nsfw);
   v('amLinkAllow', s.unsafeLinks.allow.join('\n'));
   v('amLinkBlock', s.unsafeLinks.block.join('\n'));
   v('amWarnings', s.warnings);
@@ -1895,6 +1896,7 @@ function readAutomod() {
     shorteners: c('amLinkShort'),
     ipLinks: c('amLinkIp'),
     files: c('amLinkFiles'),
+    nsfw: c('amLinkNsfw'),
     allow: lines('amLinkAllow'),
     block: lines('amLinkBlock')
   });

@@ -58,6 +58,9 @@ Turn it on first. The defaults are fine.
         away** (scam link). Remove the timeout afterwards.
   - [ ] 👤 Post "hi", then edit it to `hi https://steamcommunlty.com/gift` → the edited message is
         removed too.
+  - [ ] 👤 Post `https://pornhub.com` (or any adult site) → removed with a 🔞 "adult (NSFW) links
+        aren't allowed here" note and a warning. In a channel marked **Age-Restricted (NSFW)** in
+        Discord, the same link stays. `/automod checklink url:somesite.xxx` → "an adult (NSFW) site".
   - [ ] `/automod checklink url:dlscord.com` → "would be removed — a misspelled copy of discord".
         The dashboard's **Test a link** gives the same answer.
   - [ ] `/automod links mode:Every link except approved sites allow:example.com`, then 👤 post
