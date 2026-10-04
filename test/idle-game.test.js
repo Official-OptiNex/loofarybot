@@ -72,6 +72,20 @@ const H=3600000;
   out=await I.cashout(guild,'ann',{...s,dailyXpCap:0},{now:tmr,adjustXp}); assert.match(out.error,/turned off/);
   console.log('✓ cash-out converts 🫧 → XP at the set rate, capped per day, resets at midnight, and can be disabled');
 
+  // ---- admin: give / take / reset
+  let g1=await I.adminAdjustBubbles('g','ann',500);
+  assert.equal(g1.applied,500); assert.equal(g1.state.bank>=500,true,'giving adds to the bank');
+  const lifeBefore=g1.state.lifetime;
+  let t1=await I.adminAdjustBubbles('g','ann',-100);
+  assert.equal(t1.applied,-100,'taking removes from the bank');
+  assert.equal(t1.state.lifetime,lifeBefore,'taking does not lower lifetime');
+  let t2=await I.adminAdjustBubbles('g','ann',-1e9);
+  assert.equal(t2.state.bank,0,'bank never goes below 0');
+  await I.resetFactory('g','ann');
+  const fresh=await I.getFactory('g','ann');
+  assert.equal(fresh.bank,0); assert.equal(fresh.lifetime,0,'reset wipes the factory');
+  console.log('✓ admin give/take clamps at 0 (lifetime unaffected by takes), and reset wipes a factory');
+
   // ---- leaderboard
   await M('IdleFactory').create({guildId:'g',userId:'ben',lifetime:50000,bank:0,upgrades:{scrubber:3}});
   const top=await I.leaderboard(guild,{now,limit:5});

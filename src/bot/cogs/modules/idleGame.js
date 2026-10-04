@@ -152,35 +152,93 @@ async function cashout(guild, userId, s, { now = Date.now(), adjustXp = null } =
   return { xp, spent, state };
 }
 
+// ---------------------------------------------------------------- Admin actions (staff only)
+
+/** Adds (delta > 0) or removes (delta < 0) bubbles from a member's bank. Granting also adds to
+ * lifetime; taking never lowers lifetime. Bank can't go below 0. Returns the actual change. */
+async function adminAdjustBubbles(guildId, userId, delta) {
+  const amount = Math.round(Number(delta) || 0);
+  const state = await getFactory(guildId, userId);
+  const before = state.bank;
+  state.bank = Math.max(0, state.bank + amount);
+  const applied = state.bank - before;
+  if (applied > 0) state.lifetime += applied;
+  await state.save();
+  return { state, applied };
+}
+
+/** Wipes a member's factory (bank, upgrades, lifetime) back to a fresh start. */
+async function resetFactory(guildId, userId) {
+  await IdleFactory.deleteOne({ guildId, userId });
+}
+
 // ---------------------------------------------------------------- Embeds & buttons
 
-function bar(current, max, width = 12) {
-  const filled = Math.max(0, Math.min(width, Math.round((max > 0 ? current / max : 0) * width)));
-  return '🫧'.repeat(filled) + '▫️'.repeat(width - filled);
+const BLUE = 0x4ab3f4;
+const GOLD = 0xf4b14a;
+const GREEN = 0x3ba55d;
+
+/** A clean, narrow progress bar (▰ filled / ▱ empty). */
+function bar(current, max, width = 14) {
+  const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
+  const filled = Math.round(ratio * width);
+  return '▰'.repeat(filled) + '▱'.repeat(width - filled);
+}
+
+/** The upgrade we nudge the player toward: the biggest one they can afford, else the cheapest next. */
+function recommendedUpgrade(state) {
+  const opts = UPGRADES.map((u) => {
+    const lvl = levelOf(state, u.id);
+    return { u, lvl, maxed: !!(u.max && lvl >= u.max), cost: upgradeCost(u.id, lvl) };
+  }).filter((o) => !o.maxed);
+  if (!opts.length) return null;
+  const affordable = opts.filter((o) => state.bank >= o.cost).sort((x, y) => y.cost - x.cost)[0];
+  return affordable ? { ...affordable, affordable: true } : { ...opts.sort((x, y) => x.cost - y.cost)[0], affordable: false };
 }
 
 function factoryEmbed(state, s, { name, now = Date.now() } = {}) {
   const pending = pendingBubbles(state, s, now);
   const rate = ratePerHour(state, s);
   const capH = offlineCapHours(state, s);
+  const capBubbles = rate * capH;
   const left = xpLeftToday(state, s, now);
-  const owned = UPGRADES.filter((u) => levelOf(state, u.id)).map((u) => `${u.emoji}×${levelOf(state, u.id)}`).join('  ') || 'none yet';
-  const embed = new EmbedBuilder()
-    .setColor('#4AB3F4')
+  const full = capBubbles > 0 && pending >= capBubbles;
+  const pct = capBubbles > 0 ? Math.round((pending / capBubbles) * 100) : 0;
+
+  const owned = UPGRADES.filter((u) => levelOf(state, u.id));
+  const ownedStr = owned.length
+    ? owned.map((u) => `${u.emoji} **${u.name}** · Lv ${levelOf(state, u.id)}${u.max ? `/${u.max}` : ''}`).join('\n')
+    : '_None yet — open **⬆️ Upgrades**._';
+
+  const rec = recommendedUpgrade(state);
+  const recLine = !rec
+    ? '🏆 **Every upgrade maxed** — you’re a Bubble Baron!'
+    : rec.affordable
+      ? `💡 You can afford **${rec.u.emoji} ${rec.u.name}** for **${fmt(rec.cost)}** 🫧 — grab it in **⬆️ Upgrades**.`
+      : `💡 Next goal: **${rec.u.emoji} ${rec.u.name}** — **${fmt(rec.cost)}** 🫧 (${fmt(Math.max(0, rec.cost - state.bank))} to go).`;
+
+  const collectBlock = full
+    ? `🫧 **FULL — collect before you waste production!**\n${bar(1, 1)} \`${fmt(pending)} / ${fmt(capBubbles)}\` 🫧`
+    : `${bar(pending, capBubbles)} \`${fmt(pending)} / ${fmt(capBubbles)}\` 🫧 · ${pct}%\n-# Fills up after **${capH}h** away.`;
+
+  return new EmbedBuilder()
+    .setColor(full ? GOLD : BLUE)
     .setTitle(`🫧 ${name ? `${name}'s ` : ''}Bubble Factory`)
     .setDescription(
-      `Your loofah makes bubbles around the clock. Spend them on upgrades, or cash them out for XP.\n` +
-        `**${bar(pending, rate * capH)}**\n-# ${fmt(pending)} / ${fmt(rate * capH)} 🫧 waiting (full after ${capH}h away)`
+      `Your loofah bubbles away around the clock — even while you're gone.\n\n` +
+        `**📦 Ready to collect**\n${collectBlock}\n\n${recLine}`
     )
     .addFields(
-      { name: '🫧 Bank', value: fmt(state.bank), inline: true },
-      { name: '⚙️ Rate', value: `${fmt(rate)} / hr`, inline: true },
-      { name: '📦 To collect', value: fmt(pending), inline: true },
-      { name: '💧 Cash-out left today', value: s.dailyXpCap > 0 ? `${fmt(left)} XP` : 'off', inline: true },
-      { name: '💱 Rate', value: s.dailyXpCap > 0 ? `${fmt(s.bubblesPerXp)} 🫧 = 1 XP` : '—', inline: true },
-      { name: '🏭 Upgrades', value: owned, inline: false }
-    );
-  return embed;
+      { name: '🫧 Bank', value: `**${fmt(state.bank)}**\n-# ready to spend`, inline: true },
+      { name: '⚙️ Production', value: `**${fmt(rate)}**/hr\n-# with upgrades`, inline: true },
+      { name: '🛁 Storage', value: `**${capH}h**\n-# ${fmt(capBubbles)} 🫧 max`, inline: true },
+      s.dailyXpCap > 0
+        ? { name: '💧 Cash out', value: `${fmt(s.bubblesPerXp)} 🫧 = 1 XP\n-# ${fmt(left)} XP left today`, inline: true }
+        : { name: '💧 Cash out', value: 'off\n-# bubbles only', inline: true },
+      { name: '📈 Lifetime', value: `**${fmt(state.lifetime)}** 🫧\n-# all-time`, inline: true },
+      { name: `🏭 Upgrades${owned.length ? ` · ${owned.length}` : ''}`, value: ownedStr, inline: true }
+    )
+    .setFooter({ text: 'Collect → Upgrade → Cash out to XP' });
 }
 
 const rowFor = (userId, s) =>
@@ -188,17 +246,17 @@ const rowFor = (userId, s) =>
     new ButtonBuilder().setCustomId(`idle:collect:${userId}`).setLabel('Collect').setEmoji('🫧').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`idle:upgrades:${userId}`).setLabel('Upgrades').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`idle:cashout:${userId}`).setLabel('Cash out → XP').setEmoji('💧').setStyle(ButtonStyle.Success).setDisabled(s.dailyXpCap <= 0),
-    new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('↻').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
   );
 
 function upgradesView(state, s, userId, now = Date.now()) {
   const pending = pendingBubbles(state, s, now);
   const embed = new EmbedBuilder()
-    .setColor('#4AB3F4')
-    .setTitle('⬆️ Upgrades')
+    .setColor(BLUE)
+    .setTitle('⬆️ Upgrade your factory')
     .setDescription(
-      `You have **${fmt(state.bank)} 🫧** to spend.` +
-        (pending > 0 ? `\n-# 📦 ${fmt(pending)} 🫧 waiting — hit **← Back**, then **Collect**, to spend them.` : '')
+      `**🫧 ${fmt(state.bank)}** in the bank to spend.` +
+        (pending > 0 ? `\n-# 📦 ${fmt(pending)} 🫧 still uncollected — **← Back → Collect** to bank them first.` : '')
     );
   const rows = [];
   let current = new ActionRowBuilder();
@@ -206,14 +264,20 @@ function upgradesView(state, s, userId, now = Date.now()) {
     const level = levelOf(state, u.id);
     const maxed = u.max && level >= u.max;
     const cost = upgradeCost(u.id, level);
-    embed.addFields({ name: `${u.emoji} ${u.name} — Lv ${level}${u.max ? `/${u.max}` : ''}`, value: maxed ? `Maxed · ${u.blurb}` : `${u.blurb} · next: **${fmt(cost)} 🫧**`, inline: true });
+    const can = state.bank >= cost;
+    const status = maxed ? '✅ **MAXED**' : can ? `🟢 buy for **${fmt(cost)}** 🫧` : `🔒 **${fmt(cost)}** 🫧 · ${fmt(cost - state.bank)} to go`;
+    embed.addFields({
+      name: `${u.emoji} ${u.name} — Lv ${level}${u.max ? `/${u.max}` : ''}`,
+      value: `${u.blurb}\n${status}`,
+      inline: true
+    });
     current.addComponents(
       new ButtonBuilder()
         .setCustomId(`idle:up:${u.id}:${userId}`)
-        .setLabel(maxed ? `${u.name} ✓` : `${u.name}`)
+        .setLabel(u.name)
         .setEmoji(u.emoji)
-        .setStyle(maxed ? ButtonStyle.Secondary : state.bank >= cost ? ButtonStyle.Success : ButtonStyle.Secondary)
-        .setDisabled(maxed || state.bank < cost)
+        .setStyle(maxed ? ButtonStyle.Secondary : can ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(maxed || !can)
     );
     if (current.components.length === 5) {
       rows.push(current);
@@ -239,10 +303,19 @@ async function handleIdleInteraction(interaction) {
 
   if (action === 'collect') {
     const { state, gained } = await collect(interaction.guild.id, interaction.user.id, s);
-    // A little animation: the bar fills, then settles.
-    await interaction.update({ embeds: [new EmbedBuilder().setColor('#4AB3F4').setTitle('🫧 Collecting…').setDescription(`**${bar(1, 3)}**`)], components: [] }).catch(() => null);
-    await new Promise((r) => setTimeout(r, 450));
-    await interaction.editReply({ embeds: [new EmbedBuilder().setColor('#4AB3F4').setTitle('🫧 Collecting…').setDescription(`**${bar(3, 3)}**\n+${fmt(gained)} 🫧`)], components: [] }).catch(() => null);
+    if (gained <= 0) {
+      const embed = factoryEmbed(state, s, { name }).setFooter({ text: '📦 Nothing to collect yet — come back a little later.' });
+      return interaction.update({ embeds: [embed], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
+    }
+    // A little filling-bubble animation, then the factory settles back in.
+    const frame = (n) => new EmbedBuilder().setColor(BLUE).setTitle('🫧 Collecting…').setDescription(`${bar(n, 3)}`);
+    await interaction.update({ embeds: [frame(1)], components: [] }).catch(() => null);
+    await new Promise((r) => setTimeout(r, 350));
+    await interaction.editReply({ embeds: [frame(2)] }).catch(() => null);
+    await new Promise((r) => setTimeout(r, 350));
+    await interaction
+      .editReply({ embeds: [new EmbedBuilder().setColor(GREEN).setTitle('🫧 Collected!').setDescription(`${bar(3, 3)}\n**+${fmt(gained)} 🫧** into the bank.`)] })
+      .catch(() => null);
     await new Promise((r) => setTimeout(r, 450));
     return interaction.editReply({ embeds: [factoryEmbed(state, s, { name })], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
   }
@@ -322,6 +395,8 @@ module.exports = {
   collect,
   buyUpgrade,
   cashout,
+  adminAdjustBubbles,
+  resetFactory,
   factoryEmbed,
   rowFor,
   upgradesView,

@@ -212,10 +212,18 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
 - **Cash out** Bubbles into real **XP** at a set rate (10 🫧 = 1 XP by default), **capped per day**
   (300 XP/day by default). The daily cap is what keeps levels sane — even a maxed factory just hits
   the cap faster. Set the cap to `0` to make it bubbles-only (no XP at all).
-- `/idle play` opens your factory (buttons to Collect, Upgrade, Cash out). `/idle top` is the
-  factory leaderboard; `/idle help` explains it. Collecting plays a little filling-bubble animation.
-- The dashboard (Leveling tab) turns it on and sets the rate, offline hours, cash-out rate and daily
-  cap, and shows the biggest factories — with an animated bubble header for flair.
+- `/idle play` opens your factory — a clean embed with a **ready-to-collect** progress bar, your
+  bank, production, storage, cash-out and lifetime, a "next upgrade" nudge, and buttons for
+  **Collect / Upgrades / Cash out → XP / Refresh**. `/idle top` is the factory leaderboard;
+  `/idle help` is a step-by-step guide with the full upgrade tree. Collecting plays a filling-bubble
+  animation.
+- **Staff commands** (`/idle admin …`, needs Manage Server): `toggle` turns the game on/off,
+  `give @user <amount>` rewards bubbles straight into someone's bank, `take @user <amount>` removes
+  them, and `reset @user` wipes a factory back to a fresh start.
+- The dashboard (Leveling tab) turns it on and sets base production, offline hours, cash-out rate and
+  daily cap — grouped into **Core** and **Cash-out** sections with a live **"At these settings"**
+  preview (level-0 output, full-tub size, daily cap in bubbles, time to earn the cap), an **upgrade
+  tree** reference, and the **biggest factories** leaderboard, all under an animated bubble header.
 
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.
