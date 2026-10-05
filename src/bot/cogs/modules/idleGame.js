@@ -347,7 +347,7 @@ function factoryEmbed(state, s, { name, now = Date.now() } = {}) {
     .addFields(
       { name: '🫧 Bank', value: `**${fmt(state.bank)}**\n-# ready to spend`, inline: true },
       { name: '⚙️ Production', value: `**${fmt(rate)}**/hr\n-# with upgrades`, inline: true },
-      { name: '🛁 Storage', value: `**${capH}h**\n-# ${fmt(capBubbles)} 🫧 max`, inline: true },
+      { name: '🛁 Storage', value: `**${capH}h**\n-# ~${fmt(capBubbles)} 🫧 at this rate`, inline: true },
       s.dailyXpCap > 0
         ? { name: '💧 Cash out', value: `${fmt(s.bubblesPerXp)} 🫧 = 1 XP\n-# ${fmt(left)} XP left today`, inline: true }
         : { name: '💧 Cash out', value: 'off\n-# bubbles only', inline: true },
