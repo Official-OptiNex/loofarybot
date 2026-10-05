@@ -41,26 +41,40 @@
   const icon = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
 
-  const NAV = [
-    ['overview', 'home', 'Overview'],
-    ['giveaways', 'gift', 'Giveaways'],
-    ['welcome', 'welcome', 'Welcome'],
-    ['honeypot', 'shield', 'Honeypot'],
-    ['leveling', 'trending', 'Leveling'],
-    ['autorole', 'userplus', 'Auto-Role'],
-    ['reactionroles', 'tag', 'Reaction Roles'],
-    ['gambling', 'dice', 'Gambling'],
-    ['community', 'chat', 'Polls & Reminders'],
-    ['moderation', 'lock', 'Moderation'],
-    ['tickets', 'ticket', 'Tickets'],
-    ['engagement', 'star', 'Engagement'],
-    ['shop', 'bag', 'XP Shop'],
-    ['logs', 'file', 'Logs'],
-    ['alerts', 'radio', 'Alerts'],
-    ['leaderboard', 'trophy', 'Leaderboard'],
-    ['commands', 'terminal', 'Commands'],
-    ['settings', 'gear', 'Server settings']
-  ].filter(([tab]) => tab === 'overview' || (tab === 'logs' ? can('logs') || can('logviewer') : can(tab)));
+  // Sidebar menu grouped into sections so related pages sit together.
+  const canNav = (tab) => tab === 'overview' || (tab === 'logs' ? can('logs') || can('logviewer') : can(tab));
+  const NAV_GROUPS = [
+    ['Menu', [['overview', 'home', 'Overview']]],
+    ['Growth & economy', [
+      ['leveling', 'trending', 'Leveling'],
+      ['gambling', 'dice', 'Gambling'],
+      ['shop', 'bag', 'XP Shop'],
+      ['engagement', 'star', 'Engagement'],
+      ['giveaways', 'gift', 'Giveaways']
+    ]],
+    ['Community', [
+      ['welcome', 'welcome', 'Welcome'],
+      ['community', 'chat', 'Polls & Reminders'],
+      ['alerts', 'radio', 'Alerts'],
+      ['tickets', 'ticket', 'Tickets']
+    ]],
+    ['Roles', [
+      ['autorole', 'userplus', 'Auto-Role'],
+      ['reactionroles', 'tag', 'Reaction Roles']
+    ]],
+    ['Safety & logs', [
+      ['honeypot', 'shield', 'Honeypot'],
+      ['moderation', 'lock', 'Moderation'],
+      ['logs', 'file', 'Logs']
+    ]],
+    ['Server', [
+      ['leaderboard', 'trophy', 'Leaderboard'],
+      ['commands', 'terminal', 'Commands'],
+      ['settings', 'gear', 'Server settings']
+    ]]
+  ]
+    .map(([heading, items]) => [heading, items.filter(([tab]) => canNav(tab))])
+    .filter(([, items]) => items.length);
   const isAdmin = access.level === 'admin';
   const logChannelSet = !!(config.logChannelId && channels.find(c => c.id === config.logChannelId));
   // Which dashboard page (and sub-tab) each on/off switch belongs to — for links and moderator access.
@@ -111,12 +125,15 @@
       </div>
     </div>
 
-    <div class="nav-section">
-      <div class="nav-heading"><span class="ring-dot"></span>Menu</div>
-      <% NAV.forEach(([tab, ic, label], i) => { %>
-        <button class="nav-item <%= i === 0 ? 'active' : '' %>" data-tab="<%= tab %>"><%- icon(ic) %><span><%= label %></span></button>
-      <% }) %>
-    </div>
+    <% let navIndex = 0; %>
+    <% NAV_GROUPS.forEach(([heading, items]) => { %>
+      <div class="nav-section">
+        <div class="nav-heading"><span class="ring-dot"></span><%= heading %></div>
+        <% items.forEach(([tab, ic, label]) => { %>
+          <button class="nav-item <%= navIndex++ === 0 ? 'active' : '' %>" data-tab="<%= tab %>"><%- icon(ic) %><span><%= label %></span></button>
+        <% }) %>
+      </div>
+    <% }) %>
 
     <div class="nav-section">
       <div class="nav-heading"><span class="ring-dot green"></span>Modules</div>
@@ -354,6 +371,27 @@
           <h3>⭐ Starboard <%- sideToggle('starboard', !!ovSb.enabled) %></h3>
           <p class="muted"><%= ovSb.enabled ? `${ovSb.threshold || 3}+ ${ovSb.emoji || '⭐'} → ${ovCh(ovSb.channelId) || 'no channel'}` : 'Off — repost the most-starred messages.' %></p>
           <p class="muted"><%- ovLink('starboard', 'Starboard settings') %></p>
+        </div>
+        <% } %>
+        <% if (can('leveling')) { const ovIdle = config.idleGame || {}; %>
+        <div class="card">
+          <h3>🫧 Bubble Factory <%- sideToggle('idle', !!ovIdle.enabled) %></h3>
+          <p class="muted"><%= ovIdle.enabled ? `Idle game · ${ovIdle.dailyXpCap ?? 300} XP/day cap · ${ovIdle.bubblesPerXp ?? 10} 🫧 = 1 XP` : 'Off — a chill idle game, an alternative to gambling.' %></p>
+          <p class="muted"><%- ovLink('idle', 'Bubble Factory settings') %></p>
+        </div>
+        <% } %>
+        <% if (can('tickets')) { %>
+        <div class="card">
+          <h3>🎫 Tickets <%- sideToggle('tickets', locals.ticketsEnabled !== false) %></h3>
+          <p class="muted"><%= locals.ticketsEnabled !== false ? 'Members open private support channels from the panel.' : 'Off — private support channels from a panel button.' %></p>
+          <p class="muted"><a href="#tickets" data-tab="tickets">Tickets settings →</a></p>
+        </div>
+        <% } %>
+        <% if (can('settings')) { const ovSs = config.serverStats || {}; %>
+        <div class="card">
+          <h3>📊 Server Stats</h3>
+          <p class="muted"><%= ovSs.enabled ? `On · ${(ovSs.enabledStats || []).length} stat channel(s) at the top of the server` : 'Off — view-only channels showing live member, online, boost and XP counts.' %></p>
+          <p class="muted"><a href="#overview" data-tab="overview" data-scroll-to="statsCard">Server Stats settings →</a></p>
         </div>
         <% } %>
         <div class="card">
@@ -1530,7 +1568,7 @@
     let joinChart = null; // created once join data loads
 
     // --- Navigation (sidebar, module rows and app-bar buttons all carry data-tab) ---
-    const ALLOWED_TABS = <%- JSON.stringify(NAV.map((n) => n[0])) %>;
+    const ALLOWED_TABS = <%- JSON.stringify(NAV_GROUPS.flatMap(([, items]) => items.map((n) => n[0]))) %>;
     function showTab(tab) {
       const panel = document.getElementById(`tab-${tab}`);
       if (!panel || !ALLOWED_TABS.includes(tab)) return;
@@ -1595,6 +1633,7 @@
         ['Cases', 'Moderation', 'moderation', 'md-cases', null, 'warn timeout kick ban history'],
         ['Daily XP Pot', 'Gambling', 'gambling', null, 'potCard', 'pot losses jackpot draw winner'],
         ['Top gamblers', 'Gambling', 'gambling', null, 'gStatsTable', 'stats'],
+        ['Bubble Factory', 'Leveling', 'leveling', null, 'idleCard', 'idle game bubbles upgrades cash out'],
         ['Chat drops', 'Leveling', 'leveling', 'lv-drops', null, 'xp drop claim'],
         ['Booster perks', 'Leveling', 'leveling', 'lv-boost', null, 'boost nitro'],
         ['Level colors', 'Leveling', 'leveling', 'lv-colors', null, 'color roles'],
@@ -1605,7 +1644,9 @@
         ['Shop items', 'XP Shop', 'shop', 'sh-items', null, 'buy role badge auto-react boost'],
         ['Give a shop item', 'XP Shop', 'shop', 'sh-members', null, 'member inventory gift'],
         ['Log storage & retention', 'Logs', 'logs', 'lg-settings', 'logRetention', 'database memory free tier cleanup'],
-        ['Log settings', 'Logs', 'logs', 'lg-settings', null, 'events channel']
+        ['Log settings', 'Logs', 'logs', 'lg-settings', null, 'events channel'],
+        ['Server Stats channels', 'Overview', 'overview', null, 'statsCard', 'member online boost top xp count channels top of server'],
+        ['Tickets', 'Tickets', 'tickets', null, null, 'support panel claim transcript']
       ].map(([label, kind, tab, sub, scroll, detail]) => ({ label, kind, tab, sub, scroll, detail }))
     ].filter((i) => i.tab === 'commands' || document.getElementById(`tab-${i.tab}`));
     const searchInput = document.getElementById('globalSearch');
