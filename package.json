@@ -10,15 +10,21 @@
     "test": "node test/run.js"
   },
   "dependencies": {
+    "@discordjs/voice": "^0.19.2",
     "connect-mongo": "^5.1.0",
     "discord.js": "^14.19.0",
     "dotenv": "^16.4.5",
     "ejs": "^3.1.10",
     "express": "^4.18.2",
     "express-session": "^1.18.0",
-    "mongoose": "^8.4.1"
+    "libsodium-wrappers": "^0.8.4",
+    "mongoose": "^8.4.1",
+    "opusscript": "^0.0.8"
   },
   "devDependencies": {
     "mingo": "^6.7.2"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.3.0"
   }
 }

@@ -30,6 +30,7 @@ const ShopOwnership = require('../../database/models/ShopOwnership');
 const LogEntry = require('../../database/models/LogEntry');
 const counting = require('../../bot/cogs/modules/counting');
 const serverStats = require('../../bot/cogs/modules/serverStats');
+const music = require('../../bot/cogs/modules/music');
 const starboard = require('../../bot/cogs/modules/starboard');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const idleGame = require('../../bot/cogs/modules/idleGame');
@@ -963,6 +964,22 @@ router.post('/guilds/:guildId/engagement/:module', ...guard('engagement'), async
       ?.send({ content: `🛠️ A moderator set the count to **${saved.settings.current.toLocaleString('en-US')}**. The next number is **${next}**.`, allowedMentions: { parse: [] } })
       .catch(() => null);
   }
+  res.json({ ok: true, settings: saved.settings });
+});
+
+// ---------------------------------------------------------------- Music / radio player
+
+router.get('/guilds/:guildId/music', ...guard('community'), async (req, res) => {
+  const config = await getOrCreateConfig(req.guild.id);
+  res.json({ settings: music.musicSettings(config), stations: music.STATIONS.map((s) => ({ name: s.name, genre: s.genre })) });
+});
+
+router.post('/guilds/:guildId/music', ...guard('community'), async (req, res) => {
+  const b = req.body || {};
+  const input = {};
+  for (const k of ['enabled', 'commandChannelIds', 'voiceChannelIds', 'djRoleId', 'defaultVolume', 'stations']) if (b[k] !== undefined) input[k] = b[k];
+  const saved = await music.saveSettings(req.guild, input);
+  res.locals.audit = { section: 'Community', action: 'Updated the music player', detail: `${saved.settings.enabled ? 'On' : 'Off'} · vol ${saved.settings.defaultVolume}%` };
   res.json({ ok: true, settings: saved.settings });
 });
 

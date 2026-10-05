@@ -74,6 +74,12 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     .map((c) => ({ id: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // Voice / stage channels (for the music player's allowed-channel list).
+  const voiceChannels = guild.channels.cache
+    .filter((c) => c.type === 2 || c.type === 13)
+    .map((c) => ({ id: c.id, name: c.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   const botHighestPosition = guild.members.me?.roles.highest.position ?? 0;
   const roles = guild.roles.cache
     // Managed roles (Server Booster, Twitch subs…) can't be handed out by the bot, but they're still
@@ -160,6 +166,7 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     guild,
     config,
     channels: textChannels,
+    voiceChannels,
     roles,
     effectiveXp,
     levelColorSettings: levelColors.settingsOf(config),

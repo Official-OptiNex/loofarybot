@@ -220,7 +220,10 @@ module.exports = [
       { usage: '/poll end', perm: null, description: 'Close a poll early (creator or moderators).' },
       { usage: '/remind me', perm: null, description: 'DM yourself a reminder, e.g. in 2h or 1d12h.' },
       { usage: '/remind channel', perm: null, description: 'Post a reminder in a channel.' },
-      { usage: '/remind list · cancel', perm: null, description: 'See or cancel your reminders.' }
+      { usage: '/remind list · cancel', perm: null, description: 'See or cancel your reminders.' },
+      { usage: '/music play · skip · stop', perm: null, description: 'Play Lofi / chill radio in your voice channel, switch stations, or stop. Light, free, ToS-safe.' },
+      { usage: '/music stations · nowplaying · volume', perm: null, description: 'Browse stations, see what’s playing, or set the volume.' },
+      { usage: '/music config', perm: 'Manage Server', description: 'Turn music on/off, set a DJ role and default volume (full setup — channels & stations — on the dashboard).' }
     ]
   },
   {
