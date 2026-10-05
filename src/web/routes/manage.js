@@ -941,7 +941,7 @@ router.get('/guilds/:guildId/engagement', ...guard('engagement'), async (req, re
 
 const PICK = {
   birthdays: ['enabled', 'channelId', 'roleId', 'xpGift', 'announceHour', 'message'],
-  counting: ['enabled', 'channelId', 'allowSameUser', 'mathAllowed', 'current'],
+  counting: ['enabled', 'channelId', 'allowSameUser', 'mathAllowed', 'numbersOnly', 'slowmodeSeconds', 'current'],
   starboard: ['enabled', 'channelId', 'emoji', 'threshold', 'selfStar', 'ignoredChannelIds']
 };
 const MODULES = { birthdays, counting, starboard };

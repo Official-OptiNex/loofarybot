@@ -1668,6 +1668,8 @@ function fillEngagementForms(d) {
   v('ctChannel', ct.channelId || '');
   c('ctTurns', !ct.allowSameUser);
   c('ctMath', ct.mathAllowed);
+  c('ctNumbersOnly', ct.numbersOnly !== false);
+  v('ctSlowmode', ct.slowmodeSeconds ?? 1200);
   const sb = d.starboard.settings;
   c('sbEnabled', sb.enabled);
   v('sbChannel', sb.channelId || '');
@@ -1744,7 +1746,15 @@ function readEngagement(section) {
   if (section === 'birthdays') {
     return { enabled: c('bdEnabled'), channelId: v('bdChannel') || null, announceHour: v('bdHour'), roleId: v('bdRole') || null, xpGift: v('bdXp') || 0, message: v('bdMessage') };
   }
-  if (section === 'counting') return { enabled: c('ctEnabled'), channelId: v('ctChannel') || null, allowSameUser: !c('ctTurns'), mathAllowed: c('ctMath') };
+  if (section === 'counting')
+    return {
+      enabled: c('ctEnabled'),
+      channelId: v('ctChannel') || null,
+      allowSameUser: !c('ctTurns'),
+      mathAllowed: c('ctMath'),
+      numbersOnly: c('ctNumbersOnly'),
+      slowmodeSeconds: v('ctSlowmode')
+    };
   return {
     enabled: c('sbEnabled'),
     channelId: v('sbChannel') || null,

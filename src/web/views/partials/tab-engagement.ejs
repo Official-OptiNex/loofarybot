@@ -89,12 +89,20 @@
                 <div class="setting-control"><select id="ctChannel"><%- channelOptions(null, '— Select a channel —') %></select></div>
               </div>
               <div class="setting-row">
-                <div><div class="setting-title">Take turns</div><div class="setting-help">Nobody can count twice in a row.</div></div>
+                <div><div class="setting-title">Take turns</div><div class="setting-help">Nobody can count twice in a row. A double count is just deleted — it doesn’t reset the run (griefers can’t abuse it).</div></div>
                 <div class="setting-control"><label class="switch"><input type="checkbox" id="ctTurns"><span class="track"></span></label></div>
               </div>
               <div class="setting-row">
                 <div><div class="setting-title">Allow sums</div><div class="setting-help">“3*4” counts as 12, “(5+5)*2” as 20.</div></div>
                 <div class="setting-control"><label class="switch"><input type="checkbox" id="ctMath"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Numbers only</div><div class="setting-help">Delete normal chat in the channel so it stays all numbers (staff are exempt). Wrong numbers still reset as usual.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="ctNumbersOnly"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Slowmode</div><div class="setting-help">Seconds each member must wait between messages — grief protection. <strong>Default 1200 (20 min)</strong>; 0 turns it off. Needs <em>Manage Channels</em>.</div></div>
+                <div class="setting-control"><input type="number" id="ctSlowmode" min="0" max="21600"><span class="muted">sec</span></div>
               </div>
             </div>
             <div class="savebar" style="position:static;"><button class="btn" id="ctSave" onclick="saveEngagement('counting')">Save counting</button></div>

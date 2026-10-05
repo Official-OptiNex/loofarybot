@@ -534,11 +534,17 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 ### Counting (`/counting …` or dashboard **Engagement → Counting**)
 - Members count up one number at a time in a counting channel. Right numbers get ✅, every 100 gets
   💯, and the number that beats the best run gets 🏆.
-- A wrong number, or counting twice in a row (with **take turns** on), resets the count to 0 with a
-  short message. If two people send the same right number at the same moment, the slower one gets 👀
-  instead of a reset.
-- Sums like `3*4` count when **allow sums** is on. Messages that don't start with a number are
-  ignored, so people can still chat. If someone deletes the latest count, the bot posts the next number.
+- A **wrong number resets** the count to 0 with a short message. If two people send the same right
+  number at the same moment, the slower one gets 👀 instead of a reset.
+- **Grief protection (on by default):**
+  - **Take turns** — counting twice in a row doesn't reset the run; the extra count is just **deleted**
+    with a "take turns" nudge, so a griefer can't wipe the count by double-posting.
+  - **Numbers only** — normal chat in the channel is deleted so it stays all numbers (staff with
+    *Manage Messages* are exempt). Turn it off to let people chat.
+  - **Slowmode** — the channel is put in slowmode (default **1200s / 20 min**; set 0 to disable) so
+    nobody can spam the channel. Needs *Manage Channels*.
+- Sums like `3*4` count when **allow sums** is on. If someone deletes the latest count, the bot posts
+  the next number.
 - `/counting set` (or the dashboard) fixes the count after an unfair reset.
 
 ### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)

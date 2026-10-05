@@ -154,6 +154,8 @@ const GuildConfigSchema = new mongoose.Schema(
       bestBefore: { type: Number, default: 0 }, // best run before the current one (for the 🏆 when it's beaten)
       allowSameUser: { type: Boolean, default: false }, // false = people have to take turns
       mathAllowed: { type: Boolean, default: true }, // "2*5" counts as 10
+      numbersOnly: { type: Boolean, default: true }, // delete normal chatter so the channel stays numbers-only
+      slowmodeSeconds: { type: Number, default: 1200 }, // slowmode applied to the channel (grief protection; 20 min default)
       resets: { type: Number, default: 0 },
       lastResetBy: { type: String, default: null }
     },
