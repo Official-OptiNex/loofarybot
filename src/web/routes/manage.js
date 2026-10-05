@@ -29,6 +29,7 @@ const ShopItem = require('../../database/models/ShopItem');
 const ShopOwnership = require('../../database/models/ShopOwnership');
 const LogEntry = require('../../database/models/LogEntry');
 const counting = require('../../bot/cogs/modules/counting');
+const serverStats = require('../../bot/cogs/modules/serverStats');
 const starboard = require('../../bot/cogs/modules/starboard');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const idleGame = require('../../bot/cogs/modules/idleGame');
@@ -963,6 +964,43 @@ router.post('/guilds/:guildId/engagement/:module', ...guard('engagement'), async
       .catch(() => null);
   }
   res.json({ ok: true, settings: saved.settings });
+});
+
+// ---------------------------------------------------------------- Server Stats channels (admin only)
+
+router.get('/guilds/:guildId/serverstats', ...guard('settings'), async (req, res) => {
+  const config = await getOrCreateConfig(req.guild.id);
+  res.json({ settings: serverStats.serverStatsSettings(config), stats: serverStats.STAT_DEFS.map((d) => ({ key: d.key, emoji: d.emoji, label: d.label })) });
+});
+
+router.post('/guilds/:guildId/serverstats', ...guard('settings'), async (req, res) => {
+  const b = req.body || {};
+  const input = {};
+  if (b.enabled !== undefined) input.enabled = b.enabled;
+  if (b.enabledStats !== undefined) input.enabledStats = b.enabledStats;
+  const saved = await serverStats.saveSettings(req.guild, input);
+  let sync = null;
+  if (saved.settings.enabled) sync = await serverStats.syncChannels(req.app.get('client') || req.guild.client, req.guild).catch((e) => ({ error: e.message }));
+  res.locals.audit = { section: 'Server Stats', action: 'Updated Server Stats', detail: `${saved.settings.enabled ? 'On' : 'Off'} · ${saved.settings.enabledStats.length} stat(s)` };
+  res.json({ ok: true, settings: saved.settings, sync });
+});
+
+router.post('/guilds/:guildId/serverstats/action', ...guard('settings'), async (req, res) => {
+  const action = String((req.body || {}).action || '');
+  const client = req.guild.client;
+  if (action === 'refresh') {
+    const r = await serverStats.syncChannels(client, req.guild);
+    if (r.error) return bad(res, r.error);
+    res.locals.audit = { section: 'Server Stats', action: 'Refreshed the stat channels' };
+    return res.json({ ok: true, result: r });
+  }
+  if (action === 'remove') {
+    await serverStats.removeAll(req.guild);
+    await serverStats.saveSettings(req.guild, { enabled: false });
+    res.locals.audit = { section: 'Server Stats', action: 'Removed the stat channels' };
+    return res.json({ ok: true });
+  }
+  return bad(res, 'Unknown action.', 404);
 });
 
 // ---------------------------------------------------------------- XP shop

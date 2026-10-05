@@ -159,6 +159,14 @@ const GuildConfigSchema = new mongoose.Schema(
       resets: { type: Number, default: 0 },
       lastResetBy: { type: String, default: null }
     },
+    // Server Stats channels (/serverstats, dashboard Overview → Server Stats). View-only voice
+    // channels at the top of the server that show live counts, refreshed on a timer. See serverStats.js.
+    serverStats: {
+      enabled: { type: Boolean, default: false },
+      categoryId: { type: String, default: null }, // the "📊 Server Stats" category holding the channels
+      channels: { type: mongoose.Schema.Types.Mixed, default: {} }, // { statKey: channelId }
+      enabledStats: { type: [String], default: ['members', 'online', 'boosts', 'highestxp'] } // which stats show
+    },
     // Starboard (/starboard, dashboard Engagement → Starboard).
     starboard: {
       enabled: { type: Boolean, default: false },

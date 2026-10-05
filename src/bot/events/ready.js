@@ -51,6 +51,7 @@ const automodCommand = require('../commands/automod');
 const shopCommand = require('../commands/shop');
 const potCommand = require('../commands/pot');
 const idleCommand = require('../commands/idle');
+const serverstatsCommand = require('../commands/serverstats');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -83,7 +84,8 @@ const ALL_COMMANDS = [
   automodCommand,
   shopCommand,
   potCommand,
-  idleCommand
+  idleCommand,
+  serverstatsCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -158,5 +160,8 @@ module.exports = function registerReadyEvent(client) {
 
     // Bubble Factory: DM members once when their offline tub fills up (so bubbles aren't wasted).
     require('../cogs/modules/idleGame').startFullAlertLoop(client);
+
+    // Server Stats channels: refresh the live-count channel names on a timer (~30 min).
+    require('../cogs/modules/serverStats').startStatsLoop(client);
   });
 };
