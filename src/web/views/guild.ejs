@@ -1351,7 +1351,7 @@
       </div>
     </div>
 
-    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, bot, moduleToggle, ticketsEnabled: locals.ticketsEnabled !== false, shopEnabled: config.shopEnabled !== false }; %>
+    <% const partialLocals = { chip, channelOptions, esc, guild, roles, channels, voiceChannels: (typeof voiceChannels !== 'undefined' ? voiceChannels : []), bot, moduleToggle, ticketsEnabled: locals.ticketsEnabled !== false, shopEnabled: config.shopEnabled !== false }; %>
     <% if (can('giveaways')) { %><%- include('partials/tab-giveaways', partialLocals) %><% } %>
     <% if (can('reactionroles')) { %><%- include('partials/tab-reactionroles', partialLocals) %><% } %>
     <% if (can('community')) { %><%- include('partials/tab-community', partialLocals) %><% } %>

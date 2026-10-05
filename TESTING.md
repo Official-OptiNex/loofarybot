@@ -219,6 +219,18 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] `/serverstats remove` deletes the channels and the category. The dashboard card (Overview) does
       the same with its toggle, stat pills, and Refresh / Remove buttons.
 - [ ] Without **Manage Channels**, setup replies with a clear permission error.
+
+## 9c. Music / radio (`/music`, dashboard **Community → Music**)
+- [ ] Turn music on (dashboard Community → Music, or `/music config enabled:true`). Join a voice
+      channel → `/music play` → the bot joins and plays Lofi; `/music nowplaying` shows the station.
+- [ ] `/music skip` switches station; `/music volume percent:30` changes volume; `/music stop` leaves.
+      `/music stations` lists the built-in + any custom stations.
+- [ ] **Restrictions:** set command channels and allowed voice channels on the dashboard →
+      `/music play` from the wrong text channel, or while in a non-allowed voice channel, is refused
+      with a clear message. With a **DJ role** set, only that role (and admins) can control it.
+- [ ] The bot **leaves on its own** once everyone else has left the voice channel.
+- [ ] If the host has no ffmpeg/voice libs, `/music play` replies that playback isn't available
+      instead of crashing the bot.
 - [ ] **Server settings → Dashboard access:** new pages (Engagement, XP Shop) can be given to
       moderators. A moderator only sees the switches for pages they have.
 - [ ] **Server settings → Backups:** make a backup → it lists "N shop item(s)". Restoring doesn't

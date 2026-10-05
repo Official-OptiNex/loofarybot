@@ -12,6 +12,7 @@
       <div class="subtabs" data-subtabs>
         <button class="active" data-sub="cm-polls">📊 Polls</button>
         <button data-sub="cm-reminders">⏰ Channel reminders</button>
+        <button data-sub="cm-music">🎵 Music</button>
       </div>
 
       <div class="subpage" data-page="cm-polls">
@@ -72,6 +73,42 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="subpage hidden" data-page="cm-music">
+        <div class="card settings-card">
+          <p class="muted" style="font-size:0.85rem; margin-top:0;">Play <strong>Lofi / chill internet radio</strong> in a voice channel with <code>/music play</code>. Light and ToS-safe (public radio streams, not YouTube) so it won't strain the bot. The bot needs <strong>Connect</strong> + <strong>Speak</strong> in the voice channel.</p>
+          <div class="setting-row">
+            <div><div class="setting-title">Music player</div><div class="setting-help">Turn the <code>/music</code> commands on or off.</div></div>
+            <div class="setting-control"><label class="switch"><input type="checkbox" id="musEnabled"><span class="track"></span></label></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Default volume</div><div class="setting-help">0–100% when a station starts.</div></div>
+            <div class="setting-control"><input type="number" id="musVolume" min="0" max="100"><span class="muted">%</span></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">DJ role</div><div class="setting-help">Only this role (and admins) may control the music. Leave as “Anyone” to let everyone in the voice channel.</div></div>
+            <div class="setting-control"><select id="musDjRole"><option value="">Anyone in voice</option><% roles.forEach(r => { %><option value="<%= r.id %>"><%= esc(r.name) %></option><% }) %></select></div>
+          </div>
+          <div class="setting-row stack">
+            <div><div class="setting-title">Command channels</div><div class="setting-help">Where <code>/music</code> may be used. None ticked = any channel.</div></div>
+            <div class="check-grid" style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+              <% channels.forEach(c => { %><label class="check-pill"><input type="checkbox" class="mus-cmd-channel" value="<%= c.id %>"><span>#<%= esc(c.name) %></span></label><% }) %>
+            </div>
+          </div>
+          <div class="setting-row stack">
+            <div><div class="setting-title">Allowed voice channels</div><div class="setting-help">Which voice channels it may join. None ticked = any.</div></div>
+            <div class="check-grid" style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+              <% if (!voiceChannels.length) { %><span class="muted">No voice channels in this server yet.</span><% } %>
+              <% voiceChannels.forEach(c => { %><label class="check-pill"><input type="checkbox" class="mus-voice-channel" value="<%= c.id %>"><span>🔊 <%= esc(c.name) %></span></label><% }) %>
+            </div>
+          </div>
+          <div class="setting-row stack">
+            <div><div class="setting-title">Extra stations</div><div class="setting-help">Add your own streams, one per line as <code>Name | https://stream-url</code>. Built-in Lofi / chill stations are always available.</div></div>
+            <textarea id="musStations" rows="3" placeholder="My Lofi | https://example.com/stream.mp3" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.82rem;"></textarea>
+          </div>
+        </div>
+        <div class="savebar"><button class="btn" id="musSaveBtn" onclick="saveMusic()">Save music settings</button></div>
       </div>
 
       <div class="subpage hidden" data-page="cm-reminders">

@@ -167,6 +167,16 @@ const GuildConfigSchema = new mongoose.Schema(
       channels: { type: mongoose.Schema.Types.Mixed, default: {} }, // { statKey: channelId }
       enabledStats: { type: [String], default: ['members', 'online', 'boosts', 'highestxp'] } // which stats show
     },
+    // Music / radio voice player (/music, dashboard Community → Music). Plays Lofi / chill internet
+    // radio streams in a voice channel — light and ToS-safe for the free tier. See music.js.
+    music: {
+      enabled: { type: Boolean, default: false },
+      commandChannelIds: { type: [String], default: [] }, // where /music works (empty = any text channel)
+      voiceChannelIds: { type: [String], default: [] }, // which voice channels it may join (empty = any)
+      djRoleId: { type: String, default: null }, // only this role may control it (empty = anyone in voice)
+      defaultVolume: { type: Number, default: 50 }, // 0–100
+      stations: { type: mongoose.Schema.Types.Mixed, default: [] } // extra stations admins add: [{ name, url }]
+    },
     // Starboard (/starboard, dashboard Engagement → Starboard).
     starboard: {
       enabled: { type: Boolean, default: false },

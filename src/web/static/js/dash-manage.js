@@ -140,6 +140,7 @@ function onManageTabShown(tab) {
   if (tab === 'community') {
     if (!pollState.loaded) initPolls();
     loadReminders();
+    loadMusic();
   }
   if (tab === 'moderation') {
     loadModeration();
@@ -2373,6 +2374,52 @@ async function potDrawNow() {
     el.addEventListener('change', renderPotPreview);
   });
 })();
+
+/* ------------------------------------------------------------------ Music / radio player */
+const musicState = { loaded: false };
+async function loadMusic() {
+  if (!document.getElementById('musSaveBtn') || musicState.loaded) return;
+  let d;
+  try {
+    d = await manageApi('GET', 'music');
+  } catch (err) {
+    return;
+  }
+  const s = d.settings;
+  document.getElementById('musEnabled').checked = !!s.enabled;
+  document.getElementById('musVolume').value = s.defaultVolume ?? 50;
+  document.getElementById('musDjRole').value = s.djRoleId || '';
+  const cmd = new Set(s.commandChannelIds || []);
+  document.querySelectorAll('.mus-cmd-channel').forEach((el) => (el.checked = cmd.has(el.value)));
+  const vc = new Set(s.voiceChannelIds || []);
+  document.querySelectorAll('.mus-voice-channel').forEach((el) => (el.checked = vc.has(el.value)));
+  document.getElementById('musStations').value = (s.stations || []).map((x) => `${x.name} | ${x.url}`).join('\n');
+  musicState.loaded = true;
+}
+async function saveMusic() {
+  const stations = document
+    .getElementById('musStations')
+    .value.split('\n')
+    .map((line) => {
+      const i = line.indexOf('|');
+      if (i < 0) return null;
+      return { name: line.slice(0, i).trim(), url: line.slice(i + 1).trim() };
+    })
+    .filter((x) => x && x.name && x.url);
+  const body = {
+    enabled: document.getElementById('musEnabled').checked,
+    defaultVolume: document.getElementById('musVolume').value,
+    djRoleId: document.getElementById('musDjRole').value || null,
+    commandChannelIds: [...document.querySelectorAll('.mus-cmd-channel:checked')].map((el) => el.value),
+    voiceChannelIds: [...document.querySelectorAll('.mus-voice-channel:checked')].map((el) => el.value),
+    stations
+  };
+  const data = await withButton(document.getElementById('musSaveBtn'), () => manageApi('POST', 'music', body), '🎵 Music settings saved.');
+  if (data) {
+    musicState.loaded = false;
+    loadMusic();
+  }
+}
 
 /* ------------------------------------------------------------------ Server Stats channels */
 const statsState = { loaded: false };

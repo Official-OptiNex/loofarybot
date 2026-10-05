@@ -566,6 +566,19 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 - `/serverstats setup` creates them, `stat` shows/hides one, `refresh` updates now, `remove` deletes
   them all. Needs **Manage Channels**.
 
+### Music / radio (`/music …` or dashboard **Community → Music**)
+- Plays **Lofi / chill internet radio** in a voice channel — deliberately a radio player, not a
+  YouTube bot, so it's **light, free and ToS-safe** and won't strain the free-tier host. Built-in
+  stations: Lofi, chill, ambient, vocal chill, synthwave and nu-jazz; admins can add their own stream
+  URLs. The bot needs **Connect** + **Speak** in the voice channel (plus `ffmpeg`, which ships as an
+  optional dependency).
+- `/music play [station]` joins your voice channel and plays; `/music skip` switches to the next
+  station; `/music stop` leaves; `/music nowplaying`, `/music stations`, `/music volume`.
+  `/music config` (Manage Server) toggles it and sets a DJ role / default volume.
+- **Configurable** on the dashboard: on/off, which **command channels** `/music` works in, which
+  **voice channels** it may join, a **DJ role** (only they control it, admins always can), default
+  volume and extra stations. It leaves a voice channel automatically once everyone else has left.
+
 ### Booster perks (`/perks` or dashboard **Leveling → Booster perks**)
 Server boosters get, by default:
 - 🎲 **+5 gambles a day** on top of the daily gamble limit.

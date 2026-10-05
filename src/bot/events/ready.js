@@ -52,6 +52,7 @@ const shopCommand = require('../commands/shop');
 const potCommand = require('../commands/pot');
 const idleCommand = require('../commands/idle');
 const serverstatsCommand = require('../commands/serverstats');
+const musicCommand = require('../commands/music');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -85,7 +86,8 @@ const ALL_COMMANDS = [
   shopCommand,
   potCommand,
   idleCommand,
-  serverstatsCommand
+  serverstatsCommand,
+  musicCommand
 ];
 
 module.exports = function registerReadyEvent(client) {
@@ -163,5 +165,9 @@ module.exports = function registerReadyEvent(client) {
 
     // Server Stats channels: refresh the live-count channel names on a timer (~30 min).
     require('../cogs/modules/serverStats').startStatsLoop(client);
+
+    // Music: leave a voice channel once everyone else has left (saves resources on the free tier).
+    const music = require('../cogs/modules/music');
+    client.on('voiceStateUpdate', (oldState) => music.handleVoiceStateUpdate(oldState));
   });
 };
