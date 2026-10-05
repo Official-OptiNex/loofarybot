@@ -120,7 +120,9 @@ browse each category's commands (with 🔒 permission tags), and a link to the w
 
 ### Leveling (`/levels ...` or the web dashboard)
 - XP is awarded per message (15–25 XP, 60s cooldown — tune in `src/config.js`).
-- `/levels rank`, `/levels leaderboard` for users.
+- `/levels rank`, `/levels leaderboard` for users. When a member leaves the server their XP/level,
+  shop items, Bubble Factory, gamble stats and birthday are deleted, so they drop off the leaderboards
+  (moderation history is kept). The leaderboard also tidies up anyone who left before this on view.
 - `/levels setrole <level> <role>` (Admin) to configure automatic role rewards.
 - `/levels toggle` (Admin) to turn XP gain on/off.
 - `/levels announcechannel [channel]` (Admin) to send level-up messages to a specific channel;
@@ -508,11 +510,13 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 | ⚡ XP Boost (24h) | 1,500 XP | +50% chat XP for 24 hours. Buying again adds another 24 hours. |
 | 🎲 +3 Gambles | 800 XP | Three extra `/gamble` plays today. |
 | 🏷️ Nickname tag | 1,200 XP | An emoji of your choice in front of your name. Toggle it off and your old nickname comes back. |
+| 📝 Nickname change | 1,000 XP | Set your own server nickname — for members who can't change it themselves (boosters usually can). Buy again any time to change it. |
 | 🎖️ Custom badge | 3,000 XP | Fully yours: your **title, emoji and color** on `/levels rank` and the leaderboard. |
 | 🏆 Golden Loofa | 10,000 XP | A collectible trophy for your rank card. Only 10 exist. |
 
 - **Using the shop:** `/shop view` shows the shop with a buy menu. `/shop buy`, `/shop inventory`,
-  `/shop toggle` and `/shop customize` (emoji, badge title, badge color) cover the rest.
+  `/shop toggle` and `/shop customize` (emoji, badge title, badge color) cover the rest. For the
+  Nickname item, `/shop buy item:Nickname name:YourName` (or a box pops up from the menu).
 - **Safe payments:** XP is taken atomically, so a member can't overspend, and limited stock can't
   oversell. If an item can't be delivered (for example a role above the bot), the XP is refunded.
 - **Dashboard:** edit, hide, reorder or delete any item, or add your own of any kind. Each item can

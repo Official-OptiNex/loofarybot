@@ -144,7 +144,7 @@ module.exports = [
     tab: 'shop',
     commands: [
       { usage: '/shop view', perm: null, description: 'Browse the shop and buy something from a menu.' },
-      { usage: '/shop buy', perm: null, description: 'Buy an item straight away (autocompletes).' },
+      { usage: '/shop buy', perm: null, description: 'Buy an item straight away (autocompletes). For the Nickname item, add name: to set your server nickname.' },
       { usage: '/shop inventory', perm: null, description: 'What you (or someone else) own.' },
       { usage: '/shop toggle', perm: null, description: 'Switch an item on or off — auto-react, nickname tag, badge, roles.' },
       { usage: '/shop customize', perm: null, description: 'Make it yours: your emoji, badge title and badge color.' }

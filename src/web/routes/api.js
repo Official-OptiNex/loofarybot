@@ -132,9 +132,16 @@ router.get('/guilds/:guildId/leaderboard', requireAuth, requireGuildAccess, guar
     // Only fetch the members on this page (names/avatars for people who aren't cached).
     const missing = entries.map((r) => r.userId).filter((id) => !req.guild.members.cache.has(id));
     if (missing.length) await req.guild.members.fetch({ user: missing }).catch(() => null);
+    // Anyone still not found has left — clear their stale data and leave them off the board.
+    const gone = entries.map((r) => r.userId).filter((id) => !req.guild.members.cache.has(id));
+    if (gone.length) {
+      const { clearMemberData } = require('../../bot/events/guildMemberRemove');
+      Promise.all(gone.map((id) => clearMemberData(req.guild.id, id))).catch(() => null);
+    }
     const startRank = (page - 1) * 10;
     await loadFlair(entries.map((r) => r.userId));
-    res.json({ entries: entries.map((r, i) => describe(r, startRank + i + 1)), page, totalPages, total });
+    const rows = entries.map((r, i) => describe(r, startRank + i + 1)).filter((e) => req.guild.members.cache.has(e.userId));
+    res.json({ entries: rows, page, totalPages, total });
   } catch (err) {
     console.error('Failed to load leaderboard:', err);
     res.status(500).json({ error: 'Failed to load leaderboard.' });

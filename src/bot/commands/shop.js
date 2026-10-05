@@ -9,7 +9,13 @@ const data = new SlashCommandBuilder()
   .setDescription('Spend XP on fun extras 🛍️')
   .setDMPermission(false)
   .addSubcommand((s) => s.setName('view').setDescription('Browse the shop and buy something'))
-  .addSubcommand((s) => s.setName('buy').setDescription('Buy an item').addStringOption(itemOption('What to buy')))
+  .addSubcommand((s) =>
+    s
+      .setName('buy')
+      .setDescription('Buy an item')
+      .addStringOption(itemOption('What to buy'))
+      .addStringOption((o) => o.setName('name').setDescription('New nickname (only for the Nickname item)').setMaxLength(32))
+  )
   .addSubcommand((s) => s.setName('inventory').setDescription('What you own').addUserOption((o) => o.setName('user').setDescription("Someone else's (defaults to you)")))
   .addSubcommand((s) =>
     s
@@ -60,7 +66,7 @@ async function execute(interaction) {
   }
 
   if (sub === 'buy') {
-    const res = await shop.buy(guild, interaction.member, o.getString('item'));
+    const res = await shop.buy(guild, interaction.member, o.getString('item'), { nickname: o.getString('name') });
     return reply(res.error ? `❌ ${res.error}` : res.message);
   }
 

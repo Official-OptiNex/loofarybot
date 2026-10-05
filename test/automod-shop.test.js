@@ -137,8 +137,8 @@ function msg(user,content,ch='general',extra={}){ const c=guild.channels.cache.g
   const Shop=require(root+'src/bot/cogs/modules/shop');
   const UserLevel=M('UserLevel');
   await UserLevel.create({guildId:'g',userId:'ann',xp:20000,level:10}); await UserLevel.create({guildId:'g',userId:'ben',xp:500,level:2});
-  const items=await Shop.listItems('g'); assert.deepEqual(items.map(i=>i.key),['autoreact','xpboost','gambles','nicktag','badge','loofa']);
-  assert.equal((await Shop.listItems('g')).length,6,'starter items are added once');
+  const items=await Shop.listItems('g'); assert.deepEqual(items.map(i=>i.key),['autoreact','xpboost','gambles','nicktag','nickname','badge','loofa']);
+  assert.equal((await Shop.listItems('g')).length,7,'starter items are added once');
   const byKey=(k)=>items.find(i=>i.key===k); const id=(k)=>String(byKey(k)._id);
   const ann=members.get('ann'); const ben=members.get('ben');
 
@@ -181,7 +181,11 @@ function msg(user,content,ch='general',extra={}){ const c=guild.channels.cache.g
   const loofa=byKey('loofa'); rows.ShopItem.find(i=>String(i._id)===String(loofa._id)).sold=9;
   b=await Shop.buy(guild,ann,id('loofa')); assert.ok(b.ok); b=await Shop.buy(guild,ben,id('loofa')); assert.match(b.error,/sold out/);
   fl=await Shop.flair('g','ann'); assert.deepEqual(fl.get('ann').collectibles.map(c=>c.name),['Golden Loofa']);
-  console.log('✓ custom badge (title/emoji/color, links & mentions stripped) as rank flair, nickname tag on/swap/off, limited stock sells out');
+  // Nickname change: needs a name, sets the server nickname (whitespace collapsed), and is repeatable.
+  b=await Shop.buy(guild,ann,id('nickname')); assert.match(b.error,/Tell me the nickname/,'a nickname is required');
+  b=await Shop.buy(guild,ann,id('nickname'),{nickname:'  Cool   Cat  '}); assert.ok(b.ok,b.error); assert.equal(ann.nickname,'Cool Cat');
+  b=await Shop.buy(guild,ann,id('nickname'),{nickname:'Second Name'}); assert.ok(b.ok,'repeatable — buy again to change again'); assert.equal(ann.nickname,'Second Name');
+  console.log('✓ custom badge (title/emoji/color, links & mentions stripped) as rank flair, nickname tag on/swap/off, nickname change (needs a name, repeatable), limited stock sells out');
 
   // Staff items: role (timed), validation.
   let ci=Shop.cleanItem(guild,{type:'role',name:'Admin?',price:5,config:{roleId:'adminRole'}}); assert.match(ci.error,/Administrator/);
