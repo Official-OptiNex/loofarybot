@@ -1057,8 +1057,12 @@
             </div>
 
             <details class="idle-panel idle-tree">
-              <summary class="idle-panel-title">🏭 Upgrade tree <span class="muted" style="font-weight:400;">· what members can buy</span></summary>
+              <summary class="idle-panel-title">🏭 Upgrades <span class="muted" style="font-weight:400;">· tune cost, effect, max &amp; availability</span></summary>
               <div id="idleTree"></div>
+              <div class="field-row" style="margin-top:0.6rem; gap:0.5rem; align-items:center;">
+                <button class="btn small" type="button" id="idleUpSaveBtn" onclick="saveIdleUpgrades()">Save upgrades</button>
+                <button class="btn secondary small" type="button" id="idleUpResetBtn" onclick="resetIdleUpgrades()">Reset to defaults</button>
+              </div>
             </details>
 
             <div class="idle-panel">

@@ -44,6 +44,33 @@ const data = new SlashCommandBuilder()
           .setDescription("Wipe a member's factory back to a fresh start")
           .addUserOption((o) => o.setName('user').setDescription('Whose factory to reset').setRequired(true))
       )
+      .addSubcommand((s) =>
+        s
+          .setName('upgrade')
+          .setDescription('Tune an upgrade: its cost, effect, max level or availability')
+          .addStringOption((o) =>
+            o
+              .setName('which')
+              .setDescription('Which upgrade')
+              .setRequired(true)
+              .addChoices(...idle.DEFAULT_UPGRADES.map((u) => ({ name: `${u.emoji} ${u.name}`, value: u.id })))
+          )
+          .addIntegerOption((o) => o.setName('cost').setDescription('Base cost in 🫧 (level 1)').setMinValue(1).setMaxValue(1000000000))
+          .addIntegerOption((o) => o.setName('effect').setDescription('Effect per level (🫧/hr, or % for Shine, or hours for Bigger Tub)').setMinValue(0).setMaxValue(1000000))
+          .addIntegerOption((o) => o.setName('max_level').setDescription('Max level (1–1000)').setMinValue(1).setMaxValue(1000))
+          .addBooleanOption((o) => o.setName('available').setDescription('Whether members can buy it'))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('upgrades_reset')
+          .setDescription('Reset upgrade tuning back to the defaults')
+          .addStringOption((o) =>
+            o
+              .setName('which')
+              .setDescription('One upgrade, or leave blank for all')
+              .addChoices(...idle.DEFAULT_UPGRADES.map((u) => ({ name: `${u.emoji} ${u.name}`, value: u.id })))
+          )
+      )
   );
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
@@ -59,6 +86,32 @@ async function runAdmin(interaction, sub) {
     const res = await idle.saveSettings(guild, { enabled });
     if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
     return interaction.reply({ content: `🫧 Bubble Factory is now **${enabled ? 'ON' : 'OFF'}** for this server.`, ephemeral: true });
+  }
+
+  if (sub === 'upgrade') {
+    const id = interaction.options.getString('which');
+    const patch = {
+      baseCost: interaction.options.getInteger('cost'),
+      effect: interaction.options.getInteger('effect'),
+      max: interaction.options.getInteger('max_level'),
+      enabled: interaction.options.getBoolean('available')
+    };
+    // drop options that weren't provided (null) so we only change what was given
+    Object.keys(patch).forEach((k) => patch[k] === null && delete patch[k]);
+    const res = await idle.setUpgrade(guild, id, patch);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    const u = res.upgrade;
+    return interaction.reply({
+      content: `🛠️ **${u.emoji} ${u.name}** updated — ${u.enabled ? '' : '**disabled** · '}base cost **${fmt(u.baseCost)} 🫧**, ${u.blurb}${u.max ? `, max Lv ${u.max}` : ''}.`,
+      ephemeral: true
+    });
+  }
+
+  if (sub === 'upgrades_reset') {
+    const id = interaction.options.getString('which');
+    const res = await idle.resetUpgrades(guild, id);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    return interaction.reply({ content: id ? '↩️ That upgrade is back to its default.' : '↩️ All upgrades reset to their defaults.', ephemeral: true });
   }
 
   const target = interaction.options.getUser('user');
@@ -95,7 +148,7 @@ async function execute(interaction) {
   const reply = (content) => interaction.reply({ content, ephemeral: true, allowedMentions: { parse: [] } });
 
   if (sub === 'help') {
-    const tree = idle.UPGRADES.map((u) => `${u.emoji} **${u.name}** — ${u.blurb}${u.max ? ` _(max Lv ${u.max})_` : ''}`).join('\n');
+    const tree = s.upgrades.map((u) => `${u.emoji} **${u.name}** — ${u.blurb}${u.max ? ` _(max Lv ${u.max})_` : ''}`).join('\n');
     const embed = new EmbedBuilder()
       .setColor(0x4ab3f4)
       .setTitle('🫧 How the Bubble Factory works')

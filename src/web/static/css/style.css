@@ -1158,6 +1158,13 @@ details.idle-tree[open] summary.idle-panel-title { margin-bottom: 0.9rem; }
 .idle-tile .s { font-size: 0.72rem; color: var(--text-muted, #9aa4b2); margin-top: 0.1rem; }
 .idle-context { font-size: 0.78rem; line-height: 1.5; margin: 0.9rem 0 0; }
 
+/* Editable upgrade rows */
+.idle-up-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.7rem; padding: 0.6rem 0; border-top: 1px solid var(--border-card); }
+.idle-up-row:first-child { border-top: 0; }
+.idle-up-name { flex: 1 1 100%; font-size: 0.86rem; }
+.idle-up-f { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; color: var(--text-muted, #9aa4b2); }
+.idle-up-f input[type="number"] { width: 5rem; padding: 0.3rem 0.4rem; }
+
 /* Upgrade tree rows */
 .idle-tree-row { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.84rem; padding: 0.55rem 0; border-top: 1px solid var(--border-card); }
 .idle-tree-row:first-child { border-top: 0; }
