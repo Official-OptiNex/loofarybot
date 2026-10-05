@@ -32,7 +32,9 @@ module.exports = [
     tab: 'leveling',
     commands: [
       { usage: '/daily', perm: null, description: 'Claim daily XP — consecutive days build a streak for bigger rewards.' },
-      { usage: '/idle play · top · help', perm: null, description: 'The Bubble Factory idle game (no gambling): make 🫧 over time, buy upgrades, cash out to XP (daily-capped).' },
+      { usage: '/idle play · start · stop', perm: null, description: 'The Bubble Factory idle game (no gambling): start your factory, make 🫧 over time, collect, upgrade, cash out to XP (daily-capped). Pause any time.' },
+      { usage: '/idle top · help', perm: null, description: 'The factory leaderboard, and a guide to how the Bubble Factory works.' },
+      { usage: '/idle admin', perm: 'Manage Server', description: 'Toggle the game on/off, or give / take / reset a member’s bubbles.' },
       { usage: '/xpdrop setup', perm: 'Manage Server', description: 'Random XP drops in chat — pick channels, XP range and how often; first to click wins.' },
       { usage: '/xpdrop now · status · toggle', perm: 'Manage Server', description: 'Drop one right now, see recent winners and the next drop, or turn drops on/off.' },
       { usage: '/perks show', perm: null, description: 'What server boosters get: extra gambles, giveaway entries, a daily XP drop and a thank-you package.' },
@@ -158,8 +160,8 @@ module.exports = [
       { usage: '/birthday set · remove', perm: null, description: 'Save (or forget) your birthday — month and day, no year.' },
       { usage: '/birthday view · upcoming', perm: null, description: "Someone's birthday, or whose birthdays are coming up next." },
       { usage: '/birthday setup · toggle', perm: 'Manage Server', description: 'Where birthday wishes go, the post time, an optional role for the day and an XP gift.' },
-      { usage: '/counting setup · toggle', perm: 'Manage Server', description: 'A counting game channel — ✅ for each right number, a wrong one resets the count.' },
-      { usage: '/counting set · status', perm: 'Manage Server', description: 'Fix the count after an unfair reset, or see the next number, best run and resets.' },
+      { usage: '/counting setup · toggle', perm: 'Manage Server', description: 'A counting game channel — ✅ for each right number, a wrong one resets. Grief protection: numbers-only, double-counts deleted (not a reset), and slowmode.' },
+      { usage: '/counting set · status', perm: 'Manage Server', description: 'Fix the count after an unfair reset, or see the next number, best run, settings and resets.' },
       { usage: '/starboard setup · toggle', perm: 'Manage Server', description: 'Repost messages that get enough ⭐ (or your emoji) in a starboard channel.' },
       { usage: '/starboard ignore · top', perm: 'Manage Server', description: "Keep a channel off the starboard, or see the most-starred messages." }
     ]
@@ -231,6 +233,7 @@ module.exports = [
       { usage: '/loof help', perm: null, description: 'This help menu.' },
       { usage: '/loof ping', perm: null, description: "Bot latency." },
       { usage: '/serverinfo', perm: null, description: 'Server stats: members, boosts, channels and more.' },
+      { usage: '/serverstats setup · stat · refresh · remove', perm: 'Manage Server', description: 'View-only channels pinned at the top of the server showing live counts (members, online, boosts, top XP, roles, channels), refreshed every ~30 min.' },
       { usage: '/userinfo', perm: null, description: "A member's account age, join date and roles." },
       { usage: '/avatar', perm: null, description: "Someone's full-size avatar." }
     ]

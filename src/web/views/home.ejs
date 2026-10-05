@@ -15,11 +15,22 @@
     ['🎁', 'Giveaways & drops', 'Timed giveaways with entry requirements, or first-to-click drops. Survive restarts, reroll any time.', ''],
     ['📈', 'Leveling', 'XP for chatting, role rewards, name-color roles, multipliers, daily streaks and custom rank cards.', 'yellow'],
     ['🎰', 'XP gambling', 'Coinflip, blackjack, mines and high-low with a fair, adjustable house edge — plus a free play when you go broke.', 'red'],
-    ['📡', 'Go-live alerts', 'Paste any Twitch or YouTube link and get a custom alert the moment they go live or upload.', 'red'],
+    ['🫧', 'Bubble Factory', 'A relaxing idle game (no gambling): make bubbles over time, buy upgrades and cash out to capped XP.', 'blue'],
+    ['💰', 'Daily XP Pot', 'Gambling losses feed a daily pot, drawn among active chatters — tiered prizes, nothing wasted.', 'yellow'],
+    ['🛒', 'XP Shop', 'Spend XP on boosts, temporary roles, collectibles and rank-card flair you configure.', 'green'],
+    ['🎫', 'Tickets', 'Private support channels from a panel button — claim, add members, transcripts and DM on close.', ''],
+    ['🛡️', 'Moderation & logs', 'Warn / timeout / kick / ban with cases, lockdowns, purge, and a full searchable server log.', 'red'],
+    ['🤖', 'Auto-mod', 'Catches spam, duplicates, walls, mass-mentions, invites and unsafe / NSFW links automatically.', 'green'],
     ['🍯', 'Honeypot', 'A trap channel that instantly removes raid bots and hacked accounts before they spam.', 'green'],
-    ['🛡️', 'Moderation & logs', 'Lockdowns, purge, and a full server log with a searchable viewer and before/after edits.', ''],
+    ['📡', 'Go-live alerts', 'Paste any Twitch or YouTube link and get a custom alert the moment they go live or upload.', 'red'],
+    ['🖌️', 'Embed Builder', 'Design rich messages and forum posts with a live preview, JSON import/export and a JSON editor.', 'blue'],
+    ['💬', 'Bot Chat', 'Talk through the bot from the dashboard, with a live feed and replies — no mass-pings.', ''],
+    ['⭐', 'Starboard', 'Repost the messages that get enough ⭐ (or your emoji) into a highlights channel.', 'yellow'],
+    ['🔢', 'Counting game', 'A count-up channel with grief protection: numbers-only, no double-count resets, and slowmode.', ''],
+    ['🎂', 'Birthdays', 'Members save a birthday; the bot wishes them with an optional role and XP gift.', 'red'],
+    ['📊', 'Server Stats', 'View-only channels pinned at the top showing live member, online, boost and top-XP counts.', 'blue'],
     ['🎭', 'Roles', 'Auto-role on join and self-assign panels with buttons or dropdowns.', 'green'],
-    ['👋', 'Welcome messages', 'Greet new members with text or a rich embed, previewed live as you type.', 'yellow'],
+    ['👋', 'Welcome & goodbye', 'Greet new members and farewell leavers with text or a rich embed, previewed live.', 'yellow'],
     ['📊', 'Polls & reminders', 'Button polls (public or anonymous) and reminders for you or a whole channel.', '']
   ];
 %>
@@ -30,7 +41,7 @@
       <div class="site-hero-copy">
         <div class="hero-badge"><span class="pulse-dot"></span> Online · in <%= stats.servers.toLocaleString() %> server<%= stats.servers === 1 ? '' : 's' %></div>
         <h1>Run your whole Discord server from <span class="gradient-text">one bot</span></h1>
-        <p>Giveaways, leveling, gambling, go-live alerts, an anti-raid honeypot and moderation — control every feature with slash commands <em>or</em> the web dashboard. Your choice, every time.</p>
+        <p>Giveaways, leveling, XP games, tickets, a shop, auto-mod, go-live alerts, an anti-raid honeypot, server-stat channels and full moderation — control every feature with slash commands <em>or</em> the web dashboard. Your choice, every time.</p>
         <div class="site-cta">
           <a class="btn" href="<%= inviteUrl %>" target="_blank" rel="noopener">➕ Add to Discord</a>
           <% if (user) { %>

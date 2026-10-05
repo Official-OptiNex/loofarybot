@@ -555,6 +555,17 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 - Stars from the author (unless allowed) and bots don't count. NSFW channels never feed a non-NSFW
   starboard, and you can ignore channels. Threads follow their parent channel.
 
+### Server Stats channels (`/serverstats …` or dashboard **Overview → Server Stats**)
+- View-only **voice channels** pinned at the top of the server (under a 📊 Server Stats category) whose
+  names show live counts. Members can **see** them but can't join or type.
+- Pick any of: **👥 Members · 🟢 Online · 🚀 Boosts · 🏆 Top XP · 🎭 Roles · 💬 Channels** — each is its
+  own channel and toggleable. The online count uses the server's approximate presence count, so it needs
+  no privileged intent.
+- Names refresh **every ~30 minutes** (channel renames are rate-limited, so this is the safe cadence),
+  with a first pass shortly after the bot starts. `/serverstats refresh` updates them on demand.
+- `/serverstats setup` creates them, `stat` shows/hides one, `refresh` updates now, `remove` deletes
+  them all. Needs **Manage Channels**.
+
 ### Booster perks (`/perks` or dashboard **Leveling → Booster perks**)
 Server boosters get, by default:
 - 🎲 **+5 gambles a day** on top of the daily gamble limit.

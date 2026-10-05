@@ -634,6 +634,7 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.88em
 .hero-icon.red { background: rgba(255, 92, 122, 0.14); }
 .hero-icon.yellow { background: rgba(255, 181, 71, 0.16); }
 .hero-icon.green { background: rgba(34, 197, 139, 0.14); }
+.hero-icon.blue { background: rgba(79, 124, 255, 0.14); }
 .module-hero h1 { margin: 0; font-size: 1.25rem; }
 .module-hero p { margin: 0.15rem 0 0; color: var(--text-label); font-size: 0.88rem; }
 .hero-status { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.45rem; }

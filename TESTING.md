@@ -207,8 +207,18 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       the feature comes first, and Enter jumps straight to it.
 - [ ] **Leaderboard** page: someone with a shop badge shows it next to their name, plus any
       collectibles.
-- [ ] **Commands** page lists `/automod`, `/shop`, `/pot`, `/birthday`, `/counting` and
-      `/starboard`.
+- [ ] **Commands** page lists `/automod`, `/shop`, `/pot`, `/birthday`, `/counting`, `/starboard`,
+      `/idle` and `/serverstats`. The public home page's feature grid shows every module.
+
+## 9b. Server Stats channels (`/serverstats`, dashboard **Overview → Server Stats**)
+- [ ] `/serverstats setup` → a **📊 Server Stats** category appears at the top of the server with
+      view-only voice channels: 👥 Members, 🟢 Online, 🚀 Boosts, 🏆 Top XP. Members can see them but
+      can't join or type.
+- [ ] `/serverstats stat name:🎭 Roles show:true` → a Roles channel is added; `show:false` removes it.
+- [ ] `/serverstats refresh` updates the numbers now; they also refresh on their own every ~30 min.
+- [ ] `/serverstats remove` deletes the channels and the category. The dashboard card (Overview) does
+      the same with its toggle, stat pills, and Refresh / Remove buttons.
+- [ ] Without **Manage Channels**, setup replies with a clear permission error.
 - [ ] **Server settings → Dashboard access:** new pages (Engagement, XP Shop) can be given to
       moderators. A moderator only sees the switches for pages they have.
 - [ ] **Server settings → Backups:** make a backup → it lists "N shop item(s)". Restoring doesn't
