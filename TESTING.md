@@ -82,12 +82,17 @@ Set a log channel if you want to see them in Discord, too.
 
 ## 5. XP Shop (`/shop view`, dashboard **XP Shop**)
 Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. +20,000.
-- [ ] `/shop view` lists 6 starter items. Pick one from the menu → confirm → bought. XP goes down.
+- [ ] `/shop view` lists 7 starter items. Pick one from the menu → confirm → bought. XP goes down.
 - [ ] Buying something you can't afford → "costs X XP — you have Y", and nothing is taken.
 - [ ] **Auto-react:** buy it, chat → the bot reacts 🔥 (at most every ~45s).
       `/shop customize item:Auto-react emoji:🍕` changes it. `/shop toggle` turns it off/on.
 - [ ] **Nickname tag:** buy it → your name gets "⭐ " in front. Customize the emoji → it updates.
       Toggle off → your old nickname comes back.
+- [ ] **Nickname change:** `/shop buy item:Nickname name:CoolName` → your server nickname becomes
+      **CoolName**. Picking it from `/shop view` instead pops a box to type the name. Buying with no
+      name → "Tell me the nickname you want". Buy again with a new name → it changes (repeatable).
+      If LoofaryBot can't change your nickname (no Manage Nicknames / your top role is higher) → it
+      says so and no XP is taken.
 - [ ] **Custom badge:** buy it, then `/shop customize item:Custom badge title:Night Owl emoji:🦉
       color:#FF00AA` → `/levels rank` shows "🦉 **Night Owl**" and `/levels leaderboard` shows it next
       to your name.
@@ -101,6 +106,10 @@ Give your 👤 test account XP first: dashboard Leaderboard → Adjust XP, e.g. 
 - [ ] Dashboard: **Member items** → search your test account → **Give for free** and **Take away**
       both work.
 - [ ] Dashboard: **Recent purchases** lists what was bought, and Logs has *XP shop purchases*.
+- [ ] **Leaderboard drops people who leave:** `/levels leaderboard` lists members by name/mention —
+      no raw `<@123…>` IDs. Have (or simulate) a ranked member leave → they're gone from the board
+      next time it's shown, and their XP/level, shop items, factory, gamble stats and birthday are
+      cleared (their moderation history stays).
 
 ## 5b. Bubble Factory idle game (`/idle`, dashboard **Leveling → 🫧 Bubble Factory**)
 Turn it on first (dashboard Leveling tab, or it's off by default).

@@ -1,19 +1,29 @@
 const UserLevel = require('../../database/models/UserLevel');
 const Reminder = require('../../database/models/Reminder');
 const Giveaway = require('../../database/models/Giveaway');
+const ShopOwnership = require('../../database/models/ShopOwnership');
+const IdleFactory = require('../../database/models/IdleFactory');
+const GambleStats = require('../../database/models/GambleStats');
+const Birthday = require('../../database/models/Birthday');
 const { sendGoodbye } = require('../cogs/modules/welcome');
 const { reportIssue } = require('../utils/errorReporter');
 
 /**
- * When someone leaves, drop their per-server data: XP/level/rank card (so they vanish from the
- * leaderboard), their reminders in this server, and their entries in giveaways still running.
- * Join/leave counts for the dashboard chart are kept — they're anonymous aggregates.
+ * When someone leaves, drop their per-server personal data so they vanish from the leaderboards and
+ * we don't keep data on people who aren't here: XP/level/rank card, owned shop items, their Bubble
+ * Factory, gamble stats, birthday, reminders, and entries in giveaways still running.
+ * Kept on purpose: moderation cases (ban-evasion / audit history must survive a leave+rejoin) and the
+ * anonymous join/leave counts that power the dashboard growth chart.
  */
 async function clearMemberData(guildId, userId) {
   const [levels, reminders, giveaways] = await Promise.all([
     UserLevel.deleteOne({ guildId, userId }),
     Reminder.deleteMany({ guildId, userId }),
-    Giveaway.updateMany({ guildId, ended: false, entries: userId }, { $pull: { entries: userId } })
+    Giveaway.updateMany({ guildId, ended: false, entries: userId }, { $pull: { entries: userId } }),
+    ShopOwnership.deleteMany({ guildId, userId }),
+    IdleFactory.deleteOne({ guildId, userId }),
+    GambleStats.deleteOne({ guildId, userId }),
+    Birthday.deleteOne({ guildId, userId })
   ]);
   return { levels: levels.deletedCount, reminders: reminders.deletedCount, giveaways: giveaways.modifiedCount };
 }

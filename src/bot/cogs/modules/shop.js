@@ -2,7 +2,7 @@
 // shop; staff can edit, hide or delete them and add their own (roles, collectibles, any type) on the
 // dashboard. Owned items that can be toggled (auto-react, nickname tag, badge, roles) are switched on
 // and off by the member, and the emoji / badge text is theirs to customise.
-const { EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
 const ShopItem = require('../../../database/models/ShopItem');
 const ShopOwnership = require('../../../database/models/ShopOwnership');
@@ -19,6 +19,7 @@ const TYPES = {
   xpBoost: { label: 'XP boost', toggle: false, custom: [], help: 'More XP from chatting for a while. Buying again adds more time.' },
   extraGambles: { label: 'Extra gambles', toggle: false, custom: [], help: 'More /gamble plays today.' },
   nickTag: { label: 'Nickname tag', toggle: true, custom: ['emoji'], help: 'An emoji in front of your name.' },
+  nickname: { label: 'Nickname', toggle: false, custom: [], help: 'Set your own server nickname (for members who can’t change it themselves).' },
   badge: { label: 'Custom badge', toggle: true, custom: ['emoji', 'text', 'color'], help: 'Your own title, emoji and color on /levels rank and the leaderboard.' },
   role: { label: 'Role', toggle: true, custom: [], help: 'A role — wear it or hide it any time.' },
   collectible: { label: 'Collectible', toggle: false, custom: [], help: 'A trophy for your /levels rank card.' }
@@ -30,6 +31,7 @@ const DEFAULT_ITEMS = [
   { key: 'xpboost', type: 'xpBoost', emoji: '⚡', name: 'XP Boost (24h)', price: 1500, maxPerUser: 0, description: '+50% XP from chatting for 24 hours. Buying again adds another 24 hours.', config: { multiplier: 1.5, durationHours: 24 } },
   { key: 'gambles', type: 'extraGambles', emoji: '🎲', name: '+3 Gambles', price: 800, maxPerUser: 0, description: 'Three extra /gamble plays today (resets at midnight UTC).', config: { plays: 3 } },
   { key: 'nicktag', type: 'nickTag', emoji: '🏷️', name: 'Nickname tag', price: 1200, description: 'Put an emoji of your choice in front of your name. Toggle it any time.', config: { reactEmoji: '⭐' } },
+  { key: 'nickname', type: 'nickname', emoji: '📝', name: 'Nickname change', price: 1000, maxPerUser: 0, description: 'Set your own server nickname. Run `/shop buy` and type your new name (or pick it here and a box pops up).', config: {} },
   { key: 'badge', type: 'badge', emoji: '🎖️', name: 'Custom badge', price: 3000, description: 'Your own title, emoji and color on your rank card and the leaderboard.', config: {} },
   { key: 'loofa', type: 'collectible', emoji: '🏆', name: 'Golden Loofa', price: 10000, stock: 10, description: 'Ultra rare trophy — only 10 exist. Shows on your rank card forever.', config: {} }
 ];
@@ -90,6 +92,13 @@ function cleanText(raw, max = 24) {
 }
 
 const cleanColor = (raw) => (/^#?[0-9a-f]{6}$/i.test(String(raw || '').trim()) ? `#${String(raw).trim().replace('#', '').toUpperCase()}` : null);
+
+/** A server nickname: 1–32 chars, no line breaks. Discord blocks a few words itself — we let it, and
+ * surface its error if so. Returns the cleaned nickname or null when it's empty. */
+function cleanNickname(raw) {
+  const t = String(raw || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return t ? t.slice(0, 32) : null;
+}
 
 function botCanGiveRole(guild, roleId) {
   const role = roleId ? guild.roles.cache.get(roleId) : null;
@@ -196,7 +205,7 @@ async function boostMultiplier(guildId, userId, now = Date.now()) {
  * Buys an item for a member. Checks stock, limits and level, takes the XP atomically (refunded if the
  * item can't be delivered), then applies it. Returns { ok, message } or { error }.
  */
-async function buy(guild, member, itemId, { free = false, by = null } = {}) {
+async function buy(guild, member, itemId, { free = false, by = null, nickname = null } = {}) {
   const config = await leveling.getOrCreateConfig(guild.id);
   if (config.shopEnabled === false) return { error: 'The shop is closed right now.' };
   if (config.levelingEnabled === false && !free) return { error: 'Leveling is turned off, so XP can’t be spent right now.' };
@@ -214,6 +223,10 @@ async function buy(guild, member, itemId, { free = false, by = null } = {}) {
   // Type checks before any XP moves.
   if (item.type === 'role' && !botCanGiveRole(guild, item.config?.roleId)) return { error: "This role can't be handed out right now — ask staff to check the bot's role position." };
   if (item.type === 'nickTag' && !canNick(member)) return { error: "LoofaryBot can't change your nickname (it needs Manage Nicknames and a role above yours), so this item wouldn't work for you." };
+  if (item.type === 'nickname') {
+    if (!canNick(member)) return { error: "LoofaryBot can't change your nickname (it needs Manage Nicknames and a role above yours), so this item wouldn't work for you." };
+    if (!cleanNickname(nickname)) return { error: 'Tell me the nickname you want — for example `/shop buy item:Nickname name:CoolName`.' };
+  }
   if (item.type === 'extraGambles') {
     const { getGamblingSettings } = require('./gambling');
     const g = getGamblingSettings(config);
@@ -267,6 +280,15 @@ async function buy(guild, member, itemId, { free = false, by = null } = {}) {
       if (applied.error) return refund(applied.error);
       await ShopOwnership.updateOne(itemKey, { $set: { type: item.type, active: true, expiresAt }, $inc: { quantity: 1, spent: price } }, { upsert: true });
       message = `🎭 You got <@&${item.config.roleId}>${expiresAt ? ` until <t:${Math.floor(expiresAt.getTime() / 1000)}:f>` : ''}! Hide or show it with \`/shop toggle\`.`;
+    } else if (item.type === 'nickname') {
+      const nick = cleanNickname(nickname);
+      try {
+        await member.setNickname(nick, 'XP shop: nickname change');
+      } catch (err) {
+        return refund(`Discord wouldn't let me set that nickname (${err.message}).`);
+      }
+      await ShopOwnership.updateOne(itemKey, { $set: { type: item.type, active: false }, $inc: { quantity: 1, spent: price } }, { upsert: true });
+      message = `📝 Your nickname is now **${nick.replace(/([*_`~|\\])/g, '\\$1')}**.`;
     } else {
       const defaults = {
         autoReact: { emoji: item.config?.reactEmoji || item.emoji },
@@ -469,7 +491,7 @@ function cleanItem(guild, b) {
       description: String(b.description || '').trim().slice(0, 300),
       enabled: b.enabled !== false,
       stock: int(b.stock, 0, 1_000_000, 'Stock'),
-      maxPerUser: int(b.maxPerUser, 0, 1000, 'Limit per member', ['xpBoost', 'extraGambles'].includes(type) ? 0 : 1),
+      maxPerUser: int(b.maxPerUser, 0, 1000, 'Limit per member', ['xpBoost', 'extraGambles', 'nickname'].includes(type) ? 0 : 1),
       minLevel: int(b.minLevel, 0, 1000, 'Minimum level', 0),
       config: {}
     };
@@ -548,6 +570,19 @@ async function handleShopInteraction(interaction) {
     if (a !== interaction.user.id) return interaction.reply({ content: 'Open your own shop with `/shop view`.', ephemeral: true });
     const item = await ShopItem.findOne({ _id: interaction.values[0], guildId: interaction.guildId }).lean().catch(() => null);
     if (!item) return interaction.reply({ content: '❌ That item is gone.', ephemeral: true });
+    // Nickname needs a name, so pop a box to type it in rather than a plain confirm button.
+    if (item.type === 'nickname') {
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId(`shop:nickmodal:${item._id}:${interaction.user.id}`)
+          .setTitle(`${item.name} — ${fmt(item.price)} XP`.slice(0, 45))
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('name').setLabel('Your new nickname').setStyle(TextInputStyle.Short).setMinLength(1).setMaxLength(32).setRequired(true)
+            )
+          )
+      );
+    }
     return interaction.reply({
       content: `${item.emoji} **${item.name}** for **${fmt(item.price)} XP**?\n${item.description || TYPES[item.type].help}`,
       components: [
@@ -558,6 +593,11 @@ async function handleShopInteraction(interaction) {
       ],
       ephemeral: true
     });
+  }
+  if (action === 'nickmodal') {
+    if (b !== interaction.user.id) return interaction.reply({ content: "That's not your purchase.", ephemeral: true });
+    const res = await buy(interaction.guild, interaction.member, a, { nickname: interaction.fields.getTextInputValue('name') });
+    return interaction.reply({ content: res.error ? `❌ ${res.error}` : res.message, ephemeral: true });
   }
   if (action === 'cancel') return interaction.update({ content: 'No worries — nothing was bought.', components: [] });
   if (action === 'buy') {

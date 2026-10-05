@@ -275,11 +275,25 @@ async function execute(interaction) {
       return interaction.reply({ content: `There are only ${totalPages} page(s) of leaderboard data.`, ephemeral: true });
     }
     const startRank = (safePage - 1) * 10;
-    const flair = await require('../cogs/modules/shop').flair(interaction.guildId, entries.map((r) => r.userId)).catch(() => new Map());
-    const lines = entries.map((r, i) => {
-      const badge = flair.get(r.userId)?.badge;
-      return `**${startRank + i + 1}.** <@${r.userId}>${badge ? ` ${badge.emoji} *${badge.text}*` : ''} — Level ${r.level} (${r.xp} XP)`;
-    });
+    // Make sure this page's members are cached so names resolve. Anyone who has left the server gets
+    // their stale data cleared (so they stop showing as a raw ID) and is left off the board.
+    const ids = entries.map((r) => r.userId);
+    const uncached = ids.filter((id) => !interaction.guild.members.cache.has(id));
+    if (uncached.length) await interaction.guild.members.fetch({ user: uncached }).catch(() => null);
+    const gone = ids.filter((id) => !interaction.guild.members.cache.has(id));
+    if (gone.length) {
+      const { clearMemberData } = require('../events/guildMemberRemove');
+      Promise.all(gone.map((id) => clearMemberData(interaction.guildId, id))).catch(() => null);
+    }
+    const flair = await require('../cogs/modules/shop').flair(interaction.guildId, ids).catch(() => new Map());
+    const lines = entries
+      .map((r, i) => ({ r, rank: startRank + i + 1 }))
+      .filter(({ r }) => interaction.guild.members.cache.has(r.userId))
+      .map(({ r, rank }) => {
+        const badge = flair.get(r.userId)?.badge;
+        return `**${rank}.** <@${r.userId}>${badge ? ` ${badge.emoji} *${badge.text}*` : ''} — Level ${r.level} (${Number(r.xp).toLocaleString('en-US')} XP)`;
+      });
+    if (!lines.length) return interaction.reply({ content: 'No ranked members on this page — they may have left. Try page 1.', ephemeral: true });
     const embed = new EmbedBuilder()
       .setTitle('🏆 XP Leaderboard')
       .setColor('#F1C40F')
