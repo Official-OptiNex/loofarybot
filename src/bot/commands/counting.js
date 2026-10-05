@@ -15,6 +15,8 @@ const data = new SlashCommandBuilder()
       .addChannelOption((o) => o.setName('channel').setDescription('The counting channel').setRequired(true).addChannelTypes(ChannelType.GuildText))
       .addBooleanOption((o) => o.setName('take_turns').setDescription('Members must take turns — no counting twice in a row (default on)'))
       .addBooleanOption((o) => o.setName('math').setDescription('Allow sums like 3*4 (default on)'))
+      .addBooleanOption((o) => o.setName('numbers_only').setDescription('Delete normal chat so the channel is numbers only (default on)'))
+      .addIntegerOption((o) => o.setName('slowmode').setDescription('Slowmode in seconds, grief protection (default 1200 = 20 min; 0 = off)').setMinValue(0).setMaxValue(21600))
   )
   .addSubcommand((s) =>
     s.setName('toggle').setDescription('Turn the counting game on or off').addBooleanOption((o) => o.setName('enabled').setDescription('On or off').setRequired(true))
@@ -38,6 +40,8 @@ async function execute(interaction) {
     const input = { enabled: true, channelId: o.getChannel('channel').id };
     if (o.getBoolean('take_turns') !== null) input.allowSameUser = !o.getBoolean('take_turns');
     if (o.getBoolean('math') !== null) input.mathAllowed = o.getBoolean('math');
+    if (o.getBoolean('numbers_only') !== null) input.numbersOnly = o.getBoolean('numbers_only');
+    if (o.getInteger('slowmode') !== null) input.slowmodeSeconds = o.getInteger('slowmode');
     const saved = await counting.saveSettings(guild, input);
     if (saved.error) return interaction.reply({ content: `❌ ${saved.error}`, ephemeral: true });
     const s = saved.settings;
@@ -45,8 +49,11 @@ async function execute(interaction) {
     await channel
       ?.send(`🔢 **Counting game!** Count up one number at a time${s.allowSameUser ? '' : ' — and take turns'}. A wrong number resets the count.\nThe next number is **${fmt(s.current + 1)}**.`)
       .catch(() => null);
+    const slowLabel = s.slowmodeSeconds >= 60 ? `${Math.round(s.slowmodeSeconds / 60)} min` : `${s.slowmodeSeconds}s`;
     return interaction.reply({
-      content: `✅ Counting is on in <#${s.channelId}> · ${s.allowSameUser ? 'same person can count again' : 'members take turns'} · ${s.mathAllowed ? 'sums allowed' : 'plain numbers only'}.`,
+      content:
+        `✅ Counting is on in <#${s.channelId}> · ${s.allowSameUser ? 'same person can count again' : 'members take turns'} · ${s.mathAllowed ? 'sums allowed' : 'plain numbers only'} · ` +
+        `${s.numbersOnly ? 'numbers-only (chat removed)' : 'chat allowed'} · slowmode ${s.slowmodeSeconds ? slowLabel : 'off'}.`,
       ephemeral: true
     });
   }
@@ -80,7 +87,12 @@ async function execute(interaction) {
       { name: 'Best run', value: fmt(s.record), inline: true },
       { name: 'Last counted by', value: s.lastUserId ? `<@${s.lastUserId}>` : '—', inline: true },
       { name: 'Resets', value: fmt(s.resets) + (s.lastResetBy ? ` (last: <@${s.lastResetBy}>)` : ''), inline: true },
-      { name: 'Rules', value: `${s.allowSameUser ? 'Same person can count again' : 'Take turns'} · ${s.mathAllowed ? 'sums allowed' : 'plain numbers'}`, inline: true }
+      { name: 'Rules', value: `${s.allowSameUser ? 'Same person can count again' : 'Take turns'} · ${s.mathAllowed ? 'sums allowed' : 'plain numbers'}`, inline: true },
+      {
+        name: 'Anti-grief',
+        value: `${s.numbersOnly ? 'Numbers only (chat deleted)' : 'Chat allowed'} · slowmode ${s.slowmodeSeconds ? (s.slowmodeSeconds >= 60 ? `${Math.round(s.slowmodeSeconds / 60)} min` : `${s.slowmodeSeconds}s`) : 'off'}`,
+        inline: true
+      }
     );
   return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
 }

@@ -154,8 +154,18 @@ const GuildConfigSchema = new mongoose.Schema(
       bestBefore: { type: Number, default: 0 }, // best run before the current one (for the 🏆 when it's beaten)
       allowSameUser: { type: Boolean, default: false }, // false = people have to take turns
       mathAllowed: { type: Boolean, default: true }, // "2*5" counts as 10
+      numbersOnly: { type: Boolean, default: true }, // delete normal chatter so the channel stays numbers-only
+      slowmodeSeconds: { type: Number, default: 1200 }, // slowmode applied to the channel (grief protection; 20 min default)
       resets: { type: Number, default: 0 },
       lastResetBy: { type: String, default: null }
+    },
+    // Server Stats channels (/serverstats, dashboard Overview → Server Stats). View-only voice
+    // channels at the top of the server that show live counts, refreshed on a timer. See serverStats.js.
+    serverStats: {
+      enabled: { type: Boolean, default: false },
+      categoryId: { type: String, default: null }, // the "📊 Server Stats" category holding the channels
+      channels: { type: mongoose.Schema.Types.Mixed, default: {} }, // { statKey: channelId }
+      enabledStats: { type: [String], default: ['members', 'online', 'boosts', 'highestxp'] } // which stats show
     },
     // Starboard (/starboard, dashboard Engagement → Starboard).
     starboard: {

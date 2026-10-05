@@ -155,6 +155,7 @@ function onManageTabShown(tab) {
     loadPot();
   }
   if (tab === 'engagement') loadEngagement();
+  if (tab === 'overview') loadServerStats();
   if (tab === 'shop') {
     loadShop();
     attachMemberPicker(document.getElementById('shMember'), { onPick: (u) => loadShopMember(u.id) });
@@ -472,6 +473,11 @@ async function deleteGiveaway(id) {
   const data = await withButton(null, () => manageApi('DELETE', `giveaways/${id}`), '🗑️ Giveaway deleted.');
   if (data) loadGiveaways();
 }
+
+// Overview is the default-visible tab, so load its Server Stats card on first paint.
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.getElementById('statsCard')) loadServerStats();
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!document.getElementById('tab-giveaways')) return;
@@ -1668,6 +1674,8 @@ function fillEngagementForms(d) {
   v('ctChannel', ct.channelId || '');
   c('ctTurns', !ct.allowSameUser);
   c('ctMath', ct.mathAllowed);
+  c('ctNumbersOnly', ct.numbersOnly !== false);
+  v('ctSlowmode', ct.slowmodeSeconds ?? 1200);
   const sb = d.starboard.settings;
   c('sbEnabled', sb.enabled);
   v('sbChannel', sb.channelId || '');
@@ -1744,7 +1752,15 @@ function readEngagement(section) {
   if (section === 'birthdays') {
     return { enabled: c('bdEnabled'), channelId: v('bdChannel') || null, announceHour: v('bdHour'), roleId: v('bdRole') || null, xpGift: v('bdXp') || 0, message: v('bdMessage') };
   }
-  if (section === 'counting') return { enabled: c('ctEnabled'), channelId: v('ctChannel') || null, allowSameUser: !c('ctTurns'), mathAllowed: c('ctMath') };
+  if (section === 'counting')
+    return {
+      enabled: c('ctEnabled'),
+      channelId: v('ctChannel') || null,
+      allowSameUser: !c('ctTurns'),
+      mathAllowed: c('ctMath'),
+      numbersOnly: c('ctNumbersOnly'),
+      slowmodeSeconds: v('ctSlowmode')
+    };
   return {
     enabled: c('sbEnabled'),
     channelId: v('sbChannel') || null,
@@ -2357,6 +2373,47 @@ async function potDrawNow() {
     el.addEventListener('change', renderPotPreview);
   });
 })();
+
+/* ------------------------------------------------------------------ Server Stats channels */
+const statsState = { loaded: false };
+async function loadServerStats() {
+  const card = document.getElementById('statsCard');
+  if (!card || statsState.loaded) return;
+  let d;
+  try {
+    d = await manageApi('GET', 'serverstats');
+  } catch (err) {
+    return;
+  }
+  const s = d.settings;
+  document.getElementById('statsEnabled').checked = !!s.enabled;
+  document.querySelectorAll('.stat-pick').forEach((el) => (el.checked = (s.enabledStats || []).includes(el.value)));
+  document.getElementById('statsStatus').innerHTML =
+    `<span class="status-chip ${s.enabled ? 'good' : 'off'}"><span class="dot"></span>${s.enabled ? 'On' : 'Off'}</span>` +
+    `<span class="status-chip"><span class="dot"></span>${(s.enabledStats || []).length} stat(s)</span>`;
+  statsState.loaded = true;
+}
+async function saveStats() {
+  const enabledStats = [...document.querySelectorAll('.stat-pick:checked')].map((el) => el.value);
+  const body = { enabled: document.getElementById('statsEnabled').checked, enabledStats };
+  const data = await withButton(document.getElementById('statsSaveBtn'), () => manageApi('POST', 'serverstats', body), (d) => {
+    if (d.sync && d.sync.error) return `⚠️ Saved, but ${d.sync.error}`;
+    return '📊 Server Stats saved.';
+  });
+  if (data) {
+    statsState.loaded = false;
+    loadServerStats();
+  }
+}
+async function statsAction(action) {
+  const btn = document.getElementById(action === 'remove' ? 'statsRemoveBtn' : 'statsRefreshBtn');
+  if (action === 'remove' && !confirm('Delete the Server Stats channels?')) return;
+  const data = await withButton(btn, () => manageApi('POST', 'serverstats/action', { action }), action === 'remove' ? '🧹 Stat channels removed.' : '🔄 Stat channels refreshed.');
+  if (data) {
+    statsState.loaded = false;
+    loadServerStats();
+  }
+}
 
 /* ------------------------------------------------------------------ Bubble Factory (idle game) */
 const idleState = { loaded: false, wired: false };

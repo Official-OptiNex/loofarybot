@@ -73,27 +73,37 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   // ================================================================ Counting
   r=await C.saveSettings(guild,{enabled:true}); assert.match(r.error,/channel/);
   r=await C.saveSettings(guild,{enabled:true,channelId:'count'}); assert.equal(r.settings.allowSameUser,false);
+  assert.equal(r.settings.numbersOnly,true,'numbers-only on by default'); assert.equal(r.settings.slowmodeSeconds,1200,'20-min slowmode by default');
   const countCh=guild.channels.cache.get('count');
   let mid=1;
-  function msg(user,content,ch=countCh){ const reacts=[]; return {id:`m${mid++}`,guild,guildId:'g',channelId:ch.id,channel:ch,content,author:{id:user,bot:false,toString:()=>`<@${user}>`},system:false,webhookId:null,react:async(e)=>reacts.push(e),reacts}; }
-  const count=async(user,content)=>{ const m=msg(user,content); const handled=await C.handleCounting(m,cfg()); return {m,handled}; };
-  let x=await count('ann','1'); assert.deepEqual(x.m.reacts,['✅']);
-  x=await count('ben','2 lol'); assert.deepEqual(x.m.reacts,['✅']);
-  x=await count('ann','hello!'); assert.equal(x.handled,false); assert.deepEqual(x.m.reacts,[]);
-  x=await count('ann','(1+2)*1'); assert.deepEqual(x.m.reacts,['✅']); assert.equal(cfg().counting.current,3);
-  const before=sent.length;
-  x=await count('ann','4'); assert.deepEqual(x.m.reacts,['❌']); assert.equal(cfg().counting.current,0);
-  assert.match(sent.at(-1).m.payload.content,/<@ann> counted twice in a row.*ended at \*\*3\*\*.*best: \*\*3\*\*/);
-  assert.equal(sent.length,before+1); assert.equal(cfg().counting.resets,1); assert.equal(cfg().counting.record,3);
-  console.log('✓ counting: right numbers ✅ (sums + trailing chat ok), chatter ignored, counting twice resets with a short message');
+  function msg(user,content,ch=countCh,staff=false){ const reacts=[]; const m={id:`m${mid++}`,guild,guildId:'g',channelId:ch.id,channel:ch,content,author:{id:user,bot:false,toString:()=>`<@${user}>`},member:{permissions:{has:()=>staff}},deletable:true,deleted:false,delete:async()=>{m.deleted=true;},system:false,webhookId:null,react:async(e)=>reacts.push(e),reacts}; return m; }
+  const count=async(user,content,staff=false)=>{ const m=msg(user,content,countCh,staff); const handled=await C.handleCounting(m,cfg()); return {m,handled}; };
 
-  for (const [u,n] of [['ann','1'],['ben','2'],['cat','3']]) await count(u,n);
-  x=await count('ann','4'); assert.deepEqual(x.m.reacts,['✅','🏆'],'beating the best run (3) gets a trophy');
-  x=await count('ben','5'); assert.deepEqual(x.m.reacts,['✅'],'…just once');
-  x=await count('cat','5'); assert.deepEqual(x.m.reacts,['👀'],'same number a moment later: too slow, no reset'); assert.equal(cfg().counting.current,5);
-  x=await count('cat','7'); assert.deepEqual(x.m.reacts,['❌']); assert.match(sent.at(-1).m.payload.content,/said \*\*7\*\* — it was \*\*6\*\*/);
-  x=await count('ann','5'); assert.deepEqual(x.m.reacts,['❌']); assert.match(sent.at(-1).m.payload.content,/starts at \*\*1\*\*/); assert.equal(cfg().counting.resets,2,'no extra reset at 0');
-  console.log('✓ record trophy, a same-number tie is forgiven, wrong numbers reset (and just a hint when already at 0)');
+  let x=await count('ann','1'); assert.deepEqual(x.m.reacts,['✅']);
+  x=await count('ben','2 lol'); assert.deepEqual(x.m.reacts,['✅']); assert.equal(cfg().counting.current,2);
+  x=await count('ann','hello!'); assert.equal(x.handled,true); assert.equal(x.m.deleted,true,'normal chatter is deleted (numbers only)'); assert.equal(cfg().counting.current,2);
+  x=await count('ann','nice run!',true); assert.equal(x.handled,false); assert.equal(x.m.deleted,false,'staff can still talk');
+  x=await count('ann','(1+2)*1'); assert.deepEqual(x.m.reacts,['✅']); assert.equal(cfg().counting.current,3); // last user: ann
+  console.log('✓ counting: right numbers ✅ (sums + trailing chat ok), chatter deleted, staff exempt');
+
+  // Counting twice in a row: deleted, NOT a reset — griefers can't wipe the run.
+  let before=sent.length;
+  x=await count('ann','4'); assert.deepEqual(x.m.reacts,[]); assert.equal(x.m.deleted,true); assert.equal(cfg().counting.current,3,'run kept'); assert.equal(cfg().counting.resets,0);
+  assert.match(sent.at(-1).m.payload.content,/take turns.*count \*\*4\*\*/i); assert.equal(sent.length,before+1);
+  console.log('✓ counting twice is deleted, not a reset — the run survives a griefer');
+
+  // A same-number tie is forgiven; a genuinely wrong number still resets (and records the best run).
+  x=await count('ben','4'); assert.deepEqual(x.m.reacts,['✅']); assert.equal(cfg().counting.current,4); // last user: ben
+  x=await count('cat','4'); assert.deepEqual(x.m.reacts,['👀'],'same number a moment later: too slow, no reset'); assert.equal(cfg().counting.current,4);
+  x=await count('ann','9'); assert.deepEqual(x.m.reacts,['❌']); assert.equal(cfg().counting.current,0,'wrong number resets'); assert.equal(cfg().counting.resets,1); assert.equal(cfg().counting.record,4);
+  assert.match(sent.at(-1).m.payload.content,/said \*\*9\*\* — it was \*\*5\*\*/);
+  console.log('✓ a same-number tie is forgiven; a wrong number still resets and records the best run');
+
+  // Trophy when the previous best (4) is beaten; 💯 milestone.
+  for (const [u,n] of [['ann','1'],['ben','2'],['cat','3'],['ann','4']]) x=await count(u,n);
+  assert.deepEqual(x.m.reacts,['✅'],'up to the old best (4) — no trophy yet');
+  x=await count('ben','5'); assert.deepEqual(x.m.reacts,['✅','🏆'],'passing the best run (4) earns a trophy');
+  console.log('✓ trophy when the best run is beaten');
 
   r=await C.saveSettings(guild,{current:99}); assert.equal(r.settings.current,99); assert.equal(r.settings.record,99);
   x=await count('ben','100'); assert.deepEqual(x.m.reacts,['💯']);

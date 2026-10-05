@@ -363,6 +363,41 @@
           <p class="muted" style="margin-top:0.4rem;">Use the tabs above to configure everything else.</p>
         </div>
       </div>
+
+      <% if (can('settings')) { %>
+      <div class="card" id="statsCard" style="margin-top:1.25rem;">
+        <div class="list-toolbar" style="margin-bottom:0.3rem;">
+          <h3 style="margin:0;">📊 Server Stats channels</h3>
+          <span class="hero-status" id="statsStatus"></span>
+        </div>
+        <p class="muted" style="font-size:0.84rem; margin-top:0;">View-only voice channels pinned at the top of the server that show live counts — members can see them but can't join or type. They refresh about every 30 minutes. The bot needs <strong>Manage Channels</strong>.</p>
+        <div class="settings-card" style="padding:0;">
+          <div class="setting-row">
+            <div><div class="setting-title">Server Stats</div><div class="setting-help">Create the channels and keep them updated.</div></div>
+            <div class="setting-control"><label class="switch"><input type="checkbox" id="statsEnabled"><span class="track"></span></label></div>
+          </div>
+          <div class="setting-row">
+            <div style="width:100%;">
+              <div class="setting-title">Which stats to show</div>
+              <div class="setting-help">Each one becomes its own channel.</div>
+              <div id="statsPicks" style="margin-top:0.55rem; display:flex; flex-wrap:wrap; gap:0.4rem;">
+                <label class="check-pill"><input type="checkbox" class="stat-pick" value="members"><span>👥 Members</span></label>
+                <label class="check-pill"><input type="checkbox" class="stat-pick" value="online"><span>🟢 Online</span></label>
+                <label class="check-pill"><input type="checkbox" class="stat-pick" value="boosts"><span>🚀 Boosts</span></label>
+                <label class="check-pill"><input type="checkbox" class="stat-pick" value="highestxp"><span>🏆 Top XP</span></label>
+                <label class="check-pill"><input type="checkbox" class="stat-pick" value="roles"><span>🎭 Roles</span></label>
+                <label class="check-pill"><input type="checkbox" class="stat-pick" value="channels"><span>💬 Channels</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="savebar" style="position:static; gap:0.5rem; flex-wrap:wrap;">
+            <button class="btn" id="statsSaveBtn" onclick="saveStats()">Save &amp; apply</button>
+            <button class="btn secondary" id="statsRefreshBtn" onclick="statsAction('refresh')">Refresh now</button>
+            <button class="btn secondary" id="statsRemoveBtn" onclick="statsAction('remove')">Remove channels</button>
+          </div>
+        </div>
+      </div>
+      <% } %>
     </div>
 
 <%

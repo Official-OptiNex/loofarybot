@@ -534,11 +534,17 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 ### Counting (`/counting …` or dashboard **Engagement → Counting**)
 - Members count up one number at a time in a counting channel. Right numbers get ✅, every 100 gets
   💯, and the number that beats the best run gets 🏆.
-- A wrong number, or counting twice in a row (with **take turns** on), resets the count to 0 with a
-  short message. If two people send the same right number at the same moment, the slower one gets 👀
-  instead of a reset.
-- Sums like `3*4` count when **allow sums** is on. Messages that don't start with a number are
-  ignored, so people can still chat. If someone deletes the latest count, the bot posts the next number.
+- A **wrong number resets** the count to 0 with a short message. If two people send the same right
+  number at the same moment, the slower one gets 👀 instead of a reset.
+- **Grief protection (on by default):**
+  - **Take turns** — counting twice in a row doesn't reset the run; the extra count is just **deleted**
+    with a "take turns" nudge, so a griefer can't wipe the count by double-posting.
+  - **Numbers only** — normal chat in the channel is deleted so it stays all numbers (staff with
+    *Manage Messages* are exempt). Turn it off to let people chat.
+  - **Slowmode** — the channel is put in slowmode (default **1200s / 20 min**; set 0 to disable) so
+    nobody can spam the channel. Needs *Manage Channels*.
+- Sums like `3*4` count when **allow sums** is on. If someone deletes the latest count, the bot posts
+  the next number.
 - `/counting set` (or the dashboard) fixes the count after an unfair reset.
 
 ### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)
@@ -548,6 +554,17 @@ Members spend XP on fun extras. The shop is open by default and comes with start
   threshold the post is removed, and deleting the original removes the copy too.
 - Stars from the author (unless allowed) and bots don't count. NSFW channels never feed a non-NSFW
   starboard, and you can ignore channels. Threads follow their parent channel.
+
+### Server Stats channels (`/serverstats …` or dashboard **Overview → Server Stats**)
+- View-only **voice channels** pinned at the top of the server (under a 📊 Server Stats category) whose
+  names show live counts. Members can **see** them but can't join or type.
+- Pick any of: **👥 Members · 🟢 Online · 🚀 Boosts · 🏆 Top XP · 🎭 Roles · 💬 Channels** — each is its
+  own channel and toggleable. The online count uses the server's approximate presence count, so it needs
+  no privileged intent.
+- Names refresh **every ~30 minutes** (channel renames are rate-limited, so this is the safe cadence),
+  with a first pass shortly after the bot starts. `/serverstats refresh` updates them on demand.
+- `/serverstats setup` creates them, `stat` shows/hides one, `refresh` updates now, `remove` deletes
+  them all. Needs **Manage Channels**.
 
 ### Booster perks (`/perks` or dashboard **Leveling → Booster perks**)
 Server boosters get, by default:

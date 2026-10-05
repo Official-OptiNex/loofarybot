@@ -1,6 +1,7 @@
 // Counting game: members count up one number at a time in a chosen channel. The bot reacts ✅ to each
 // correct number; a wrong number (or counting twice in a row) resets the count to 0. Tracks the best run.
 // Fully automatic once a channel is picked (/counting setup or dashboard Engagement → Counting).
+const { PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
 
 // Two people typing the same next number at the same moment: the slower one isn't punished.
@@ -20,7 +21,9 @@ function countingSettings(config) {
     resets: Math.max(0, c.resets || 0),
     lastResetBy: c.lastResetBy || null,
     allowSameUser: !!c.allowSameUser,
-    mathAllowed: c.mathAllowed !== false
+    mathAllowed: c.mathAllowed !== false,
+    numbersOnly: c.numbersOnly !== false,
+    slowmodeSeconds: Number.isFinite(c.slowmodeSeconds) ? Math.max(0, Math.min(21600, c.slowmodeSeconds)) : 1200
   };
 }
 
@@ -112,7 +115,16 @@ async function handleCounting(message, config) {
   if (!s.enabled || !s.channelId || message.channelId !== s.channelId) return false;
   if (message.author.bot || message.webhookId || message.system) return false;
   const n = parseCount(message.content, s.mathAllowed);
-  if (n === null) return false; // just chatting
+  if (n === null) {
+    // Numbers-only: quietly remove normal chatter so the channel stays clean (staff are exempt so they
+    // can still post notes). The count is never touched by non-numbers.
+    const isStaff = message.member?.permissions?.has(PermissionFlagsBits.ManageMessages);
+    if (s.numbersOnly && !isStaff && message.deletable !== false) {
+      await message.delete().catch(() => null);
+      return true;
+    }
+    return false; // just chatting (numbers-only off, or a staff message)
+  }
 
   const userId = message.author.id;
   const filter = { guildId: message.guild.id, 'counting.channelId': s.channelId, 'counting.enabled': true, 'counting.current': n - 1 };
@@ -146,12 +158,20 @@ async function handleCounting(message, config) {
     return true;
   }
 
-  const twice = n === fresh.current + 1 && fresh.lastUserId === userId && !fresh.allowSameUser;
+  // Counting twice in a row: don't let it reset the run (griefers love that). Just remove the extra
+  // count and nudge them to wait their turn — the count stays exactly where it was.
+  if (n === fresh.current + 1 && fresh.lastUserId === userId && !fresh.allowSameUser) {
+    if (message.deletable !== false) await message.delete().catch(() => null);
+    const warn = await message.channel
+      .send({ content: `⏳ ${message.author}, take turns — wait for someone else to count **${(fresh.current + 1).toLocaleString('en-US')}**.`, allowedMentions: { parse: [] } })
+      .catch(() => null);
+    if (warn?.delete) setTimeout(() => warn.delete().catch(() => null), 8000);
+    return true;
+  }
+
   await react(message, '❌');
   if (fresh.current === 0) {
-    await message.channel
-      .send({ content: twice ? '⚠️ Take turns — let someone else count next! The next number is **1**.' : '⚠️ The count starts at **1**.', allowedMentions: { parse: [] } })
-      .catch(() => null);
+    await message.channel.send({ content: '⚠️ The count starts at **1**.', allowedMentions: { parse: [] } }).catch(() => null);
     return true;
   }
 
@@ -170,7 +190,7 @@ async function handleCounting(message, config) {
     }
   );
   if (reset.modifiedCount !== 1) return true;
-  const why = twice ? "counted twice in a row (take turns!)" : `said **${n.toLocaleString('en-US')}** — it was **${(fresh.current + 1).toLocaleString('en-US')}**`;
+  const why = `said **${n.toLocaleString('en-US')}** — it was **${(fresh.current + 1).toLocaleString('en-US')}**`;
   await message.channel
     .send({
       content: `💥 ${message.author} ${why}. The count ended at **${fresh.current.toLocaleString('en-US')}** · best: **${Math.max(fresh.record, fresh.current).toLocaleString('en-US')}**. Start again from **1**!`,
@@ -204,6 +224,12 @@ function cleanSettings(guild, input) {
   }
   if (input.allowSameUser !== undefined) patch['counting.allowSameUser'] = !!input.allowSameUser;
   if (input.mathAllowed !== undefined) patch['counting.mathAllowed'] = !!input.mathAllowed;
+  if (input.numbersOnly !== undefined) patch['counting.numbersOnly'] = !!input.numbersOnly;
+  if (input.slowmodeSeconds !== undefined && input.slowmodeSeconds !== null && input.slowmodeSeconds !== '') {
+    const sm = Number.parseInt(input.slowmodeSeconds, 10);
+    if (!(sm >= 0 && sm <= 21600)) return { error: 'Slowmode must be 0–21600 seconds (up to 6 hours).' };
+    patch['counting.slowmodeSeconds'] = sm;
+  }
   if (input.current !== undefined && input.current !== null && input.current !== '') {
     const n = Number.parseInt(input.current, 10);
     if (!(n >= 0 && n <= 1e9)) return { error: 'The count must be a whole number from 0.' };
@@ -224,7 +250,13 @@ async function saveSettings(guild, input) {
   if (patch['counting.current'] !== undefined) update.$max = { 'counting.record': patch['counting.current'] };
   await GuildConfig.updateOne({ guildId: guild.id }, update, { upsert: true });
   const fresh = await GuildConfig.findOne({ guildId: guild.id }, { counting: 1 }).lean();
-  return { settings: countingSettings(fresh) };
+  const settings = countingSettings(fresh);
+  // Keep the channel's slowmode matched to the setting (grief protection). Best effort — needs Manage Channels.
+  if (settings.enabled && settings.channelId) {
+    const ch = guild.channels.cache.get(settings.channelId);
+    if (ch?.setRateLimitPerUser) await ch.setRateLimitPerUser(settings.slowmodeSeconds, 'Counting channel slowmode').catch(() => null);
+  }
+  return { settings };
 }
 
 function registerCountingEvents(client) {
