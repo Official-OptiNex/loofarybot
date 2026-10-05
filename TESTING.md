@@ -129,8 +129,14 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] **Staff:** `/idle admin toggle enabled:false` turns it off (non-staff get "needs Manage Server").
       `/idle admin give @user amount:500` adds 500 🫧 to their bank; `/idle admin take @user amount:200`
       removes 200; `/idle admin reset @user` wipes their factory. Each replies with the new balance.
+- [ ] **Staff:** `/idle admin upgrade which:🧽 Scrubber cost:50 effect:3 max_level:30 available:true`
+      retunes that upgrade (`/idle help` and the dashboard reflect the new cost/effect/max). Setting
+      `available:false` removes it from `/idle upgrades` but keeps it in the dashboard editor.
+      `/idle admin upgrades_reset which:🧽 Scrubber` restores one upgrade; `/idle admin upgrades_reset`
+      (no `which`) restores them all.
 - [ ] Dashboard: the 🫧 header bubbles animate; the **At these settings** preview tiles update live as
-      you change a number (before saving); the **Upgrade tree** expands; the **"Tub is full" alerts**
+      you change a number (before saving); the **🏭 Upgrades** editor lists every upgrade with editable
+      Cost / Effect / Max / On fields, and **Save** / **Reset to defaults** persist and reload; the **"Tub is full" alerts**
       toggle and **Fallback channel** save and reload correctly; changing a number and saving sticks;
       the sidebar **Bubble Factory** switch and the card's switch stay in sync; no sideways scroll on mobile.
 
@@ -186,6 +192,9 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       is put in **20-min slowmode** (adjust with the `slowmode` option or the dashboard).
 - [ ] **Grief protection:** the same account counting twice in a row → its second message is **deleted**
       with a "take turns" nudge and the count is **kept** (not reset). A **wrong** number still resets.
+- [ ] **Can't say a number then delete it:** count a number, then delete your own message → the bot
+      re-posts "counted **N** then deleted it — that count still stands" and the run does **not** rewind;
+      the next number is still **N+1**.
 - [ ] **Numbers only:** send a normal chat message (`hello`) in the counting channel as a non-mod →
       it's deleted. As a mod (Manage Messages) → it stays. `/counting set number:2` fixes the count.
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the

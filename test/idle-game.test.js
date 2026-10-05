@@ -132,5 +132,34 @@ const H=3600000;
   const em=I.factoryEmbed(await I.getFactory('g','ann'),s,{name:'Ann',now}).data;
   assert.match(em.title,/Ann's Bubble Factory/); assert.ok(em.fields.find((x)=>x.name.includes('Bank')));
   console.log('✓ the factory embed builds');
+
+  // ---- configurable upgrades (per-guild cost / effect / max / enabled)
+  const gg={id:'g'};
+  const freshCfg=async()=>I.idleSettings(await M('GuildConfig').findOne({guildId:'g'}).lean());
+  let up=await I.setUpgrade(gg,'scrubber',{baseCost:50,effect:100});
+  assert.equal(up.upgrade.baseCost,50); assert.equal(up.upgrade.rate,100,'effect maps to the rate field');
+  let s2=await freshCfg();
+  assert.equal(I.upgradeCost('scrubber',0,s2.upgradeById),50,'override base cost is used');
+  assert.equal(I.ratePerHour({active:true,upgrades:{scrubber:1}},s2),60+100,'override effect used in the rate');
+  await I.setUpgrade(gg,'tub',{effect:5}); await I.setUpgrade(gg,'shine',{effect:20});
+  s2=await freshCfg();
+  assert.equal(I.offlineCapHours({upgrades:{tub:3}},s2),8+15,'tub effect (5h) × level 3');
+  assert.equal(I.ratePerHour({active:true,upgrades:{shine:2}},s2),Math.round(60*(1+0.2*2)),'shine effect 20%/level');
+  // disabling an upgrade removes it from the buyable set (but keeps it listed for the dashboard)
+  await I.setUpgrade(gg,'jets',{enabled:false});
+  s2=await freshCfg();
+  assert.ok(!s2.upgradeById.jets,'disabled upgrade is not buyable');
+  assert.equal(s2.allUpgrades.find((u)=>u.id==='jets').enabled,false,'still listed, marked disabled');
+  assert.match((await I.buyUpgrade('g','ann','jets',s2)).error,/No such upgrade/);
+  // bulk save, then reset
+  await I.saveUpgrades(gg,[{id:'scrubber',baseCost:200,effect:40,max:5,enabled:true}]);
+  s2=await freshCfg();
+  assert.equal(I.upgradeCost('scrubber',0,s2.upgradeById),200); assert.equal(s2.upgradeById.scrubber.max,5);
+  assert.ok(s2.upgradeById.jets,'bulk save (without jets) clears the old jets override → buyable again');
+  await I.resetUpgrades(gg);
+  s2=await freshCfg();
+  assert.equal(I.upgradeCost('scrubber',0,s2.upgradeById),100,'back to the default cost after reset');
+  console.log('✓ configurable upgrades: cost/effect/max/enabled, disable, bulk save and reset');
+
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});

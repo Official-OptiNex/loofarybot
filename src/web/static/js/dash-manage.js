@@ -2513,17 +2513,51 @@ function renderIdlePreview() {
   }
 }
 
-function renderIdleTree() {
+// Editable upgrade table — each row tunes one upgrade's cost, effect, max level and availability.
+function renderIdleUpgrades(list) {
   const el = document.getElementById('idleTree');
-  if (!el) return;
-  el.innerHTML = IDLE_UPGRADES
-    .map((u) => `<div class="idle-tree-row"><span class="emo">${u.emoji}</span><span class="nm">${esc(u.name)}</span><span class="bl">· ${esc(u.blurb)}</span><span class="cost">from ${fmtN(u.base)} 🫧</span></div>`)
+  if (!el || !Array.isArray(list)) return;
+  el.innerHTML = list
+    .map((u) => {
+      const effect = u.rate ?? u.shine ?? u.tub ?? 0;
+      const unit = u.rate !== undefined ? '🫧/hr' : u.shine !== undefined ? '%' : 'h';
+      return `<div class="idle-up-row" data-id="${u.id}">
+        <div class="idle-up-name">${u.emoji} <strong>${esc(u.name)}</strong></div>
+        <label class="idle-up-f">Cost <input type="number" class="iu-cost" min="1" value="${u.baseCost}"></label>
+        <label class="idle-up-f">Effect <input type="number" class="iu-effect" min="0" value="${effect}"> <span class="muted">${unit}</span></label>
+        <label class="idle-up-f">Max <input type="number" class="iu-max" min="1" value="${u.max || ''}" placeholder="∞"></label>
+        <label class="idle-up-f"><input type="checkbox" class="iu-enabled" ${u.enabled !== false ? 'checked' : ''}> On</label>
+      </div>`;
+    })
     .join('');
+}
+async function saveIdleUpgrades() {
+  const upgrades = [...document.querySelectorAll('.idle-up-row')].map((row) => ({
+    id: row.dataset.id,
+    baseCost: row.querySelector('.iu-cost').value,
+    effect: row.querySelector('.iu-effect').value,
+    max: row.querySelector('.iu-max').value || null,
+    enabled: row.querySelector('.iu-enabled').checked
+  }));
+  const data = await withButton(document.getElementById('idleUpSaveBtn'), () => manageApi('POST', 'leveling/idle/upgrades', { upgrades }), '🏭 Upgrades saved.');
+  if (data) {
+    renderIdleUpgrades(data.upgrades);
+    idleState.loaded = false;
+    loadIdle();
+  }
+}
+async function resetIdleUpgrades() {
+  if (!confirm('Reset all upgrades to their defaults?')) return;
+  const data = await withButton(document.getElementById('idleUpResetBtn'), () => manageApi('POST', 'leveling/idle/upgrades', { reset: true }), '↩️ Upgrades reset to defaults.');
+  if (data) {
+    renderIdleUpgrades(data.upgrades);
+    idleState.loaded = false;
+    loadIdle();
+  }
 }
 
 async function loadIdle() {
   if (!document.getElementById('idleCard')) return;
-  renderIdleTree();
   let d;
   try {
     d = await manageApi('GET', 'leveling/idle');
@@ -2554,6 +2588,7 @@ async function loadIdle() {
     idleState.wired = true;
   }
   renderIdlePreview();
+  renderIdleUpgrades(s.allUpgrades);
   document.getElementById('idleStatus').innerHTML = [
     `<span class="status-chip ${s.enabled ? 'good' : 'off'}"><span class="dot"></span>${s.enabled ? 'On' : 'Off'}</span>`,
     `<span class="status-chip"><span class="dot"></span>${s.dailyXpCap > 0 ? `${fmtN(s.dailyXpCap)} XP/day cap` : 'cash-out off'}</span>`,

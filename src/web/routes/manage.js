@@ -758,6 +758,15 @@ router.post('/guilds/:guildId/leveling/idle', ...guard('leveling'), async (req, 
   res.json({ ok: true, settings: saved.settings });
 });
 
+// Save the whole upgrade table (cost / effect / max / enabled per upgrade), or reset it.
+router.post('/guilds/:guildId/leveling/idle/upgrades', ...guard('leveling'), async (req, res) => {
+  const b = req.body || {};
+  const result = b.reset ? await idleGame.resetUpgrades(req.guild) : await idleGame.saveUpgrades(req.guild, b.upgrades || []);
+  if (result.error) return bad(res, result.error);
+  res.locals.audit = { section: 'Leveling', action: b.reset ? 'Reset the Bubble Factory upgrades' : 'Tuned the Bubble Factory upgrades' };
+  res.json({ ok: true, upgrades: result.upgrades });
+});
+
 // ---------------------------------------------------------------- Member XP (/levels givexp · takexp · resetxp)
 
 router.post('/guilds/:guildId/levels/member-xp', ...guard('leveling'), async (req, res) => {

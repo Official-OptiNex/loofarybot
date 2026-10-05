@@ -9,23 +9,51 @@ const { getCachedConfig } = require('../../../database/configCache');
 
 const HOUR = 3600000;
 
-// The upgrade tree. `rate` adds bubbles/hour per level; `shine` is a +% multiplier per level; `tub`
-// adds hours to the offline cap. Costs grow geometrically, so there's always a next goal.
-const UPGRADES = [
-  { id: 'scrubber', name: 'Scrubber', emoji: '🧽', baseCost: 100, growth: 1.55, rate: 30, blurb: '+30 🫧/hr' },
-  { id: 'soap', name: 'Fancy Soap', emoji: '🧴', baseCost: 600, growth: 1.6, rate: 90, blurb: '+90 🫧/hr' },
-  { id: 'jets', name: 'Jet Nozzles', emoji: '🚿', baseCost: 3000, growth: 1.65, rate: 260, blurb: '+260 🫧/hr' },
-  { id: 'tub', name: 'Bigger Tub', emoji: '🛁', baseCost: 500, growth: 1.9, tub: 2, max: 12, blurb: '+2h offline storage' },
-  { id: 'shine', name: 'Extra Shine', emoji: '✨', baseCost: 4000, growth: 2.0, shine: 10, max: 15, blurb: '+10% to all bubbles' }
+// The default upgrade tree. `rate` adds bubbles/hour per level; `shine` is a +% multiplier per level;
+// `tub` adds hours to the offline cap. Costs grow geometrically, so there's always a next goal. Each
+// upgrade's cost, effect strength, max level and whether it's available are configurable per server
+// (see effectiveUpgrades / setUpgrade, /idle admin upgrade and the dashboard).
+const DEFAULT_UPGRADES = [
+  { id: 'scrubber', name: 'Scrubber', emoji: '🧽', baseCost: 100, growth: 1.55, rate: 30 },
+  { id: 'soap', name: 'Fancy Soap', emoji: '🧴', baseCost: 600, growth: 1.6, rate: 90 },
+  { id: 'jets', name: 'Jet Nozzles', emoji: '🚿', baseCost: 3000, growth: 1.65, rate: 260 },
+  { id: 'tub', name: 'Bigger Tub', emoji: '🛁', baseCost: 500, growth: 1.9, tub: 2, max: 12 },
+  { id: 'shine', name: 'Extra Shine', emoji: '✨', baseCost: 4000, growth: 2.0, shine: 10, max: 15 }
 ];
-const UPGRADE_BY_ID = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
+const DEFAULT_BY_ID = Object.fromEntries(DEFAULT_UPGRADES.map((u) => [u.id, u]));
+// Which field carries an upgrade's effect magnitude.
+const effectKey = (u) => ('rate' in u ? 'rate' : 'shine' in u ? 'shine' : 'tub' in u ? 'tub' : null);
+function blurbFor(u) {
+  if (u.rate !== undefined) return `+${u.rate} 🫧/hr`;
+  if (u.shine !== undefined) return `+${u.shine}% to all bubbles`;
+  if (u.tub !== undefined) return `+${u.tub}h offline storage`;
+  return '';
+}
 
 const fmt = (n) => Number(Math.round(n)).toLocaleString('en-US');
 const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
 
+/** The upgrade tree for a guild: defaults merged with its per-upgrade overrides (cost, effect, max,
+ * enabled). Returns every upgrade (including disabled ones) in the default order, with a fresh blurb. */
+function effectiveUpgrades(config) {
+  const ov = (config && config.idleGame && config.idleGame.upgradeConfig) || {};
+  return DEFAULT_UPGRADES.map((def) => {
+    const o = ov[def.id] || {};
+    const u = { ...def, enabled: o.enabled !== false };
+    if (Number.isFinite(Number(o.baseCost)) && Number(o.baseCost) > 0) u.baseCost = Math.round(Number(o.baseCost));
+    if (Number.isFinite(Number(o.max)) && Number(o.max) > 0) u.max = Math.round(Number(o.max));
+    const k = effectKey(def);
+    if (k && Number.isFinite(Number(o.effect)) && Number(o.effect) >= 0) u[k] = Math.round(Number(o.effect));
+    u.blurb = blurbFor(u);
+    return u;
+  });
+}
+
 function idleSettings(config) {
   const g = (config && config.idleGame) || {};
   const int = (v, d, min, max) => (Number.isFinite(Number(v)) && v !== null ? Math.min(Math.max(Math.round(Number(v)), min), max) : d);
+  const all = effectiveUpgrades(config);
+  const upgrades = all.filter((u) => u.enabled !== false); // the ones members can actually buy
   return {
     enabled: !!g.enabled,
     baseRate: int(g.baseRate, 60, 1, 100000), // bubbles/hour at level 0
@@ -33,7 +61,10 @@ function idleSettings(config) {
     bubblesPerXp: int(g.bubblesPerXp, 10, 1, 100000), // bubbles needed for 1 XP at cash-out
     dailyXpCap: int(g.dailyXpCap, 300, 0, 100000), // most XP one member can cash out per UTC day
     fullAlerts: g.fullAlerts !== false, // DM a member once when their tub fills (default on)
-    fullAlertChannelId: g.fullAlertChannelId || null // fallback channel when DMs are closed
+    fullAlertChannelId: g.fullAlertChannelId || null, // fallback channel when DMs are closed
+    upgrades,
+    upgradeById: Object.fromEntries(upgrades.map((u) => [u.id, u])),
+    allUpgrades: all // includes disabled ones, for the dashboard/admin views
   };
 }
 
@@ -53,23 +84,27 @@ function setLevel(state, id, level) {
   state.markModified?.('upgrades');
 }
 
-/** Cost of the next level of an upgrade (ceil of a geometric curve). */
-function upgradeCost(id, level) {
-  const u = UPGRADE_BY_ID[id];
+/** Cost of the next level of an upgrade (ceil of a geometric curve). Uses the guild's effective
+ * upgrade defs when given (via a settings object's upgradeById), else the defaults. */
+function upgradeCost(id, level, byId = DEFAULT_BY_ID) {
+  const u = (byId && byId[id]) || DEFAULT_BY_ID[id];
   return Math.ceil(u.baseCost * Math.pow(u.growth, level));
 }
 
 /** Bubbles produced per hour, from the base rate, flat upgrades, and the shine multiplier. */
 function ratePerHour(state, s) {
+  const list = s.upgrades || DEFAULT_UPGRADES;
   let flat = s.baseRate;
-  for (const u of UPGRADES) if (u.rate) flat += u.rate * levelOf(state, u.id);
-  const shine = 1 + 0.1 * levelOf(state, 'shine');
+  for (const u of list) if (u.rate) flat += u.rate * levelOf(state, u.id);
+  const shineDef = (s.upgradeById || DEFAULT_BY_ID).shine;
+  const shine = 1 + ((shineDef?.shine ?? 10) / 100) * levelOf(state, 'shine');
   return Math.round(flat * shine);
 }
 
 /** How many hours of production the factory can bank while you're away. */
 function offlineCapHours(state, s) {
-  return s.offlineHours + 2 * levelOf(state, 'tub');
+  const tubDef = (s.upgradeById || DEFAULT_BY_ID).tub;
+  return s.offlineHours + (tubDef?.tub ?? 2) * levelOf(state, 'tub');
 }
 
 /** Bubbles waiting to be collected right now (capped by the offline window). A paused/never-started
@@ -129,12 +164,12 @@ async function collect(guildId, userId, s, now = Date.now()) {
 /** Buys one level of an upgrade, paying from the bank. Spends collected bubbles only — the player
  * has to Collect their pending bubbles first (so the Collect step actually means something). */
 async function buyUpgrade(guildId, userId, id, s) {
-  const u = UPGRADE_BY_ID[id];
+  const u = (s.upgradeById || DEFAULT_BY_ID)[id];
   if (!u) return { error: 'No such upgrade.' };
   const state = await getFactory(guildId, userId);
   const level = levelOf(state, id);
   if (u.max && level >= u.max) return { error: `${u.name} is already maxed (${u.max}).`, state };
-  const cost = upgradeCost(id, level);
+  const cost = upgradeCost(id, level, s.upgradeById);
   if (state.bank < cost) return { error: `That costs ${fmt(cost)} 🫧 — you have ${fmt(state.bank)}.`, state, cost };
   state.bank -= cost;
   setLevel(state, id, level + 1);
@@ -265,10 +300,12 @@ function bar(current, max, width = 14) {
 }
 
 /** The upgrade we nudge the player toward: the biggest one they can afford, else the cheapest next. */
-function recommendedUpgrade(state) {
-  const opts = UPGRADES.map((u) => {
+function recommendedUpgrade(state, s) {
+  const list = s?.upgrades || DEFAULT_UPGRADES;
+  const byId = s?.upgradeById || DEFAULT_BY_ID;
+  const opts = list.map((u) => {
     const lvl = levelOf(state, u.id);
-    return { u, lvl, maxed: !!(u.max && lvl >= u.max), cost: upgradeCost(u.id, lvl) };
+    return { u, lvl, maxed: !!(u.max && lvl >= u.max), cost: upgradeCost(u.id, lvl, byId) };
   }).filter((o) => !o.maxed);
   if (!opts.length) return null;
   const affordable = opts.filter((o) => state.bank >= o.cost).sort((x, y) => y.cost - x.cost)[0];
@@ -284,12 +321,12 @@ function factoryEmbed(state, s, { name, now = Date.now() } = {}) {
   const full = capBubbles > 0 && pending >= capBubbles;
   const pct = capBubbles > 0 ? Math.round((pending / capBubbles) * 100) : 0;
 
-  const owned = UPGRADES.filter((u) => levelOf(state, u.id));
+  const owned = (s.upgrades || DEFAULT_UPGRADES).filter((u) => levelOf(state, u.id));
   const ownedStr = owned.length
     ? owned.map((u) => `${u.emoji} **${u.name}** · Lv ${levelOf(state, u.id)}${u.max ? `/${u.max}` : ''}`).join('\n')
     : '_None yet — open **⬆️ Upgrades**._';
 
-  const rec = recommendedUpgrade(state);
+  const rec = recommendedUpgrade(state, s);
   const recLine = !rec
     ? '🏆 **Every upgrade maxed** — you’re a Bubble Baron!'
     : rec.affordable
@@ -360,10 +397,10 @@ function upgradesView(state, s, userId, now = Date.now()) {
     );
   const rows = [];
   let current = new ActionRowBuilder();
-  for (const u of UPGRADES) {
+  for (const u of (s.upgrades || DEFAULT_UPGRADES)) {
     const level = levelOf(state, u.id);
     const maxed = u.max && level >= u.max;
-    const cost = upgradeCost(u.id, level);
+    const cost = upgradeCost(u.id, level, s.upgradeById);
     const can = state.bank >= cost;
     const status = maxed ? '✅ **MAXED**' : can ? `🟢 buy for **${fmt(cost)}** 🫧` : `🔒 **${fmt(cost)}** 🫧 · ${fmt(cost - state.bank)} to go`;
     embed.addFields({
@@ -504,8 +541,78 @@ async function saveSettings(guild, input) {
   return { settings: idleSettings(fresh) };
 }
 
+// ---------------------------------------------------------------- Upgrade configuration (admin)
+
+const numOr = (v, min, max) => {
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
+};
+
+/** Overrides one upgrade's cost / effect / max level / availability for a guild. */
+async function setUpgrade(guild, id, patch = {}) {
+  if (!DEFAULT_BY_ID[id]) return { error: 'No such upgrade.' };
+  const set = {};
+  if (patch.baseCost !== undefined && patch.baseCost !== null && patch.baseCost !== '') {
+    const n = numOr(patch.baseCost, 1, 1e9);
+    if (n === undefined) return { error: 'Base cost must be 1–1,000,000,000.' };
+    set[`idleGame.upgradeConfig.${id}.baseCost`] = n;
+  }
+  if (patch.effect !== undefined && patch.effect !== null && patch.effect !== '') {
+    const n = numOr(patch.effect, 0, 1e6);
+    if (n === undefined) return { error: 'Effect must be 0–1,000,000.' };
+    set[`idleGame.upgradeConfig.${id}.effect`] = n;
+  }
+  if (patch.max !== undefined && patch.max !== null && patch.max !== '') {
+    const n = numOr(patch.max, 1, 1000);
+    if (n === undefined) return { error: 'Max level must be 1–1000.' };
+    set[`idleGame.upgradeConfig.${id}.max`] = n;
+  }
+  if (patch.enabled !== undefined) set[`idleGame.upgradeConfig.${id}.enabled`] = !!patch.enabled;
+  if (!Object.keys(set).length) return { error: 'Nothing to change.' };
+  await GuildConfig.updateOne({ guildId: guild.id }, { $set: set }, { upsert: true });
+  const fresh = await GuildConfig.findOne({ guildId: guild.id }, { idleGame: 1 }).lean();
+  return { upgrades: effectiveUpgrades(fresh), upgrade: effectiveUpgrades(fresh).find((u) => u.id === id) };
+}
+
+/** Saves the whole upgrade table at once (dashboard). `list` is [{ id, baseCost, effect, max, enabled }]. */
+async function saveUpgrades(guild, list) {
+  const cfg = {};
+  for (const row of Array.isArray(list) ? list : []) {
+    if (!row || !DEFAULT_BY_ID[row.id]) continue;
+    const o = {};
+    const bc = numOr(row.baseCost, 1, 1e9);
+    if (bc !== undefined) o.baseCost = bc;
+    const ef = numOr(row.effect, 0, 1e6);
+    if (ef !== undefined) o.effect = ef;
+    const mx = numOr(row.max, 1, 1000);
+    if (mx !== undefined) o.max = mx;
+    o.enabled = row.enabled !== false;
+    cfg[row.id] = o;
+  }
+  await GuildConfig.updateOne({ guildId: guild.id }, { $set: { 'idleGame.upgradeConfig': cfg } }, { upsert: true });
+  const fresh = await GuildConfig.findOne({ guildId: guild.id }, { idleGame: 1 }).lean();
+  return { upgrades: effectiveUpgrades(fresh) };
+}
+
+/** Clears all (or one) upgrade overrides, back to the defaults. */
+async function resetUpgrades(guild, id = null) {
+  if (id) {
+    if (!DEFAULT_BY_ID[id]) return { error: 'No such upgrade.' };
+    await GuildConfig.updateOne({ guildId: guild.id }, { $set: { [`idleGame.upgradeConfig.${id}`]: {} } }, { upsert: true });
+  } else {
+    await GuildConfig.updateOne({ guildId: guild.id }, { $set: { 'idleGame.upgradeConfig': {} } }, { upsert: true });
+  }
+  const fresh = await GuildConfig.findOne({ guildId: guild.id }, { idleGame: 1 }).lean();
+  return { upgrades: effectiveUpgrades(fresh) };
+}
+
 module.exports = {
-  UPGRADES,
+  UPGRADES: DEFAULT_UPGRADES,
+  DEFAULT_UPGRADES,
+  effectiveUpgrades,
+  setUpgrade,
+  saveUpgrades,
+  resetUpgrades,
   idleSettings,
   upgradeCost,
   ratePerHour,

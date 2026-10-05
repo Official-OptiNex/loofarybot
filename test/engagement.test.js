@@ -108,7 +108,12 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   r=await C.saveSettings(guild,{current:99}); assert.equal(r.settings.current,99); assert.equal(r.settings.record,99);
   x=await count('ben','100'); assert.deepEqual(x.m.reacts,['💯']);
   await C.handleCountDeleted({guildId:'g',channelId:'count',channel:countCh,id:x.m.id});
-  assert.match(sent.at(-1).m.payload.content,/<@ben> deleted their count \(\*\*100\*\*\)\. The next number is \*\*101\*\*/);
+  const record=sent.at(-1).m;
+  assert.match(record.payload.content,/<@ben> counted \*\*100\*\* then deleted it — that count still stands\. Next number is \*\*101\*\*/);
+  assert.equal(cfg().counting.current,100,'deleting your count never rewinds the run');
+  assert.equal(cfg().counting.lastMessageId,record.id,'the bot re-post becomes the authoritative record');
+  // The bot's own re-post being deleted must not loop into another re-post.
+  const afterRecord=sent.length; await C.handleCountDeleted({guildId:'g',channelId:'count',channel:countCh,id:record.id,author:{bot:true}}); assert.equal(sent.length,afterRecord,'a deleted bot record does not re-post');
   const beforeOther=sent.length; await C.handleCountDeleted({guildId:'g',channelId:'count',channel:countCh,id:'old'}); assert.equal(sent.length,beforeOther);
   x=await C.handleCounting(msg('ann','1',guild.channels.cache.get('general')),cfg()); assert.equal(x,false,'other channels untouched');
   // Race: two people send 101 at the same moment — only one counts.

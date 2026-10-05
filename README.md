@@ -226,11 +226,15 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
 - `/idle start` / `/idle stop` start and pause your own factory. **Staff commands**
   (`/idle admin …`, needs Manage Server): `toggle` turns the game on/off server-wide,
   `give @user <amount>` rewards bubbles straight into someone's bank, `take @user <amount>` removes
-  them, and `reset @user` wipes a factory back to a fresh start.
+  them, `reset @user` wipes a factory back to a fresh start, and `upgrade` / `upgrades_reset` tune the
+  upgrade tree.
+- **Configurable upgrades:** each upgrade's **base cost**, **effect per level**, **max level** and
+  whether it's **available** can be tuned per server — with `/idle admin upgrade` or the dashboard's
+  **🏭 Upgrades** editor (Save / Reset to defaults). Disabled upgrades vanish from the shop.
 - The dashboard (Leveling tab) turns it on and sets base production, offline hours, cash-out rate and
   daily cap — grouped into **Core**, **Cash-out** and **"Tub is full" alerts** sections with a live
   **"At these settings"** preview (level-0 output, full-tub size, daily cap in bubbles, time to earn
-  the cap), an **upgrade tree** reference, and the **biggest factories** leaderboard, all under an
+  the cap), the editable **🏭 Upgrades** table, and the **biggest factories** leaderboard, all under an
   animated bubble header.
 
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)

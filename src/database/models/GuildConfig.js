@@ -222,7 +222,8 @@ const GuildConfigSchema = new mongoose.Schema(
       bubblesPerXp: { type: Number, default: 10 }, // bubbles needed for 1 XP at cash-out
       dailyXpCap: { type: Number, default: 300 }, // most XP a member can cash out per UTC day (0 = cash-out off)
       fullAlerts: { type: Boolean, default: true }, // DM a member once when their tub fills up
-      fullAlertChannelId: { type: String, default: null } // fallback channel if the member's DMs are closed
+      fullAlertChannelId: { type: String, default: null }, // fallback channel if the member's DMs are closed
+      upgradeConfig: { type: mongoose.Schema.Types.Mixed, default: {} } // per-upgrade overrides: { id: { baseCost, effect, max, enabled } }
     },
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).
