@@ -192,6 +192,9 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       is put in **20-min slowmode** (adjust with the `slowmode` option or the dashboard).
 - [ ] **Grief protection:** the same account counting twice in a row → its second message is **deleted**
       with a "take turns" nudge and the count is **kept** (not reset). A **wrong** number still resets.
+- [ ] **Can't say a number then delete it:** count a number, then delete your own message → the bot
+      re-posts "counted **N** then deleted it — that count still stands" and the run does **not** rewind;
+      the next number is still **N+1**.
 - [ ] **Numbers only:** send a normal chat message (`hello`) in the counting channel as a non-mod →
       it's deleted. As a mod (Manage Messages) → it stays. `/counting set number:2` fixes the count.
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the

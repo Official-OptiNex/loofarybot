@@ -200,16 +200,28 @@ async function handleCounting(message, config) {
   return true;
 }
 
-// Someone deleted the latest count: say what the next number is, so the game isn't left confusing.
+// Someone deleted the latest count to try to hide/rewind it. Deleting a message never touches the
+// stored count, so the run already stands — but we re-post it as a bot message so the record can't be
+// erased from the channel, and make THAT message the authoritative last count (so it can't be quietly
+// rewound by deleting again). The grief ("say a number then delete it") simply doesn't work.
 async function handleCountDeleted(message) {
   if (!message.guildId) return;
+  if (message.author?.bot) return; // our own re-post was removed — don't loop
   const config = await GuildConfig.findOne({ guildId: message.guildId }, { counting: 1 }).lean();
   const s = countingSettings(config);
   if (!s.enabled || message.channelId !== s.channelId || s.lastMessageId !== message.id) return;
   const channel = message.channel || message.client?.channels.cache.get(message.channelId);
-  await channel
-    ?.send({ content: `⚠️ <@${s.lastUserId}> deleted their count (**${s.current.toLocaleString('en-US')}**). The next number is **${(s.current + 1).toLocaleString('en-US')}**.`, allowedMentions: { parse: [] } })
+  if (!channel?.send) return;
+  const record = await channel
+    .send({ content: `📌 <@${s.lastUserId}> counted **${s.current.toLocaleString('en-US')}** then deleted it — that count still stands. Next number is **${(s.current + 1).toLocaleString('en-US')}**.`, allowedMentions: { parse: [] } })
     .catch(() => null);
+  // Pin the record to the bot's own message, but only if nobody has counted since (atomic guard).
+  if (record?.id) {
+    await GuildConfig.updateOne(
+      { guildId: message.guildId, 'counting.lastMessageId': message.id, 'counting.current': s.current },
+      { $set: { 'counting.lastMessageId': record.id } }
+    ).catch(() => null);
+  }
 }
 
 /** Validates a settings update (from /counting or the dashboard). Returns { patch } or { error }. */
