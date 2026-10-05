@@ -195,6 +195,9 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] **Can't say a number then delete it:** count a number, then delete your own message → the bot
       re-posts "counted **N** then deleted it — that count still stands" and the run does **not** rewind;
       the next number is still **N+1**.
+- [ ] **Can't edit a number to confuse people:** count a number, then edit that message to a different
+      number (e.g. `39` → `38`) → the bot re-posts "edited their count — it still stands at **N**" and
+      the run does **not** change. Editing to add trailing text (`39` → `39 lol`) is left alone.
 - [ ] **Numbers only:** send a normal chat message (`hello`) in the counting channel as a non-mod →
       it's deleted. As a mod (Manage Messages) → it stays. `/counting set number:2` fixes the count.
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the

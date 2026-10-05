@@ -121,6 +121,17 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   assert.equal(cfg().counting.current,101); assert.deepEqual([p1.reacts,p2.reacts].map(a=>a[0]).sort(),['✅','👀']);
   console.log('✓ set the count, 💯 milestones, deleting the latest count posts the next number, simultaneous counts can’t both win');
 
+  // Editing your count to a different number can't rewind or disguise it either ("39" → "38").
+  x=await count('ben','102'); assert.deepEqual(x.m.reacts,['✅']); assert.equal(cfg().counting.current,102);
+  await C.handleCountEdited({},{...x.m,content:'88'});
+  const edited=sent.at(-1).m;
+  assert.match(edited.payload.content,/<@ben> edited their count — it still stands at \*\*102\*\*\. Next number is \*\*103\*\*/);
+  assert.equal(cfg().counting.current,102,'editing your count never rewinds the run');
+  assert.equal(cfg().counting.lastMessageId,edited.id,'the edit re-post becomes the authoritative record');
+  // An edit that still reads as the right number (added trailing text like "102 lol") is left alone.
+  x=await count('ann','103'); const okq=sent.length; await C.handleCountEdited({},{...x.m,content:'103 nice'}); assert.equal(sent.length,okq,'an edit that keeps the number is not corrected');
+  console.log('✓ editing a count can’t rewind or disguise it; harmless trailing-text edits are ignored');
+
   // ================================================================ Starboard
   r=await S.saveSettings(guild,{enabled:true}); assert.match(r.error,/channel/);
   r=await S.saveSettings(guild,{emoji:'hello'}); assert.match(r.error,/single emoji/);
@@ -157,7 +168,7 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   const j=async(path,body)=>{ const res=await fetch(base+path,{method:body?'POST':'GET',headers:{'content-type':'application/json'},body:body?JSON.stringify(body):undefined}); return {status:res.status,...await res.json()}; };
   let d=await j('/engagement');
   assert.equal(d.birthdays.settings.channelId,'general'); assert.equal(d.birthdays.saved,5); assert.deepEqual(d.birthdays.upcoming.map(u=>u.userId).sort(),['ann','ben','cat']);
-  assert.equal(d.counting.settings.current,101); assert.equal(d.starboard.settings.threshold,3); assert.deepEqual(d.starboard.top,[]);
+  assert.equal(d.counting.settings.current,103); assert.equal(d.starboard.settings.threshold,3); assert.deepEqual(d.starboard.top,[]);
   let res=await j('/engagement/starboard',{threshold:5,emoji:'🔥',selfStar:true}); assert.equal(res.ok,true); assert.equal(res.settings.threshold,5); assert.equal(res.settings.emoji,'🔥');
   res=await j('/engagement/starboard',{threshold:0}); assert.equal(res.status,400); assert.match(res.error,/1–100/);
   res=await j('/engagement/birthdays',{roleId:'boost'}); assert.equal(res.status,400);

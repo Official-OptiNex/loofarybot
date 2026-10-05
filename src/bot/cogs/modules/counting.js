@@ -1,6 +1,8 @@
 // Counting game: members count up one number at a time in a chosen channel. The bot reacts ✅ to each
 // correct number; a wrong number (or counting twice in a row) resets the count to 0. Tracks the best run.
 // Fully automatic once a channel is picked (/counting setup or dashboard Engagement → Counting).
+// Grief-proof: deleting or editing the latest count can't rewind or hide it — the bot re-posts an
+// authoritative record and the stored number never changes.
 const { PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
 
@@ -200,20 +202,15 @@ async function handleCounting(message, config) {
   return true;
 }
 
-// Someone deleted the latest count to try to hide/rewind it. Deleting a message never touches the
-// stored count, so the run already stands — but we re-post it as a bot message so the record can't be
-// erased from the channel, and make THAT message the authoritative last count (so it can't be quietly
-// rewound by deleting again). The grief ("say a number then delete it") simply doesn't work.
-async function handleCountDeleted(message) {
-  if (!message.guildId) return;
-  if (message.author?.bot) return; // our own re-post was removed — don't loop
-  const config = await GuildConfig.findOne({ guildId: message.guildId }, { counting: 1 }).lean();
-  const s = countingSettings(config);
-  if (!s.enabled || message.channelId !== s.channelId || s.lastMessageId !== message.id) return;
+// Tampering with the latest count (deleting or editing it) never touches the stored number, so the run
+// already stands. We re-post the count as a bot message so it can't be erased or disguised in the
+// channel, and make THAT message the authoritative last count (so it can't be quietly rewound by
+// tampering again). `prefix` describes what happened; the next-number line is appended.
+async function reassertCount(message, s, prefix) {
   const channel = message.channel || message.client?.channels.cache.get(message.channelId);
   if (!channel?.send) return;
   const record = await channel
-    .send({ content: `📌 <@${s.lastUserId}> counted **${s.current.toLocaleString('en-US')}** then deleted it — that count still stands. Next number is **${(s.current + 1).toLocaleString('en-US')}**.`, allowedMentions: { parse: [] } })
+    .send({ content: `${prefix} Next number is **${(s.current + 1).toLocaleString('en-US')}**.`, allowedMentions: { parse: [] } })
     .catch(() => null);
   // Pin the record to the bot's own message, but only if nobody has counted since (atomic guard).
   if (record?.id) {
@@ -222,6 +219,33 @@ async function handleCountDeleted(message) {
       { $set: { 'counting.lastMessageId': record.id } }
     ).catch(() => null);
   }
+}
+
+// Someone deleted the latest count to try to hide/rewind it. The grief ("say a number then delete it")
+// simply doesn't work — the bot keeps the record.
+async function handleCountDeleted(message) {
+  if (!message.guildId) return;
+  if (message.author?.bot) return; // our own re-post was removed — don't loop
+  const config = await GuildConfig.findOne({ guildId: message.guildId }, { counting: 1 }).lean();
+  const s = countingSettings(config);
+  if (!s.enabled || message.channelId !== s.channelId || s.lastMessageId !== message.id) return;
+  await reassertCount(message, s, `📌 <@${s.lastUserId}> counted **${s.current.toLocaleString('en-US')}** then deleted it — that count still stands.`);
+}
+
+// Someone edited the latest count to a different number (e.g. "39" → "38") to confuse people. The
+// stored count is unchanged, so re-assert it. An edit that still reads as the right number (adding
+// trailing text like "39 lol") is left alone.
+async function handleCountEdited(_oldMessage, newMessage) {
+  const message = newMessage;
+  if (!message || !message.guildId) return;
+  if (message.author?.bot) return; // our own re-post, or another bot
+  const content = message.content;
+  if (content == null) return; // partial / embed-load update — nothing we can judge
+  const config = await GuildConfig.findOne({ guildId: message.guildId }, { counting: 1 }).lean();
+  const s = countingSettings(config);
+  if (!s.enabled || message.channelId !== s.channelId || s.lastMessageId !== message.id) return;
+  if (parseCount(content, s.mathAllowed) === s.current) return; // still shows the right number — fine
+  await reassertCount(message, s, `✏️ <@${s.lastUserId}> edited their count — it still stands at **${s.current.toLocaleString('en-US')}**.`);
 }
 
 /** Validates a settings update (from /counting or the dashboard). Returns { patch } or { error }. */
@@ -273,6 +297,7 @@ async function saveSettings(guild, input) {
 
 function registerCountingEvents(client) {
   client.on('messageDelete', (message) => handleCountDeleted(message).catch(() => null));
+  client.on('messageUpdate', (oldMessage, newMessage) => handleCountEdited(oldMessage, newMessage).catch(() => null));
 }
 
-module.exports = { registerCountingEvents, evaluate, parseCount, countingSettings, handleCounting, handleCountDeleted, cleanSettings, saveSettings };
+module.exports = { registerCountingEvents, evaluate, parseCount, countingSettings, handleCounting, handleCountDeleted, handleCountEdited, cleanSettings, saveSettings };
