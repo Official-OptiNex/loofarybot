@@ -112,7 +112,8 @@ async function play(guild, voiceChannel, textChannelId, station, volume) {
       channelId: voiceChannel.id,
       guildId: guild.id,
       adapterCreator: guild.voiceAdapterCreator,
-      selfDeaf: true
+      selfDeaf: false, // it's a music bot — show it as listening, not deafened
+      selfMute: false
     });
     let s = sessions.get(guild.id);
     if (!s) {
