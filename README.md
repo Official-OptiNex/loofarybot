@@ -551,8 +551,14 @@ Members spend XP on fun extras. The shop is open by default and comes with start
     *Manage Messages* are exempt). Turn it off to let people chat.
   - **Slowmode** — the channel is put in slowmode (default **1200s / 20 min**; set 0 to disable) so
     nobody can spam the channel. Needs *Manage Channels*.
-- Sums like `3*4` count when **allow sums** is on. If someone deletes the latest count, the bot posts
-  the next number.
+- **Maths** count when **allow sums** is on — not just `3*4`, but full expressions: PEMDAS with
+  `+ - * / % ^` and brackets, factorials (`5!`), roots (`√144`, `∛27`, `root(27,3)`), functions
+  (`sqrt`, `abs`, `floor`, `gcd`, `lcm`, `nCr`/`choose`, `nPr`, `log`, `min`, `max`, …), constants
+  (`pi`, `e`), and even summations `∑(i,1,5,i)`, products `∏(i,1,5,i)` and definite integrals
+  `∫(x,0,3,2*x)`. Only a whole-number result counts; trailing chat (`3*4 nice`) is ignored. It's a
+  safe evaluator (no `eval`) with every loop capped so it can't be abused.
+- If someone deletes or edits the latest count, the bot re-posts an authoritative record and the
+  stored number never changes.
 - `/counting set` (or the dashboard) fixes the count after an unfair reset.
 
 ### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)

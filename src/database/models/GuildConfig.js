@@ -278,6 +278,7 @@ const GuildConfigSchema = new mongoose.Schema(
     logRetentionDays: { type: Number, default: 30 }, // dashboard log viewer history
     shopEnabled: { type: Boolean, default: true }, // XP shop (/shop, dashboard XP Shop)
     shopSeeded: { type: Boolean, default: false }, // the starter items were added once
+    shopSeededKeys: { type: [String], default: undefined }, // which starter items this server has been offered (so new ones can be topped up, deleted ones stay gone)
     logChannelId: { type: String, default: null },
     logEvents: {
       messageEdit: { type: Boolean, default: true },

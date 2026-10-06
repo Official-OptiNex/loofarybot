@@ -86,6 +86,21 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   x=await count('ann','(1+2)*1'); assert.deepEqual(x.m.reacts,['✅']); assert.equal(cfg().counting.current,3); // last user: ann
   console.log('✓ counting: right numbers ✅ (sums + trailing chat ok), chatter deleted, staff exempt');
 
+  // Full-maths evaluator: PEMDAS, factorials, roots, nCr/nPr, functions, summation/product/integral,
+  // trailing chat ignored, and hostile input can't tie up the bot or count as junk.
+  for (const [inp,exp] of [['3*4',12],['(2+3)*4-1',19],['10%3',1],['2^10',1024],['7!/5!',42],['5!',120],
+    ['√144',12],['∛27',3],['sqrt(225)',15],['root(27,3)',3],['nCr(6,2)',15],['choose(10,3)',120],['nPr(5,2)',20],
+    ['gcd(12,18)',6],['lcm(4,6)',12],['floor(7.9)',7],['abs(-9)',9],['∑(i,1,5,i)',15],['sum(i,1,10,i)',55],
+    ['prod(i,1,5,i)',120],['integral(x,0,3,2*x)',9],['log(1000)',3],['log(8,2)',3],['max(3,7,2)',7],
+    ['3*4 nice try',12],['12 nice',12],['3 x 4',12],['2+2',4]])
+    assert.equal(C.parseCount(inp),exp,`maths: ${inp}`);
+  for (const inp of ['hello!','2*pi','-5','1.5','sqrt(2)','sum(i,1,100000000,i)','1-800-273','not a number'])
+    assert.equal(C.parseCount(inp),null,`not a usable count: ${inp}`);
+  assert.equal(C.parseCount('99999!'),99999,'an over-170 factorial just falls back to the number typed');
+  assert.equal(C.parseCount('5!',false),5,'maths off: "5!" is just the plain 5');
+  const t0=Date.now(); for (let k=0;k<500;k++) C.parseCount('sum(i,1,1000,prod(j,1,1000,j))'); assert.ok(Date.now()-t0<1000,'hostile maths stays cheap');
+  console.log('✓ counting maths: PEMDAS, factorials, roots, nCr/nPr, functions, ∑/∏/∫; junk ignored; capped against abuse');
+
   // Counting twice in a row: deleted, NOT a reset — griefers can't wipe the run.
   let before=sent.length;
   x=await count('ann','4'); assert.deepEqual(x.m.reacts,[]); assert.equal(x.m.deleted,true); assert.equal(cfg().counting.current,3,'run kept'); assert.equal(cfg().counting.resets,0);

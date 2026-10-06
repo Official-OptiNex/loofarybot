@@ -38,13 +38,38 @@ const DEFAULT_ITEMS = [
 
 const CUSTOM_EMOJI_RE = /^<a?:\w{2,32}:(\d{17,20})>$/;
 
+// Starter items that existed before we tracked which ones a server had been offered. Used once, to
+// seed the tracking set for servers that were seeded back then, so only genuinely new starter items
+// (e.g. the Nickname change) get topped up — staff-deleted ones never come back on their own.
+const LEGACY_SEEDED_KEYS = ['autoreact', 'xpboost', 'gambles', 'nicktag', 'badge', 'loofa'];
+
 // ---------------------------------------------------------------- Catalog
 
 async function ensureDefaults(guildId) {
-  const claimed = await GuildConfig.updateOne({ guildId, shopSeeded: { $ne: true } }, { $set: { shopSeeded: true } });
-  if (claimed.modifiedCount !== 1) return false;
-  if (await ShopItem.exists({ guildId })) return false;
-  await ShopItem.insertMany(DEFAULT_ITEMS.map((d, i) => ({ ...d, guildId, order: i, maxPerUser: d.maxPerUser ?? 1, stock: d.stock ?? null })));
+  // First time this server opens the shop: seed the whole starter catalog (once).
+  const claimed = await GuildConfig.updateOne(
+    { guildId, shopSeeded: { $ne: true } },
+    { $set: { shopSeeded: true, shopSeededKeys: DEFAULT_ITEMS.map((d) => d.key) } }
+  );
+  if (claimed.modifiedCount === 1) {
+    if (await ShopItem.exists({ guildId })) return false;
+    await ShopItem.insertMany(DEFAULT_ITEMS.map((d, i) => ({ ...d, guildId, order: i, maxPerUser: d.maxPerUser ?? 1, stock: d.stock ?? null })));
+    return true;
+  }
+  // Already seeded before some starter items existed: add the new ones this server has never been
+  // offered (so they appear without the staff having to add them), but never re-add ones staff
+  // deleted on purpose, and never duplicate an item that's already there.
+  const cfg = await GuildConfig.findOne({ guildId }, { shopSeededKeys: 1 }).lean();
+  const have = new Set((await ShopItem.find({ guildId, key: { $ne: null } }, { key: 1 }).lean()).map((i) => i.key));
+  const offered = new Set(cfg?.shopSeededKeys || LEGACY_SEEDED_KEYS);
+  const fresh = DEFAULT_ITEMS.filter((d) => !offered.has(d.key) && !have.has(d.key));
+  if (!fresh.length) {
+    if (!cfg?.shopSeededKeys) await GuildConfig.updateOne({ guildId }, { $set: { shopSeededKeys: [...new Set([...offered, ...have])] } });
+    return false;
+  }
+  const count = await ShopItem.countDocuments({ guildId });
+  await ShopItem.insertMany(fresh.map((d, i) => ({ ...d, guildId, order: count + i, maxPerUser: d.maxPerUser ?? 1, stock: d.stock ?? null })));
+  await GuildConfig.updateOne({ guildId }, { $set: { shopSeededKeys: [...new Set([...offered, ...have, ...fresh.map((d) => d.key)])] } });
   return true;
 }
 

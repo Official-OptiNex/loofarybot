@@ -236,6 +236,16 @@ function msg(user,content,ch='general',extra={}){ const c=guild.channels.cache.g
   d=await j('/shop/member/ben'); assert.ok(d.owned.some(o=>o.name==='Rubber Duck'));
   res=await j('/shop/items/'+duck,null,'DELETE'); assert.equal(res.removedFrom,1); assert.ok(!rows.ShopOwnership.some(o=>o.itemId===duck));
   rows.ShopItem.splice(rows.ShopItem.findIndex(i=>i.key==='gambles'),1); res=await j('/shop/restore',{}); assert.equal(res.added,1);
+  // Top-up: a server seeded before the Nickname item existed gets it added automatically (once),
+  // without re-adding items staff deleted and without duplicating.
+  await M('GuildConfig').create({guildId:'g9',shopEnabled:true});
+  rows.GuildConfig.find(r=>r.guildId==='g9').shopSeeded=true; // legacy: seeded, but no shopSeededKeys yet
+  ['autoreact','xpboost','gambles','badge'].forEach((k,i)=>rows.ShopItem.push({_id:`g9-${k}`,guildId:'g9',key:k,type:'collectible',name:k,price:1,emoji:'🛍️',order:i,enabled:true,maxPerUser:1,stock:null,sold:0}));
+  let g9=await Shop.listItems('g9'); assert.ok(g9.some(i=>i.key==='nickname'),'nickname topped up for a legacy server');
+  const g9n=g9.length; g9=await Shop.listItems('g9'); assert.equal(g9.length,g9n,'not added twice');
+  rows.ShopItem.splice(rows.ShopItem.findIndex(i=>i.guildId==='g9'&&i.key==='nickname'),1);
+  g9=await Shop.listItems('g9'); assert.ok(!g9.some(i=>i.key==='nickname'),'a deleted top-up is not re-added');
+  console.log('✓ new starter items (Nickname change) are topped up for already-seeded servers, once, and stay gone if deleted');
   srv.close();
   console.log('✓ dashboard: auto-mod settings + recent catches; shop items add/edit/hide/delete (owners lose it), gifts, member view, restore starter items');
   process.exit(0);
