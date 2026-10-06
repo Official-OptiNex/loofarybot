@@ -7,7 +7,7 @@ const ShopItemSchema = new mongoose.Schema(
     key: { type: String, default: null }, // built-in items: 'autoreact', 'xpboost', … (null for custom ones)
     type: {
       type: String,
-      enum: ['autoReact', 'xpBoost', 'extraGambles', 'nickTag', 'badge', 'role', 'collectible'],
+      enum: ['autoReact', 'xpBoost', 'extraGambles', 'nickTag', 'nickname', 'badge', 'role', 'collectible'],
       required: true
     },
     name: { type: String, required: true },

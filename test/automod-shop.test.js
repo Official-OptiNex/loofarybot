@@ -139,6 +139,10 @@ function msg(user,content,ch='general',extra={}){ const c=guild.channels.cache.g
   await UserLevel.create({guildId:'g',userId:'ann',xp:20000,level:10}); await UserLevel.create({guildId:'g',userId:'ben',xp:500,level:2});
   const items=await Shop.listItems('g'); assert.deepEqual(items.map(i=>i.key),['autoreact','xpboost','gambles','nicktag','nickname','badge','loofa']);
   assert.equal((await Shop.listItems('g')).length,7,'starter items are added once');
+  // Every item type the shop can create must be in the ShopItem schema enum, or inserts throw in prod.
+  const itemEnum=M('ShopItem').schema.path('type').enumValues;
+  for (const t of Object.keys(Shop.TYPES)) assert.ok(itemEnum.includes(t),`ShopItem enum missing type: ${t}`);
+  for (const d of Shop.DEFAULT_ITEMS) assert.ok(itemEnum.includes(d.type),`ShopItem enum missing default type: ${d.type}`);
   const byKey=(k)=>items.find(i=>i.key===k); const id=(k)=>String(byKey(k)._id);
   const ann=members.get('ann'); const ben=members.get('ben');
 
