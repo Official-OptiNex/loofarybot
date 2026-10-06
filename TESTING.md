@@ -209,6 +209,10 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       the run does **not** change. Editing to add trailing text (`39` → `39 lol`) is left alone.
 - [ ] **Numbers only:** send a normal chat message (`hello`) in the counting channel as a non-mod →
       it's deleted. As a mod (Manage Messages) → it stays. `/counting set number:2` fixes the count.
+- [ ] **Maths (allow sums on):** with the count at N−1, posting an expression that equals N counts —
+      try `3*4`, `5!`, `√144`, `nCr(6,2)`, `∑(i,1,5,i)`, `∫(x,0,3,2*x)`, `(5+5)*2`. Trailing chat is
+      fine (`3*4 lol`). A non-whole or negative result doesn't count. Turning **allow maths** off makes
+      `3*4` just read as **3**.
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the
       author) → it's reposted in #starboard, and the count updates as stars change.
 

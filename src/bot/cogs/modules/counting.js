@@ -8,7 +8,6 @@ const GuildConfig = require('../../../database/models/GuildConfig');
 
 // Two people typing the same next number at the same moment: the slower one isn't punished.
 const SAME_NUMBER_GRACE_MS = 3000;
-const MAX_EXPRESSION = 40;
 
 function countingSettings(config) {
   const c = (config && config.counting) || {};
@@ -30,49 +29,213 @@ function countingSettings(config) {
 }
 
 // ---------------------------------------------------------------- Parsing (no eval)
+//
+// A safe maths evaluator for the counting channel. Supports PEMDAS (+ - * / % ^, brackets, unary
+// signs), factorials (n!), roots (√, ∛, root(x,n)), a set of functions (sqrt, cbrt, abs, floor, ceil,
+// round, trunc, sign, exp, ln, log, log2, log10, min, max, gcd, lcm, mod, pow, nCr/choose, nPr/perm,
+// sin/cos/tan) and constants (pi/π, e, tau/τ, phi), plus bound-variable summation (∑/sum), product
+// (∏/prod) and definite integral (∫/integral). It parses a maximal valid expression from the start of
+// the message, so trailing chat ("3*4 nice") is ignored. No eval(); every loop and step is capped so a
+// message can't tie up the bot.
 
-// Evaluates + - * / ^ and brackets. Returns a number, or null for anything else.
-function evaluate(expr) {
-  const tokens = expr.match(/\d+(?:\.\d+)?|[-+*/^()]/g);
-  if (!tokens || tokens.join('') !== expr.replace(/\s+/g, '')) return null;
-  let i = 0;
-  const peek = () => tokens[i];
-  const take = () => tokens[i++];
-  function primary() {
-    const t = take();
-    if (t === '(') {
-      const v = sum();
-      if (take() !== ')') throw new Error('bracket');
-      return v;
-    }
-    if (t === '-') return -primary();
-    if (t === '+') return primary();
-    if (t !== undefined && /^\d/.test(t)) return Number(t);
-    throw new Error('token');
+const MAX_COUNT = 1e12;
+const ITER_BUDGET = 100000; // total summation / product / integral steps allowed per expression
+
+const CONSTS = { pi: Math.PI, e: Math.E, tau: Math.PI * 2, phi: (1 + Math.sqrt(5)) / 2 };
+const FN1 = {
+  sqrt: Math.sqrt, cbrt: Math.cbrt, abs: Math.abs, floor: Math.floor, ceil: Math.ceil, round: Math.round,
+  trunc: Math.trunc, sign: Math.sign, exp: Math.exp, ln: Math.log, log2: Math.log2, log10: Math.log10,
+  sin: Math.sin, cos: Math.cos, tan: Math.tan
+};
+
+const req = (v, n) => { if (v.length !== n) throw new Error('args'); };
+const intArg = (v) => { if (!Number.isInteger(v)) throw new Error('int'); return v; };
+const gcd2 = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; };
+function factorial(n) {
+  if (!Number.isInteger(n) || n < 0 || n > 170) throw new Error('factorial');
+  let r = 1;
+  for (let k = 2; k <= n; k++) r *= k;
+  return r;
+}
+function nCr(n, k) {
+  if (!Number.isInteger(n) || !Number.isInteger(k) || n < 0 || k < 0 || k > n) throw new Error('nCr');
+  k = Math.min(k, n - k);
+  if (k > 100000) throw new Error('nCr big');
+  let r = 1;
+  for (let i = 0; i < k; i++) r = (r * (n - i)) / (i + 1);
+  return Math.round(r);
+}
+function nPr(n, k) {
+  if (!Number.isInteger(n) || !Number.isInteger(k) || n < 0 || k < 0 || k > n || k > 100000) throw new Error('nPr');
+  let r = 1;
+  for (let i = 0; i < k; i++) r *= n - i;
+  return r;
+}
+
+// Tokeniser: numbers, names (functions/constants/variables), operators, and the root symbols. Stops at
+// the first character it doesn't recognise, leaving the rest as trailing chat.
+const NUM_RE = /^(?:\d+(?:\.\d+)?|\.\d+)/;
+const NAME_RE = /^[A-Za-z_]\w*/;
+function tokenize(str) {
+  const tokens = [];
+  let s = str;
+  while (s.length && tokens.length < 400) {
+    if (s[0] === ' ' || s[0] === '\t') { s = s.slice(1); continue; }
+    let m = s.match(NUM_RE);
+    if (m) { tokens.push({ t: 'num', v: Number(m[0]) }); s = s.slice(m[0].length); continue; }
+    m = s.match(NAME_RE);
+    if (m) { tokens.push({ t: 'name', v: m[0].toLowerCase() }); s = s.slice(m[0].length); continue; }
+    if ('+-*/%^!(),'.includes(s[0]) || s[0] === '√' || s[0] === '∛') { tokens.push({ t: s[0] }); s = s.slice(1); continue; }
+    break;
   }
-  function power() {
-    const base = primary();
-    if (peek() === '^') {
-      take();
-      const exp = power();
-      if (Math.abs(exp) > 64) throw new Error('big');
-      return base ** exp;
+  return tokens;
+}
+
+// Recursive-descent parser → AST. Dangling operators at the end are backed out (try/restore) so a
+// trailing bit of chat never fails the whole parse.
+function parseExpr(tokens) {
+  let i = 0;
+  const eat = (t) => { if (tokens[i] && tokens[i].t === t) return tokens[i++]; throw new Error('expected ' + t); };
+  function primary() {
+    const tk = tokens[i];
+    if (!tk) throw new Error('eof');
+    if (tk.t === '(') { i++; const e = addsub(); eat(')'); return e; }
+    if (tk.t === 'num') { i++; return { k: 'num', v: tk.v }; }
+    if (tk.t === 'name') {
+      i++;
+      if (tokens[i] && tokens[i].t === '(') {
+        i++;
+        const args = [];
+        if (tokens[i] && tokens[i].t !== ')') { args.push(addsub()); while (tokens[i] && tokens[i].t === ',') { i++; args.push(addsub()); } }
+        eat(')');
+        return { k: 'call', name: tk.v, args };
+      }
+      return { k: 'name', name: tk.v };
     }
+    throw new Error('primary');
+  }
+  function postfix() { let e = primary(); while (tokens[i] && tokens[i].t === '!') { i++; e = { k: 'fact', x: e }; } return e; }
+  function power() {
+    const base = postfix();
+    if (tokens[i] && tokens[i].t === '^') { const save = i; i++; let e; try { e = unary(); } catch { i = save; return base; } return { k: 'pow', l: base, r: e }; }
     return base;
   }
-  function product() {
-    let v = power();
-    while (peek() === '*' || peek() === '/') v = take() === '*' ? v * power() : v / power();
-    return v;
+  function unary() {
+    const tk = tokens[i];
+    if (tk && (tk.t === '+' || tk.t === '-' || tk.t === '√' || tk.t === '∛')) { i++; return { k: 'unary', op: tk.t, x: unary() }; }
+    return power();
   }
-  function sum() {
-    let v = product();
-    while (peek() === '+' || peek() === '-') v = take() === '+' ? v + product() : v - product();
-    return v;
+  function binLevel(ops, next) {
+    let e = next();
+    while (tokens[i] && ops.includes(tokens[i].t)) { const op = tokens[i].t; const save = i; i++; let r; try { r = next(); } catch { i = save; break; } e = { k: 'bin', op, l: e, r }; }
+    return e;
   }
+  const muldiv = () => binLevel(['*', '/', '%'], unary);
+  const addsub = () => binLevel(['+', '-'], muldiv);
+  return addsub(); // trailing tokens are intentionally ignored
+}
+
+function evalNode(node, env) {
+  switch (node.k) {
+    case 'num': return node.v;
+    case 'name':
+      if (env.vars.has(node.name)) return env.vars.get(node.name);
+      if (node.name in CONSTS) return CONSTS[node.name];
+      throw new Error('unknown ' + node.name);
+    case 'unary': {
+      const x = evalNode(node.x, env);
+      if (node.op === '-') return -x;
+      if (node.op === '+') return x;
+      if (node.op === '√') { if (x < 0) throw new Error('√<0'); return Math.sqrt(x); }
+      return Math.cbrt(x);
+    }
+    case 'fact': return factorial(evalNode(node.x, env));
+    case 'pow': {
+      const b = evalNode(node.l, env);
+      const e = evalNode(node.r, env);
+      if (Math.abs(e) > 1024) throw new Error('big exp');
+      return b ** e;
+    }
+    case 'bin': {
+      const l = evalNode(node.l, env);
+      const r = evalNode(node.r, env);
+      if (node.op === '+') return l + r;
+      if (node.op === '-') return l - r;
+      if (node.op === '*') return l * r;
+      if (node.op === '/') { if (r === 0) throw new Error('/0'); return l / r; }
+      if (r === 0) throw new Error('%0');
+      return l % r;
+    }
+    case 'call': return evalCall(node, env);
+  }
+  throw new Error('node');
+}
+
+function spend(env, n) { env.budget -= n; if (env.budget < 0) throw new Error('too much work'); }
+
+function evalCall(node, env) {
+  const { name, args } = node;
+  if (name === 'sum' || name === 'prod' || name === 'integral') {
+    if (args.length !== 4 || args[0].k !== 'name') throw new Error(name);
+    const v = args[0].name;
+    const a = evalNode(args[1], env);
+    const b = evalNode(args[2], env);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) throw new Error('range');
+    const had = env.vars.has(v);
+    const prev = env.vars.get(v);
+    try {
+      if (name === 'integral') {
+        const N = 1000; spend(env, N);
+        const h = (b - a) / N;
+        const f = (x) => { env.vars.set(v, x); const y = evalNode(args[3], env); if (!Number.isFinite(y)) throw new Error('∫'); return y; };
+        let s = f(a) + f(b);
+        for (let k = 1; k < N; k++) s += (k % 2 ? 4 : 2) * f(a + k * h);
+        const res = (s * h) / 3;
+        const near = Math.round(res);
+        return Math.abs(res - near) < 1e-6 ? near : res; // snap to an integer when we're basically on one
+      }
+      if (!Number.isInteger(a) || !Number.isInteger(b)) throw new Error('int range');
+      const step = b >= a ? 1 : -1;
+      spend(env, Math.abs(b - a) + 1);
+      let acc = name === 'sum' ? 0 : 1;
+      for (let x = a; step > 0 ? x <= b : x >= b; x += step) {
+        env.vars.set(v, x);
+        const t = evalNode(args[3], env);
+        acc = name === 'sum' ? acc + t : acc * t;
+        if (!Number.isFinite(acc)) throw new Error('overflow');
+      }
+      return acc;
+    } finally {
+      if (had) env.vars.set(v, prev);
+      else env.vars.delete(v);
+    }
+  }
+  const vals = args.map((a) => evalNode(a, env));
+  if (FN1[name]) { req(vals, 1); return FN1[name](vals[0]); }
+  switch (name) {
+    case 'root': req(vals, 2); { const [x, r] = vals; if (r === 0) throw new Error('root0'); return x < 0 && Math.round(r) % 2 ? -(Math.abs(x) ** (1 / r)) : x ** (1 / r); }
+    case 'pow': req(vals, 2); if (Math.abs(vals[1]) > 1024) throw new Error('big'); return vals[0] ** vals[1];
+    case 'log': if (vals.length === 1) return Math.log10(vals[0]); req(vals, 2); return Math.log(vals[0]) / Math.log(vals[1]);
+    case 'mod': req(vals, 2); if (vals[1] === 0) throw new Error('%0'); return vals[0] % vals[1];
+    case 'min': if (!vals.length) throw new Error('min'); return Math.min(...vals);
+    case 'max': if (!vals.length) throw new Error('max'); return Math.max(...vals);
+    case 'gcd': if (vals.length < 2) throw new Error('gcd'); return vals.map(intArg).reduce((x, y) => gcd2(x, y));
+    case 'lcm': if (vals.length < 2) throw new Error('lcm'); return vals.map(intArg).reduce((x, y) => { const g = gcd2(x, y); return g ? Math.abs((x / g) * y) : 0; });
+    case 'ncr': case 'choose': case 'comb': req(vals, 2); return nCr(intArg(vals[0]), intArg(vals[1]));
+    case 'npr': case 'perm': req(vals, 2); return nPr(intArg(vals[0]), intArg(vals[1]));
+    case 'fact': case 'factorial': req(vals, 1); return factorial(intArg(vals[0]));
+  }
+  throw new Error('fn ' + name);
+}
+
+// Evaluates a maths expression. Returns a finite number, or null for anything that isn't valid maths.
+function evaluate(expr) {
   try {
-    const v = sum();
-    return i === tokens.length && Number.isFinite(v) ? v : null;
+    const tokens = tokenize(String(expr).slice(0, 240));
+    if (!tokens.length) return null;
+    const ast = parseExpr(tokens);
+    const v = evalNode(ast, { vars: new Map(), budget: ITER_BUDGET });
+    return Number.isFinite(v) ? v : null;
   } catch {
     return null;
   }
@@ -80,27 +243,31 @@ function evaluate(expr) {
 
 /**
  * The number a message counts as, or null when it isn't a count (normal chat is ignored).
- * Only the start of the message matters: "12 nice" counts as 12. With math on, "3*4" counts as 12.
+ * Only the start matters: "12 nice" counts as 12. With math on, "3*4", "5!", "√144", "∑(i,1,5,i)" etc.
  */
-const MAX_COUNT = 1e12;
-
 function plainNumber(text) {
-  const m = text.match(/^(\d+)(?!\d|\.\d|\s*[-+*/^×÷])/);
+  const m = String(text).match(/^(\d+)(?!\d|\.\d|\s*[-+*/^×÷])/);
   const n = m ? Number(m[1]) : null;
   return n !== null && n <= MAX_COUNT ? n : null;
 }
 
 function parseCount(content, mathAllowed = true) {
   const raw = String(content || '').trim();
+  if (!raw) return null;
   if (!mathAllowed) return plainNumber(raw);
-  const text = raw.replace(/(\d)\s*[x×]\s*(?=[\d(])/g, '$1*').replace(/÷/g, '/');
-  const m = text.match(/^[\d\s+\-*/^().]+/);
-  if (!m || !/\d/.test(m[0])) return null;
-  const expr = m[0].trim();
-  const v = expr.length <= MAX_EXPRESSION ? evaluate(expr) : null;
-  // Not a valid sum ("6 xd", "5 - my fav") — fall back to the plain number it starts with.
-  if (v === null) return plainNumber(raw);
-  if (!Number.isInteger(v) || v < 0 || v > MAX_COUNT) return null;
+  // Normalise the common maths symbols, then evaluate the start of the message.
+  const pre = raw
+    .replace(/(\d)\s*[x×·]\s*(?=[\d.(√∛])/gi, '$1*')
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/−/g, '-')
+    .replace(/[∑Σ]/g, 'sum')
+    .replace(/∏/g, 'prod')
+    .replace(/∫/g, 'integral');
+  const v = evaluate(pre);
+  // Not valid maths, or not a usable count (negative, fractional, too big) — fall back to a plain
+  // number at the start ("12 nice" → 12), which is null for ordinary chat.
+  if (v === null || !Number.isInteger(v) || v < 0 || v > MAX_COUNT) return plainNumber(raw);
   return v;
 }
 
