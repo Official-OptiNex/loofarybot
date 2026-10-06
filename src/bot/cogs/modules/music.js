@@ -103,10 +103,51 @@ function playbackAvailable() {
 const sessions = new Map();
 const getSession = (guildId) => sessions.get(guildId) || null;
 
+// Point prism-media at the bundled ffmpeg so it doesn't need one on PATH.
+function ensureFfmpegPath() {
+  if (process.env.FFMPEG_PATH) return;
+  try {
+    const p = require('ffmpeg-static');
+    if (p && typeof p === 'string') process.env.FFMPEG_PATH = p;
+  } catch {
+    /* fall back to a system ffmpeg if there is one */
+  }
+}
+
+/**
+ * Builds the audio resource for a radio stream: ffmpeg fetches the stream (reconnecting on drops) and
+ * transcodes it straight to Opus with the volume baked in. Letting ffmpeg do the Opus encoding avoids
+ * the CPU-heavy JS encoder (opusscript), which can't keep up on a small free-tier instance — the usual
+ * reason a radio bot "plays" but stays silent. Returns the resource, or null if ffmpeg isn't usable.
+ */
+function makeResource(V, url, volume) {
+  const vol = Math.min(1.5, Math.max(0, clampVol(volume) / 100)); // a little headroom above 100%
+  try {
+    const prism = require('prism-media');
+    const transcoder = new prism.FFmpeg({
+      args: [
+        '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+        '-i', url,
+        '-loglevel', 'error',
+        '-vn',
+        '-af', `volume=${vol.toFixed(2)}`,
+        '-c:a', 'libopus', '-b:a', '96k', '-ar', '48000', '-ac', '2',
+        '-f', 'ogg'
+      ]
+    });
+    transcoder.once('error', (err) => console.error('[music] ffmpeg error:', err.message));
+    return V.createAudioResource(transcoder, { inputType: V.StreamType.OggOpus });
+  } catch (err) {
+    console.error('[music] could not build audio stream:', err.message);
+    return null;
+  }
+}
+
 /** Joins the member's voice channel and starts the station. Returns { station } or { error }. */
 async function play(guild, voiceChannel, textChannelId, station, volume) {
   const V = getVoice();
   if (!V) return { error: "🎛️ Voice playback isn't available on this host (missing voice libraries or ffmpeg)." };
+  ensureFfmpegPath();
   try {
     const connection = V.joinVoiceChannel({
       channelId: voiceChannel.id,
@@ -115,23 +156,53 @@ async function play(guild, voiceChannel, textChannelId, station, volume) {
       selfDeaf: false, // it's a music bot — show it as listening, not deafened
       selfMute: false
     });
+
+    // Wait for the voice handshake. If it never connects (e.g. the host blocks voice UDP), the bot
+    // would otherwise sit in the channel silently with no green ring — so fail loudly instead.
+    try {
+      await V.entersState(connection, V.VoiceConnectionStatus.Ready, 20_000);
+    } catch {
+      try { connection.destroy(); } catch { /* already gone */ }
+      sessions.delete(guild.id);
+      return { error: '🎛️ Joined, but couldn’t establish the voice connection (the host may be blocking voice traffic). Try again in a moment.' };
+    }
+
     let s = sessions.get(guild.id);
     if (!s) {
       const player = V.createAudioPlayer({ behaviors: { noSubscriber: V.NoSubscriberBehavior.Play } });
       s = { connection, player, station: null, volume: clampVol(volume), textChannelId };
-      connection.subscribe(player);
       player.on('error', (err) => console.error('[music] player error:', err.message));
+      // If the connection drops, try to resume briefly, otherwise tear the session down cleanly.
+      connection.on(V.VoiceConnectionStatus.Disconnected, async () => {
+        try {
+          await Promise.race([
+            V.entersState(connection, V.VoiceConnectionStatus.Signalling, 5_000),
+            V.entersState(connection, V.VoiceConnectionStatus.Connecting, 5_000)
+          ]);
+        } catch {
+          stop(guild.id);
+        }
+      });
       sessions.set(guild.id, s);
     } else {
       s.connection = connection;
-      connection.subscribe(s.player);
     }
+    connection.subscribe(s.player);
     s.textChannelId = textChannelId;
-    const resource = V.createAudioResource(station.url, { inlineVolume: true });
-    resource.volume?.setVolume((volume ?? s.volume) / 100);
+
     s.volume = clampVol(volume ?? s.volume);
     s.station = station;
+    const resource = makeResource(V, station.url, s.volume);
+    if (!resource) return { error: '🎛️ Couldn’t start the audio stream (ffmpeg is missing or failed on the host).' };
     s.player.play(resource);
+
+    // Confirm audio actually started — if ffmpeg/opus can't run or the station is down, the player
+    // never reaches Playing, which is exactly the "says playing but silent" case.
+    try {
+      await V.entersState(s.player, V.AudioPlayerStatus.Playing, 15_000);
+    } catch {
+      return { error: '🎛️ Joined, but the audio stream didn’t start — the host may be missing ffmpeg, or the station is down. Try another station.' };
+    }
     return { station };
   } catch (err) {
     console.error('[music] play failed:', err.message);
@@ -143,7 +214,13 @@ function setVolume(guildId, volume) {
   const s = sessions.get(guildId);
   if (!s) return { error: 'Nothing is playing.' };
   s.volume = clampVol(volume);
-  s.player?.state?.resource?.volume?.setVolume(s.volume / 100);
+  // Volume is baked into the ffmpeg stream, so changing it restarts the station at the new level
+  // (a brief gap). Only if something is actually playing.
+  const V = getVoice();
+  if (V && s.station && s.player) {
+    const resource = makeResource(V, s.station.url, s.volume);
+    if (resource) s.player.play(resource);
+  }
   return { volume: s.volume };
 }
 
