@@ -84,7 +84,8 @@ async function restoreDefaults(guildId) {
 }
 
 async function listItems(guildId, { all = false } = {}) {
-  await ensureDefaults(guildId);
+  // Seeding/top-up must never take down the shop listing — if it fails, just show what's there.
+  await ensureDefaults(guildId).catch((err) => console.error('Shop ensureDefaults failed:', err.message));
   const items = await ShopItem.find(all ? { guildId } : { guildId, enabled: true }).sort({ order: 1, price: 1 }).lean();
   return items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.price - b.price);
 }
