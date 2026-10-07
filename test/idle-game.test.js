@@ -52,9 +52,9 @@ const H=3600000;
 
   // ---- collect banks pending bubbles (once running)
   let f=await I.getFactory('g','ann'); f.active=true; f.lastTick=now-4*H; await f.save();
-  let c=await I.collect('g','ann',s,now);
+  let c=await I.collect('g','ann',s,now,{rng:()=>1}); // rng=1 → never a golden strike
   assert.equal(c.gained,240); assert.equal(c.state.bank,240); assert.equal(c.state.lifetime,240);
-  c=await I.collect('g','ann',s,now); assert.equal(c.gained,0,'nothing new right after collecting');
+  c=await I.collect('g','ann',s,now,{rng:()=>1}); assert.equal(c.gained,0,'nothing new right after collecting');
   console.log('✓ collect banks the pending bubbles (and nothing extra right after)');
 
   // ---- buying upgrades spends the (already-collected) bank, and does NOT auto-collect pending
@@ -160,6 +160,88 @@ const H=3600000;
   s2=await freshCfg();
   assert.equal(I.upgradeCost('scrubber',0,s2.upgradeById),100,'back to the default cost after reset');
   console.log('✓ configurable upgrades: cost/effect/max/enabled, disable, bulk save and reset');
+
+  // ---- Rebirth (prestige): reset bank+upgrades for permanent power + ⭐ stars
+  const rs=I.idleSettings({idleGame:{enabled:true,rebirthBaseCost:1000,rebirthGrowth:2,rebirthBonusPct:20,starDivisor:100}});
+  assert.deepEqual([rs.rebirthEnabled,rs.rebirthBaseCost,rs.rebirthGrowth,rs.rebirthBonusPct,rs.starDivisor],[true,1000,2,20,100]);
+  assert.deepEqual([0,1,2].map((n)=>I.rebirthCost(n,rs)),[1000,2000,4000],'requirement doubles each rebirth');
+  assert.equal(I.totalStarsFor(5000,rs),7,'floor(sqrt(5000/100))');
+  assert.equal(I.prestigeMult({rebirths:2},rs).toFixed(2),'1.40','+20% per rebirth');
+  let rx=await I.getFactory('g','rex'); rx.active=true; rx.lifetime=5000; rx.bank=777; rx.upgrades={scrubber:4}; rx.markModified('upgrades'); rx.lastTick=now; await rx.save();
+  assert.equal(I.canRebirth(rx,rs),true,'5000 lifetime ≥ 1000 needed');
+  let rb=await I.rebirth('g','rex',rs,now);
+  assert.equal(rb.rebirths,1); assert.equal(rb.gained,7,'awarded √(5000/100) stars');
+  assert.equal(rb.state.bank,0,'bank reset (no Nest Egg yet)'); assert.equal(rb.state.lifetime,5000,'lifetime kept');
+  assert.deepEqual(rb.state.upgrades,{},'upgrades wiped'); assert.equal(I.ratePerHour(rb.state,rs),72,'60 × 1.2 prestige');
+  // A second rebirth with no new lifetime awards no new stars (no double-paying).
+  let rb2=await I.rebirth('g','rex',rs,now); assert.equal(rb2.rebirths,2); assert.equal(rb2.gained,0,'no new lifetime → no new stars');
+  // Not enough lifetime → blocked.
+  let rx2=await I.getFactory('g','ned'); rx2.active=true; rx2.lifetime=500; await rx2.save();
+  assert.match((await I.rebirth('g','ned',rs,now)).error,/need \*\*1,000\*\* lifetime/);
+  // Rebirth can be turned off.
+  assert.match((await I.rebirth('g','rex',{...rs,rebirthEnabled:false},now)).error,/turned off/);
+  console.log('✓ rebirth: resets run, keeps lifetime, awards √-scaled stars once, blocks under the requirement');
+
+  // ---- Prestige perks (permanent, bought with ⭐) — on a fresh prestige-1 factory (no upgrades)
+  await I.adminSetRebirth('g','rio',1); await I.adminGrantStars('g','rio',100);
+  let bp=await I.buyPerk('g','rio','golden'); assert.equal(bp.newLevel,1); assert.equal(bp.cost,5);
+  assert.equal(I.ratePerHour(bp.state,rs),Math.round(60*1.2*1.08),'Golden Touch adds +8% on top of prestige');
+  bp=await I.buyPerk('g','rio','overflow'); assert.equal(I.dailyXpCapFor(bp.state,rs),rs.dailyXpCap+50,'Overflow lifts the daily XP cap');
+  bp=await I.buyPerk('g','rio','reserves'); assert.equal(I.offlineCapHours(bp.state,rs),rs.offlineHours+2,'Deep Reserves extends offline storage');
+  // Nest Egg gives starting bubbles on rebirth (rex: lifetime 5000, rebirths 2, needs 4000).
+  await I.adminGrantStars('g','rex',100); await I.buyPerk('g','rex','nest');
+  let rbn=await I.rebirth('g','rex',rs,now); assert.equal(rbn.state.bank,250,'Nest Egg gives starting bubbles on rebirth');
+  // Can't afford → unchanged.
+  let poor=await I.getFactory('g','pat'); poor.stars=0; await poor.save();
+  assert.match((await I.buyPerk('g','pat','golden')).error,/costs/);
+  console.log('✓ prestige perks: Golden Touch / Overflow / Deep Reserves / Nest Egg, star costs enforced');
+
+  // ---- admin: stars + set rebirth
+  let gs=await I.adminGrantStars('g','ann',25); assert.equal(gs.state.stars,25);
+  gs=await I.adminGrantStars('g','ann',-10); assert.equal(gs.state.stars,15); assert.equal(gs.applied,-10);
+  gs=await I.adminGrantStars('g','ann',-999); assert.equal(gs.state.stars,0,'stars never below 0');
+  let sr=await I.adminSetRebirth('g','ann',7); assert.equal(sr.state.rebirths,7);
+  // rebirth config validation
+  assert.match(I.cleanSettings({rebirthBaseCost:100}).error,/Rebirth base cost/);
+  assert.match(I.cleanSettings({rebirthGrowth:1.05}).error,/Rebirth growth/);
+  console.log('✓ admin: grant/remove stars (clamped), set rebirth level, config validation');
+
+  // ---- 💎 Golden Bubble on collect (configurable chance/multiplier, Lucky Charm perk)
+  const gs2=I.idleSettings({idleGame:{enabled:true,goldenEnabled:true,goldenChance:50,goldenMultiplier:5}});
+  let gf=await I.getFactory('g','glo'); gf.active=true; gf.lastTick=now-4*H; await gf.save(); // 240 pending @60/hr
+  let gc=await I.collect('g','glo',gs2,now,{rng:()=>0}); // rng=0 < 50% → golden
+  assert.equal(gc.golden,true); assert.equal(gc.base,240); assert.equal(gc.gained,240*5,'golden pays ×5');
+  gf=await I.getFactory('g','glo'); gf.lastTick=now-4*H; await gf.save();
+  gc=await I.collect('g','glo',gs2,now,{rng:()=>0.99}); // 0.99*100=99 ≥ 50 → normal
+  assert.equal(gc.golden,false); assert.equal(gc.gained,240);
+  // Lucky Charm lifts the chance: 0% base + 1 level × 3% = 3%, rng 0.02 → hit.
+  let lf=await I.getFactory('g','luc'); lf.active=true; lf.lastTick=now-4*H; lf.perks={lucky:1}; lf.markModified('perks'); await lf.save();
+  gc=await I.collect('g','luc',{...gs2,goldenChance:0},now,{rng:()=>0.02});
+  assert.equal(gc.golden,true,'Lucky Charm adds +3% golden chance');
+  console.log('✓ golden bubble: configurable chance/multiplier, Lucky Charm boosts the odds');
+
+  // ---- 🎁 Daily streak bonus (self-scales with production, streak multiplier, once a day)
+  const ds=I.idleSettings({idleGame:{enabled:true,dailyBonusEnabled:true,dailyBonusHours:4,dailyStreakPct:10,dailyMaxStreak:3}});
+  const d0=Date.UTC(2027,2,1,12);
+  let df=await I.getFactory('g','day'); df.active=true; await df.save();
+  assert.equal(I.canClaimDaily(df,ds,d0),true);
+  let dc=await I.claimDaily('g','day',ds,d0);
+  assert.equal(dc.reward,240,'4h × 60/hr × streak 1'); assert.equal(dc.effStreak,1);
+  assert.match((await I.claimDaily('g','day',ds,d0)).error,/already claimed/);
+  // Next day → streak 2 (×1.1). (Pin lastTick so no new bubbles muddy the rate.)
+  const d1=d0+24*H; df=await I.getFactory('g','day'); df.lastTick=d1; await df.save();
+  dc=await I.claimDaily('g','day',ds,d1); assert.equal(dc.effStreak,2); assert.equal(dc.reward,Math.round(60*4*1.1),'×1.1 on day 2');
+  // Skip a day → streak resets to 1.
+  const d3=d1+2*24*H; df=await I.getFactory('g','day'); df.lastTick=d3; await df.save();
+  dc=await I.claimDaily('g','day',ds,d3); assert.equal(dc.effStreak,1,'a missed day resets the streak');
+  // Streak multiplier caps at dailyMaxStreak.
+  let cf=await I.getFactory('g','cap'); cf.active=true; cf.dailyDay='2027-02-28'; cf.dailyStreak=10; await cf.save();
+  dc=await I.claimDaily('g','cap',ds,Date.UTC(2027,2,1,12)); assert.equal(dc.effStreak,3,'capped at max streak 3'); assert.equal(dc.mult.toFixed(2),'1.20');
+  // Can be turned off + validation.
+  assert.match((await I.claimDaily('g','day',{...ds,dailyBonusEnabled:false},d3)).error,/turned off/);
+  assert.match(I.cleanSettings({goldenMultiplier:1}).error,/Golden bubble multiplier/);
+  assert.match(I.cleanSettings({dailyMaxStreak:0}).error,/Daily max streak/);
+  console.log('✓ daily bonus: self-scaling reward, streak ×, once/day, resets on a miss, caps, configurable');
 
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});

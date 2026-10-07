@@ -2576,6 +2576,22 @@ async function loadIdle() {
     document.getElementById('idleFullAlerts').checked = s.fullAlerts !== false;
     const ch = document.getElementById('idleAlertChannel');
     if (ch) ch.value = s.fullAlertChannelId || '';
+    if (document.getElementById('idleRebirth')) {
+      document.getElementById('idleRebirth').checked = s.rebirthEnabled !== false;
+      v('idleRebirthCost', s.rebirthBaseCost);
+      v('idleRebirthGrowth', s.rebirthGrowth);
+      v('idleRebirthBonus', s.rebirthBonusPct);
+      v('idleStarDivisor', s.starDivisor);
+    }
+    if (document.getElementById('idleDaily')) {
+      document.getElementById('idleDaily').checked = s.dailyBonusEnabled !== false;
+      v('idleDailyHours', s.dailyBonusHours);
+      v('idleDailyStreakPct', s.dailyStreakPct);
+      v('idleDailyMaxStreak', s.dailyMaxStreak);
+      document.getElementById('idleGolden').checked = s.goldenEnabled !== false;
+      v('idleGoldenChance', s.goldenChance);
+      v('idleGoldenMult', s.goldenMultiplier);
+    }
     idleState.loaded = true;
   }
   // Live preview recomputes as the admin edits any input.
@@ -2616,6 +2632,22 @@ async function saveIdle() {
     fullAlerts: document.getElementById('idleFullAlerts').checked,
     fullAlertChannelId: v('idleAlertChannel') || null
   };
+  if (document.getElementById('idleRebirth')) {
+    body.rebirthEnabled = document.getElementById('idleRebirth').checked;
+    body.rebirthBaseCost = v('idleRebirthCost');
+    body.rebirthGrowth = v('idleRebirthGrowth');
+    body.rebirthBonusPct = v('idleRebirthBonus');
+    body.starDivisor = v('idleStarDivisor');
+  }
+  if (document.getElementById('idleDaily')) {
+    body.dailyBonusEnabled = document.getElementById('idleDaily').checked;
+    body.dailyBonusHours = v('idleDailyHours');
+    body.dailyStreakPct = v('idleDailyStreakPct');
+    body.dailyMaxStreak = v('idleDailyMaxStreak');
+    body.goldenEnabled = document.getElementById('idleGolden').checked;
+    body.goldenChance = v('idleGoldenChance');
+    body.goldenMultiplier = v('idleGoldenMult');
+  }
   const data = await withButton(document.getElementById('idleSaveBtn'), () => manageApi('POST', 'leveling/idle', body), '🫧 Bubble Factory saved.');
   if (data) {
     syncModuleSwitch('idle', data.settings.enabled);

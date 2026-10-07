@@ -143,6 +143,28 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       `available:false` removes it from `/idle upgrades` but keeps it in the dashboard editor.
       `/idle admin upgrades_reset which:🧽 Scrubber` restores one upgrade; `/idle admin upgrades_reset`
       (no `which`) restores them all.
+- [ ] **✨ Rebirth:** with the factory open, below the lifetime threshold the embed shows a **rebirth
+      progress bar** and the **✨ Rebirth** button is greyed out. Lower the requirement (e.g.
+      `/idle admin rebirth base_cost:1000 growth:2`) or `/idle admin give` yourself lots of 🫧 and
+      collect to build lifetime → the embed says **"Rebirth ready!"** and the button turns red.
+- [ ] Press **✨ Rebirth → Rebirth now** → bank and upgrades reset to 0, the title gains **✨1**,
+      Production shows a **×multiplier**, and you're awarded **⭐ Stars**. Your **lifetime** is kept.
+      Rebirthing again needs a higher lifetime (× the growth).
+- [ ] **🌟 Prestige perks** button → spend ⭐ on **Golden Touch** (production ×), **Nest Egg** (start a
+      rebirth with bubbles), **Deep Reserves** (+offline storage), **Overflow Valve** (+your daily XP
+      cap). Perks persist through rebirths; a perk you can't afford is refused.
+- [ ] **Staff rebirth cmds:** `/idle admin rebirth …` updates the config (and the dashboard **✨ Rebirth**
+      section reflects it); `/idle admin stars @user amount:10` grants ⭐ (negative removes, clamped at 0);
+      `/idle admin setrebirth @user count:3` sets their rebirth level. `/idle top` shows **✨N** next to
+      people who've rebirthed. **Rebirth is optional:** `/idle admin rebirth enabled:false` (or the
+      dashboard toggle) hides the rebirth button, the Prestige panel and the `5️⃣` help section entirely.
+- [ ] **🎁 Daily bonus:** `/idle daily` (or the **🎁 Daily** button) grants bubbles once per UTC day and
+      shows your streak; claiming again the same day → "already claimed". The button greys to "Daily
+      claimed" after. `/idle admin daily hours:6 streak_pct:15 max_streak:5 enabled:true` retunes it
+      (dashboard **🎁 Daily streak bonus** section matches). Turning it off hides the button.
+- [ ] **💎 Golden Bubble:** with a high `chance` (`/idle admin golden chance:100 multiplier:5`), the next
+      **Collect** pops a **💎 GOLDEN BUBBLE!** animation and banks ×5. Set `chance:0` → always normal.
+      The 🍀 **Lucky Charm** prestige perk raises the odds. Dashboard **💎 Golden Bubble** section matches.
 - [ ] Dashboard: the 🫧 header bubbles animate; the **At these settings** preview tiles update live as
       you change a number (before saving); the **🏭 Upgrades** editor lists every upgrade with editable
       Cost / Effect / Max / On fields, and **Save** / **Reset to defaults** persist and reload; the **"Tub is full" alerts**

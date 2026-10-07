@@ -30,8 +30,46 @@ function blurbFor(u) {
   return '';
 }
 
+// Permanent prestige perks, bought with ⭐ Prestige Stars and kept forever (through every rebirth).
+// `prod` = +fraction production per level; `tub` = +offline hours/level; `xpcap` = +daily XP cap/level;
+// `startBank` = bubbles you begin each rebirth with, per level. Costs grow geometrically in stars.
+const PERKS = [
+  { id: 'golden', name: 'Golden Touch', emoji: '🌟', base: 5, growth: 1.5, max: 15, prod: 0.08, desc: '+8% production (forever)' },
+  { id: 'nest', name: 'Nest Egg', emoji: '🪺', base: 4, growth: 1.4, max: 20, startBank: 250, desc: '+250 bubbles to start each rebirth' },
+  { id: 'reserves', name: 'Deep Reserves', emoji: '🛢️', base: 6, growth: 1.5, max: 12, tub: 2, desc: '+2h offline storage' },
+  { id: 'overflow', name: 'Overflow Valve', emoji: '💧', base: 6, growth: 1.45, max: 20, xpcap: 50, desc: '+50 to your daily XP cash-out cap' },
+  { id: 'lucky', name: 'Lucky Charm', emoji: '🍀', base: 8, growth: 1.5, max: 10, chance: 3, desc: '+3% 💎 Golden Bubble chance' }
+];
+const PERK_BY_ID = Object.fromEntries(PERKS.map((p) => [p.id, p]));
+const PERK_STAT = { golden: 'prod', nest: 'startBank', reserves: 'tub', overflow: 'xpcap', lucky: 'chance' };
+const perkCost = (perk, level) => Math.ceil(perk.base * Math.pow(perk.growth, level));
+const perkLevel = (state, id) => {
+  const p = state?.perks;
+  if (!p) return 0;
+  return (p.get ? p.get(id) : p[id]) || 0;
+};
+function setPerkLevel(state, id, level) {
+  if (state.perks?.set) state.perks.set(id, level);
+  else {
+    state.perks = state.perks || {};
+    state.perks[id] = level;
+  }
+  state.markModified?.('perks');
+}
+const perkTotal = (state, id) => perkLevel(state, id) * (PERK_BY_ID[id]?.[PERK_STAT[id]] || 0);
+
 const fmt = (n) => Number(Math.round(n)).toLocaleString('en-US');
 const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+
+// ---------------------------------------------------------------- Rebirth (prestige) maths
+/** Lifetime 🫧 needed to perform the member's next rebirth. */
+const rebirthCost = (rebirths, s) => Math.ceil(s.rebirthBaseCost * Math.pow(s.rebirthGrowth, rebirths || 0));
+/** Cumulative Prestige Stars a given all-time lifetime is worth. */
+const totalStarsFor = (lifetime, s) => Math.floor(Math.sqrt(Math.max(0, lifetime) / s.starDivisor));
+/** Permanent production multiplier from rebirths + the Golden Touch perk. */
+const prestigeMult = (state, s) => (1 + (state.rebirths || 0) * (s.rebirthBonusPct / 100)) * (1 + perkTotal(state, 'golden'));
+/** Can this member rebirth right now? */
+const canRebirth = (state, s) => !!s.rebirthEnabled && (state.lifetime || 0) >= rebirthCost(state.rebirths, s);
 
 /** The upgrade tree for a guild: defaults merged with its per-upgrade overrides (cost, effect, max,
  * enabled). Returns every upgrade (including disabled ones) in the default order, with a fresh blurb. */
@@ -62,6 +100,18 @@ function idleSettings(config) {
     dailyXpCap: int(g.dailyXpCap, 300, 0, 100000), // most XP one member can cash out per UTC day
     fullAlerts: g.fullAlerts !== false, // DM a member once when their tub fills (default on)
     fullAlertChannelId: g.fullAlertChannelId || null, // fallback channel when DMs are closed
+    rebirthEnabled: g.rebirthEnabled !== false, // prestige/rebirth loop (default on)
+    rebirthBaseCost: int(g.rebirthBaseCost, 250000, 1000, 1e12), // lifetime 🫧 for the 1st rebirth
+    rebirthGrowth: Number.isFinite(Number(g.rebirthGrowth)) && Number(g.rebirthGrowth) >= 1.1 ? Math.min(Number(g.rebirthGrowth), 100) : 2.2,
+    rebirthBonusPct: int(g.rebirthBonusPct, 15, 0, 1000), // permanent +% production per rebirth
+    starDivisor: int(g.starDivisor, 4000, 1, 1e9),
+    dailyBonusEnabled: g.dailyBonusEnabled !== false, // 🎁 daily streak login reward
+    dailyBonusHours: int(g.dailyBonusHours, 4, 0, 72), // reward = N hours of production…
+    dailyStreakPct: int(g.dailyStreakPct, 10, 0, 1000), // …× streak multiplier
+    dailyMaxStreak: int(g.dailyMaxStreak, 7, 1, 365),
+    goldenEnabled: g.goldenEnabled !== false, // 💎 golden bubble on collect
+    goldenChance: int(g.goldenChance, 5, 0, 100), // base % chance
+    goldenMultiplier: int(g.goldenMultiplier, 5, 2, 100),
     upgrades,
     upgradeById: Object.fromEntries(upgrades.map((u) => [u.id, u])),
     allUpgrades: all // includes disabled ones, for the dashboard/admin views
@@ -91,21 +141,25 @@ function upgradeCost(id, level, byId = DEFAULT_BY_ID) {
   return Math.ceil(u.baseCost * Math.pow(u.growth, level));
 }
 
-/** Bubbles produced per hour, from the base rate, flat upgrades, and the shine multiplier. */
+/** Bubbles produced per hour: base rate, flat upgrades, the shine multiplier, and the permanent
+ * prestige multiplier (rebirths + Golden Touch). */
 function ratePerHour(state, s) {
   const list = s.upgrades || DEFAULT_UPGRADES;
   let flat = s.baseRate;
   for (const u of list) if (u.rate) flat += u.rate * levelOf(state, u.id);
   const shineDef = (s.upgradeById || DEFAULT_BY_ID).shine;
   const shine = 1 + ((shineDef?.shine ?? 10) / 100) * levelOf(state, 'shine');
-  return Math.round(flat * shine);
+  return Math.round(flat * shine * prestigeMult(state, s));
 }
 
-/** How many hours of production the factory can bank while you're away. */
+/** How many hours of production the factory can bank while you're away (tub upgrade + Deep Reserves). */
 function offlineCapHours(state, s) {
   const tubDef = (s.upgradeById || DEFAULT_BY_ID).tub;
-  return s.offlineHours + (tubDef?.tub ?? 2) * levelOf(state, 'tub');
+  return s.offlineHours + (tubDef?.tub ?? 2) * levelOf(state, 'tub') + perkTotal(state, 'reserves');
 }
+
+/** This member's effective daily XP cash-out cap (server cap + the Overflow Valve perk). */
+const dailyXpCapFor = (state, s) => s.dailyXpCap + perkTotal(state, 'overflow');
 
 /** Bubbles waiting to be collected right now (capped by the offline window). A paused/never-started
  * factory makes nothing — the member has to start it first with /idle start (or the Start button). */
@@ -115,10 +169,10 @@ function pendingBubbles(state, s, now = Date.now()) {
   return Math.max(0, Math.floor(hours * ratePerHour(state, s)));
 }
 
-/** XP a member may still cash out today (resets at UTC midnight). */
+/** XP a member may still cash out today (resets at UTC midnight), including their Overflow perk. */
 function xpLeftToday(state, s, now = Date.now()) {
   const used = state.cashoutDay === dayKey(now) ? state.cashoutXpToday || 0 : 0;
-  return Math.max(0, s.dailyXpCap - used);
+  return Math.max(0, dailyXpCapFor(state, s) - used);
 }
 
 // ---------------------------------------------------------------- Loading / actions
@@ -149,17 +203,53 @@ async function stopFactory(guildId, userId) {
   return { state, already };
 }
 
-/** Banks pending bubbles into the factory and returns how many were collected. */
-async function collect(guildId, userId, s, now = Date.now()) {
+/** Banks pending bubbles into the factory. Each collect has a chance to strike a 💎 Golden Bubble
+ * (configurable, boosted by the Lucky Charm perk) worth a multiple of the haul. Returns the total
+ * collected plus whether it was golden. `rng` is injectable for tests. */
+async function collect(guildId, userId, s, now = Date.now(), { rng = Math.random } = {}) {
   const state = await getFactory(guildId, userId);
-  const gained = pendingBubbles(state, s, now);
+  const base = pendingBubbles(state, s, now);
+  let golden = false;
+  let gained = base;
+  if (base > 0 && s.goldenEnabled) {
+    const chance = Math.min(100, s.goldenChance + perkTotal(state, 'lucky'));
+    if (rng() * 100 < chance) {
+      golden = true;
+      gained = base * s.goldenMultiplier;
+    }
+  }
   state.bank += gained;
   state.lifetime += gained;
   state.lastTick = now;
   state.fullNotified = false; // the tub just drained — eligible for a fresh "full" alert later
   await state.save();
-  return { state, gained };
+  return { state, gained, base, golden };
 }
+
+/**
+ * Claims the once-a-day 🎁 streak bonus: a reward worth `dailyBonusHours` of the member's current
+ * production, scaled up by their login streak (capped). Returns { reward, streak, mult } or { error }.
+ */
+async function claimDaily(guildId, userId, s, now = Date.now()) {
+  if (!s.dailyBonusEnabled) return { error: 'The daily bonus is turned off on this server.' };
+  const state = await getFactory(guildId, userId);
+  const today = dayKey(now);
+  if (state.dailyDay === today) return { error: "You've already claimed today's bonus — come back after midnight UTC.", state, already: true };
+  const yesterday = dayKey(now - 24 * HOUR);
+  const streak = state.dailyDay === yesterday ? (state.dailyStreak || 0) + 1 : 1;
+  const effStreak = Math.min(streak, s.dailyMaxStreak);
+  const mult = 1 + (effStreak - 1) * (s.dailyStreakPct / 100);
+  const reward = Math.max(1, Math.round(ratePerHour(state, s) * s.dailyBonusHours * mult));
+  state.bank += reward;
+  state.lifetime += reward;
+  state.dailyDay = today;
+  state.dailyStreak = streak;
+  await state.save();
+  return { state, reward, streak, effStreak, mult, maxed: streak >= s.dailyMaxStreak };
+}
+
+/** Whether the member can claim their daily bonus right now. */
+const canClaimDaily = (state, s, now = Date.now()) => !!s.dailyBonusEnabled && state.dailyDay !== dayKey(now);
 
 /** Buys one level of an upgrade, paying from the bank. Spends collected bubbles only — the player
  * has to Collect their pending bubbles first (so the Collect step actually means something). */
@@ -191,7 +281,7 @@ async function cashout(guild, userId, s, { now = Date.now(), adjustXp = null } =
   const left = xpLeftToday(state, s, now);
   if (left <= 0) {
     await state.save();
-    return { error: `You've hit today's cash-out cap (${fmt(s.dailyXpCap)} XP). It resets at midnight UTC.`, state };
+    return { error: `You've hit today's cash-out cap (${fmt(dailyXpCapFor(state, s))} XP). It resets at midnight UTC.`, state };
   }
   const xp = Math.min(Math.floor(state.bank / s.bubblesPerXp), left);
   if (xp <= 0) {
@@ -229,6 +319,71 @@ async function adminAdjustBubbles(guildId, userId, delta) {
 /** Wipes a member's factory (bank, upgrades, lifetime) back to a fresh start. */
 async function resetFactory(guildId, userId) {
   await IdleFactory.deleteOne({ guildId, userId });
+}
+
+/** Staff: grant (or remove, delta<0) Prestige Stars. Stars can't go below 0. */
+async function adminGrantStars(guildId, userId, delta) {
+  const amount = Math.round(Number(delta) || 0);
+  const state = await getFactory(guildId, userId);
+  const before = state.stars || 0;
+  state.stars = Math.max(0, before + amount);
+  const applied = state.stars - before;
+  if (applied > 0) state.starsEarned = (state.starsEarned || 0) + applied; // keep earned >= spendable
+  await state.save();
+  return { state, applied };
+}
+
+/** Staff: set a member's rebirth count directly (re-syncs their earned-stars floor so it stays fair). */
+async function adminSetRebirth(guildId, userId, count) {
+  const n = Math.max(0, Math.round(Number(count) || 0));
+  const state = await getFactory(guildId, userId);
+  state.rebirths = n;
+  await state.save();
+  return { state };
+}
+
+// ---------------------------------------------------------------- Rebirth & perks (members)
+
+/**
+ * Rebirths a member: resets bank + upgrades + pending, keeps lifetime/stars/perks/rebirths, awards the
+ * Prestige Stars their all-time lifetime is now worth, and bumps their permanent production bonus.
+ */
+async function rebirth(guildId, userId, s, now = Date.now()) {
+  if (!s.rebirthEnabled) return { error: 'Rebirth is turned off on this server.' };
+  const state = await getFactory(guildId, userId);
+  const cost = rebirthCost(state.rebirths, s);
+  if ((state.lifetime || 0) < cost) {
+    return { error: `You need **${fmt(cost)}** lifetime 🫧 to rebirth — you're at **${fmt(state.lifetime || 0)}** (${fmt(cost - (state.lifetime || 0))} to go).`, state, cost };
+  }
+  const total = totalStarsFor(state.lifetime, s);
+  const gained = Math.max(0, total - (state.starsEarned || 0));
+  state.starsEarned = Math.max(state.starsEarned || 0, total);
+  state.stars = (state.stars || 0) + gained;
+  state.rebirths = (state.rebirths || 0) + 1;
+  // Reset the run — but keep the prestige (rebirths, stars, perks) and all-time lifetime.
+  state.bank = perkTotal(state, 'nest'); // Nest Egg starting bubbles
+  state.upgrades = {};
+  state.markModified('upgrades');
+  state.lastTick = now;
+  state.active = true;
+  state.fullNotified = false;
+  await state.save();
+  return { state, gained, rebirths: state.rebirths, cost };
+}
+
+/** Buys one level of a prestige perk, paying Prestige Stars. */
+async function buyPerk(guildId, userId, id) {
+  const perk = PERK_BY_ID[id];
+  if (!perk) return { error: 'No such perk.' };
+  const state = await getFactory(guildId, userId);
+  const level = perkLevel(state, id);
+  if (level >= perk.max) return { error: `${perk.name} is already maxed (${perk.max}).`, state };
+  const cost = perkCost(perk, level);
+  if ((state.stars || 0) < cost) return { error: `That costs ${fmt(cost)} ⭐ — you have ${fmt(state.stars || 0)}.`, state, cost };
+  state.stars -= cost;
+  setPerkLevel(state, id, level + 1);
+  await state.save();
+  return { state, perk, newLevel: level + 1, cost };
 }
 
 // ---------------------------------------------------------------- "Tub is full" alerts
@@ -337,34 +492,82 @@ function factoryEmbed(state, s, { name, now = Date.now() } = {}) {
     ? `🫧 **FULL — collect before you waste production!**\n${bar(1, 1)} \`${fmt(pending)} / ${fmt(capBubbles)}\` 🫧`
     : `${bar(pending, capBubbles)} \`${fmt(pending)} / ${fmt(capBubbles)}\` 🫧 · ${pct}%\n-# Fills up after **${capH}h** away.`;
 
+  const reb = state.rebirths || 0;
+  const mult = prestigeMult(state, s);
+  const multStr = mult > 1.0001 ? ` ×${mult.toFixed(2)}` : '';
+  // Rebirth progress line (only once prestige is on and the player has started earning).
+  let rebirthBlock = '';
+  if (s.rebirthEnabled) {
+    const rcost = rebirthCost(reb, s);
+    if (canRebirth(state, s)) {
+      const stars = Math.max(0, totalStarsFor(state.lifetime, s) - (state.starsEarned || 0));
+      rebirthBlock = `\n\n✨ **Rebirth ready!** Reset for **+${s.rebirthBonusPct}%** permanent production${stars > 0 ? ` and **${fmt(stars)} ⭐**` : ''} — press **✨ Rebirth**.`;
+    } else if (state.lifetime > 0) {
+      rebirthBlock = `\n\n✨ Next rebirth at **${fmt(rcost)}** lifetime 🫧\n${bar(state.lifetime, rcost, 14)} ${Math.round(Math.min(100, (state.lifetime / rcost) * 100))}%`;
+    }
+  }
+
+  const prestigeField =
+    reb > 0 || (state.stars || 0) > 0
+      ? { name: '✨ Prestige', value: `**Rebirth ${reb}**${multStr ? ` · ${multStr.trim()}` : ''}\n-# ${fmt(state.stars || 0)} ⭐ to spend`, inline: true }
+      : { name: '📈 Lifetime', value: `**${fmt(state.lifetime)}** 🫧\n-# all-time`, inline: true };
+
   return new EmbedBuilder()
     .setColor(full ? GOLD : BLUE)
-    .setTitle(`🫧 ${name ? `${name}'s ` : ''}Bubble Factory`)
+    .setTitle(`🫧 ${name ? `${name}'s ` : ''}Bubble Factory${reb > 0 ? ` ✨${reb}` : ''}`)
     .setDescription(
       `Your loofah bubbles away around the clock — even while you're gone.\n\n` +
-        `**📦 Ready to collect**\n${collectBlock}\n\n${recLine}`
+        `**📦 Ready to collect**\n${collectBlock}\n\n${recLine}${rebirthBlock}`
     )
     .addFields(
       { name: '🫧 Bank', value: `**${fmt(state.bank)}**\n-# ready to spend`, inline: true },
-      { name: '⚙️ Production', value: `**${fmt(rate)}**/hr\n-# with upgrades`, inline: true },
+      { name: '⚙️ Production', value: `**${fmt(rate)}**/hr${multStr}\n-# with upgrades`, inline: true },
       { name: '🛁 Storage', value: `**${capH}h**\n-# ~${fmt(capBubbles)} 🫧 at this rate`, inline: true },
       s.dailyXpCap > 0
         ? { name: '💧 Cash out', value: `${fmt(s.bubblesPerXp)} 🫧 = 1 XP\n-# ${fmt(left)} XP left today`, inline: true }
         : { name: '💧 Cash out', value: 'off\n-# bubbles only', inline: true },
-      { name: '📈 Lifetime', value: `**${fmt(state.lifetime)}** 🫧\n-# all-time`, inline: true },
+      prestigeField,
       { name: `🏭 Upgrades${owned.length ? ` · ${owned.length}` : ''}`, value: ownedStr, inline: true }
     )
-    .setFooter({ text: 'Collect → Upgrade → Cash out to XP' });
+    .setFooter({ text: 'Collect → Upgrade → Cash out → Rebirth' });
 }
 
-const rowFor = (userId, s) =>
-  new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`idle:collect:${userId}`).setLabel('Collect').setEmoji('🫧').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`idle:upgrades:${userId}`).setLabel('Upgrades').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`idle:cashout:${userId}`).setLabel('Cash out → XP').setEmoji('💧').setStyle(ButtonStyle.Success).setDisabled(s.dailyXpCap <= 0),
-    new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`idle:stop:${userId}`).setLabel('Pause').setEmoji('⏸️').setStyle(ButtonStyle.Secondary)
-  );
+function rowFor(userId, s, state = null) {
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`idle:collect:${userId}`).setLabel('Collect').setEmoji('🫧').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`idle:upgrades:${userId}`).setLabel('Upgrades').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`idle:cashout:${userId}`).setLabel('Cash out → XP').setEmoji('💧').setStyle(ButtonStyle.Success).setDisabled(s.dailyXpCap <= 0),
+      new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`idle:stop:${userId}`).setLabel('Pause').setEmoji('⏸️').setStyle(ButtonStyle.Secondary)
+    )
+  ];
+  // Second row: 🎁 Daily, ✨ Rebirth (highlighted when ready) and 🌟 Prestige perks (when they have any).
+  const second = new ActionRowBuilder();
+  if (s.dailyBonusEnabled) {
+    const claimable = state ? canClaimDaily(state, s) : true;
+    second.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`idle:daily:${userId}`)
+        .setLabel(claimable ? 'Daily bonus' : 'Daily claimed')
+        .setEmoji('🎁')
+        .setStyle(claimable ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(!claimable)
+    );
+  }
+  if (s.rebirthEnabled) {
+    const ready = state ? canRebirth(state, s) : false;
+    const hasPrestige = state ? (state.rebirths || 0) > 0 || (state.stars || 0) > 0 : false;
+    second.addComponents(
+      new ButtonBuilder().setCustomId(`idle:rebirth:${userId}`).setLabel('Rebirth').setEmoji('✨').setStyle(ready ? ButtonStyle.Danger : ButtonStyle.Secondary).setDisabled(!ready)
+    );
+    if (hasPrestige) {
+      second.addComponents(new ButtonBuilder().setCustomId(`idle:prestige:${userId}`).setLabel('Prestige perks').setEmoji('🌟').setStyle(ButtonStyle.Primary));
+    }
+  }
+  if (second.components.length) rows.push(second);
+  return rows;
+}
 
 /** The screen shown before a member starts their factory (or after they pause it). */
 function startView(state, s, userId, name) {
@@ -426,11 +629,68 @@ function upgradesView(state, s, userId, now = Date.now()) {
   return { embed, rows };
 }
 
+/** The ✨ Prestige perks shop — spend ⭐ Stars on permanent upgrades that survive every rebirth. */
+function prestigeView(state, s, userId) {
+  const stars = state.stars || 0;
+  const embed = new EmbedBuilder()
+    .setColor(GOLD)
+    .setTitle('🌟 Prestige Perks')
+    .setDescription(
+      `**✨ Rebirth ${state.rebirths || 0}** · permanent production **×${prestigeMult(state, s).toFixed(2)}**\n` +
+        `**⭐ ${fmt(stars)}** Prestige Stars to spend. Perks are **permanent** — they stay through every rebirth.`
+    );
+  const row = new ActionRowBuilder();
+  for (const p of PERKS) {
+    const level = perkLevel(state, p.id);
+    const maxed = level >= p.max;
+    const cost = perkCost(p, level);
+    const can = stars >= cost;
+    const status = maxed ? '✅ **MAXED**' : can ? `🟢 **${fmt(cost)} ⭐**` : `🔒 **${fmt(cost)} ⭐** · ${fmt(cost - stars)} to go`;
+    embed.addFields({ name: `${p.emoji} ${p.name} — Lv ${level}/${p.max}`, value: `${p.desc}\n${status}`, inline: true });
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`idle:perk:${p.id}:${userId}`)
+        .setLabel(p.name)
+        .setEmoji(p.emoji)
+        .setStyle(maxed ? ButtonStyle.Secondary : can ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(maxed || !can)
+    );
+  }
+  const back = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('← Back').setStyle(ButtonStyle.Secondary));
+  return { embed, rows: [row, back] };
+}
+
+/** The ✨ Rebirth confirmation screen — spells out exactly what's reset and what's gained. */
+function rebirthConfirmView(state, s, userId) {
+  const reb = state.rebirths || 0;
+  const cost = rebirthCost(reb, s);
+  const ready = canRebirth(state, s);
+  const stars = Math.max(0, totalStarsFor(state.lifetime, s) - (state.starsEarned || 0));
+  const embed = new EmbedBuilder()
+    .setColor(ready ? GOLD : BLUE)
+    .setTitle('✨ Rebirth your factory')
+    .setDescription(
+      ready
+        ? `You're ready for **Rebirth ${reb + 1}**!\n\n` +
+            `**You keep:** your lifetime 🫧, Prestige Stars and perks.\n` +
+            `**You reset:** your bank and all upgrades back to zero.\n\n` +
+            `**You gain:**\n• **+${s.rebirthBonusPct}%** permanent production (now **×${((1 + (reb + 1) * (s.rebirthBonusPct / 100)) * (1 + perkTotal(state, 'golden'))).toFixed(2)}**)\n` +
+            (stars > 0 ? `• **${fmt(stars)} ⭐** Prestige Stars to spend on perks` : '• (no new stars yet — keep growing your lifetime for more)')
+        : `Rebirth resets your bank & upgrades for a permanent **+${s.rebirthBonusPct}%** production boost and ⭐ Prestige Stars.\n\n` +
+            `You need **${fmt(cost)}** lifetime 🫧 — you're at **${fmt(state.lifetime || 0)}**.\n${bar(state.lifetime || 0, cost, 14)} ${Math.round(Math.min(100, ((state.lifetime || 0) / cost) * 100))}%`
+    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`idle:dorebirth:${userId}`).setLabel(ready ? `Rebirth now (+${s.rebirthBonusPct}%)` : 'Not ready yet').setEmoji('✨').setStyle(ButtonStyle.Danger).setDisabled(!ready),
+    new ButtonBuilder().setCustomId(`idle:home:${userId}`).setLabel('← Back').setStyle(ButtonStyle.Secondary)
+  );
+  return { embed, row };
+}
+
 // ---------------------------------------------------------------- Interaction routing (idle:*)
 
 async function handleIdleInteraction(interaction) {
   const [, action, a, b] = interaction.customId.split(':');
-  const owner = action === 'up' ? b : a;
+  const owner = action === 'up' || action === 'perk' ? b : a;
   if (owner !== interaction.user.id) {
     return interaction.reply({ content: '🫧 That’s someone else’s factory — open your own with `/idle`.', ephemeral: true }).catch(() => null);
   }
@@ -440,7 +700,7 @@ async function handleIdleInteraction(interaction) {
 
   if (action === 'start') {
     const { state } = await startFactory(interaction.guild.id, interaction.user.id);
-    return interaction.update({ embeds: [factoryEmbed(state, s, { name })], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
+    return interaction.update({ embeds: [factoryEmbed(state, s, { name })], components: rowFor(interaction.user.id, s, state) }).catch(() => null);
   }
   if (action === 'stop') {
     const { state } = await stopFactory(interaction.guild.id, interaction.user.id);
@@ -458,22 +718,33 @@ async function handleIdleInteraction(interaction) {
   }
 
   if (action === 'collect') {
-    const { state, gained } = await collect(interaction.guild.id, interaction.user.id, s);
+    const { state, gained, base, golden } = await collect(interaction.guild.id, interaction.user.id, s);
     if (gained <= 0) {
       const embed = factoryEmbed(state, s, { name }).setFooter({ text: '📦 Nothing to collect yet — come back a little later.' });
-      return interaction.update({ embeds: [embed], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
+      return interaction.update({ embeds: [embed], components: rowFor(interaction.user.id, s, state) }).catch(() => null);
     }
-    // A little filling-bubble animation, then the factory settles back in.
+    // A little filling-bubble animation, then the factory settles back in. A golden strike gets a flourish.
     const frame = (n) => new EmbedBuilder().setColor(BLUE).setTitle('🫧 Collecting…').setDescription(`${bar(n, 3)}`);
     await interaction.update({ embeds: [frame(1)], components: [] }).catch(() => null);
     await new Promise((r) => setTimeout(r, 350));
     await interaction.editReply({ embeds: [frame(2)] }).catch(() => null);
     await new Promise((r) => setTimeout(r, 350));
-    await interaction
-      .editReply({ embeds: [new EmbedBuilder().setColor(GREEN).setTitle('🫧 Collected!').setDescription(`${bar(3, 3)}\n**+${fmt(gained)} 🫧** into the bank.`)] })
-      .catch(() => null);
-    await new Promise((r) => setTimeout(r, 450));
-    return interaction.editReply({ embeds: [factoryEmbed(state, s, { name })], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
+    const done = golden
+      ? new EmbedBuilder().setColor(GOLD).setTitle('💎 GOLDEN BUBBLE!').setDescription(`${bar(3, 3)}\n🎉 A golden bubble burst — **×${s.goldenMultiplier}**!\n**+${fmt(gained)} 🫧** into the bank _(normally ${fmt(base)})_.`)
+      : new EmbedBuilder().setColor(GREEN).setTitle('🫧 Collected!').setDescription(`${bar(3, 3)}\n**+${fmt(gained)} 🫧** into the bank.`);
+    await interaction.editReply({ embeds: [done] }).catch(() => null);
+    await new Promise((r) => setTimeout(r, golden ? 650 : 450));
+    return interaction.editReply({ embeds: [factoryEmbed(state, s, { name })], components: rowFor(interaction.user.id, s, state) }).catch(() => null);
+  }
+  if (action === 'daily') {
+    const res = await claimDaily(interaction.guild.id, interaction.user.id, s);
+    const embed = factoryEmbed(res.state, s, { name });
+    embed.setFooter({
+      text: res.error
+        ? `⚠️ ${res.error}`
+        : `🎁 Daily bonus: +${fmt(res.reward)} 🫧 · 🔥 ${res.effStreak}-day streak${res.maxed ? ' (max!)' : ''} · ×${res.mult.toFixed(2)}`
+    });
+    return interaction.update({ embeds: [embed], components: rowFor(interaction.user.id, s, res.state) }).catch(() => null);
   }
   if (action === 'upgrades') {
     const state = await getFactory(interaction.guild.id, interaction.user.id);
@@ -491,11 +762,38 @@ async function handleIdleInteraction(interaction) {
     const res = await cashout(interaction.guild, interaction.user.id, s);
     const embed = factoryEmbed(res.state, s, { name });
     embed.setFooter({ text: res.error ? `⚠️ ${res.error}` : `💧 Cashed out ${fmt(res.xp)} XP for ${fmt(res.spent)} 🫧.` });
-    return interaction.update({ embeds: [embed], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
+    return interaction.update({ embeds: [embed], components: rowFor(interaction.user.id, s, res.state) }).catch(() => null);
+  }
+  if (action === 'rebirth') {
+    const state = await getFactory(interaction.guild.id, interaction.user.id);
+    const { embed, row } = rebirthConfirmView(state, s, interaction.user.id);
+    return interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+  }
+  if (action === 'dorebirth') {
+    const res = await rebirth(interaction.guild.id, interaction.user.id, s);
+    if (res.error) {
+      const { embed, row } = rebirthConfirmView(res.state, s, interaction.user.id);
+      return interaction.update({ embeds: [embed.setFooter({ text: `⚠️ ${res.error}` })], components: [row] }).catch(() => null);
+    }
+    const embed = factoryEmbed(res.state, s, { name }).setFooter({
+      text: `✨ Rebirth ${res.rebirths}! +${s.rebirthBonusPct}% production${res.gained > 0 ? ` · +${fmt(res.gained)} ⭐` : ''}.`
+    });
+    return interaction.update({ embeds: [embed], components: rowFor(interaction.user.id, s, res.state) }).catch(() => null);
+  }
+  if (action === 'prestige') {
+    const state = await getFactory(interaction.guild.id, interaction.user.id);
+    const { embed, rows } = prestigeView(state, s, interaction.user.id);
+    return interaction.update({ embeds: [embed], components: rows }).catch(() => null);
+  }
+  if (action === 'perk') {
+    const res = await buyPerk(interaction.guild.id, interaction.user.id, a);
+    const { embed, rows } = prestigeView(res.state, s, interaction.user.id);
+    embed.setFooter({ text: res.error ? `⚠️ ${res.error}` : `🌟 ${res.perk.emoji} ${res.perk.name} is now level ${res.newLevel}.` });
+    return interaction.update({ embeds: [embed], components: rows }).catch(() => null);
   }
   // home / refresh — just re-render (no auto-collect; the Collect button banks pending)
   const state = await getFactory(interaction.guild.id, interaction.user.id);
-  return interaction.update({ embeds: [factoryEmbed(state, s, { name })], components: [rowFor(interaction.user.id, s)] }).catch(() => null);
+  return interaction.update({ embeds: [factoryEmbed(state, s, { name })], components: rowFor(interaction.user.id, s, state) }).catch(() => null);
 }
 
 // ---------------------------------------------------------------- Leaderboard & settings
@@ -508,6 +806,7 @@ async function leaderboard(guild, { now = Date.now(), limit = 10 } = {}) {
     name: guild.members.cache.get(r.userId)?.displayName || null,
     lifetime: r.lifetime || 0,
     bank: r.bank || 0,
+    rebirths: r.rebirths || 0,
     rate: ratePerHour(r, s)
   }));
 }
@@ -527,6 +826,22 @@ function cleanSettings(input) {
     if (input.dailyXpCap !== undefined) patch['idleGame.dailyXpCap'] = whole(input.dailyXpCap, 0, 100000, 'Daily XP cap');
     if (input.fullAlerts !== undefined) patch['idleGame.fullAlerts'] = !!input.fullAlerts;
     if (input.fullAlertChannelId !== undefined) patch['idleGame.fullAlertChannelId'] = input.fullAlertChannelId || null;
+    if (input.rebirthEnabled !== undefined) patch['idleGame.rebirthEnabled'] = !!input.rebirthEnabled;
+    if (input.rebirthBaseCost !== undefined) patch['idleGame.rebirthBaseCost'] = whole(input.rebirthBaseCost, 1000, 1e12, 'Rebirth base cost');
+    if (input.rebirthBonusPct !== undefined) patch['idleGame.rebirthBonusPct'] = whole(input.rebirthBonusPct, 0, 1000, 'Rebirth bonus %');
+    if (input.starDivisor !== undefined) patch['idleGame.starDivisor'] = whole(input.starDivisor, 1, 1e9, 'Star divisor');
+    if (input.rebirthGrowth !== undefined) {
+      const g = Number(input.rebirthGrowth);
+      if (!(g >= 1.1 && g <= 100)) throw new Error('Rebirth growth must be 1.1–100.');
+      patch['idleGame.rebirthGrowth'] = Math.round(g * 100) / 100;
+    }
+    if (input.dailyBonusEnabled !== undefined) patch['idleGame.dailyBonusEnabled'] = !!input.dailyBonusEnabled;
+    if (input.dailyBonusHours !== undefined) patch['idleGame.dailyBonusHours'] = whole(input.dailyBonusHours, 0, 72, 'Daily bonus hours');
+    if (input.dailyStreakPct !== undefined) patch['idleGame.dailyStreakPct'] = whole(input.dailyStreakPct, 0, 1000, 'Daily streak %');
+    if (input.dailyMaxStreak !== undefined) patch['idleGame.dailyMaxStreak'] = whole(input.dailyMaxStreak, 1, 365, 'Daily max streak');
+    if (input.goldenEnabled !== undefined) patch['idleGame.goldenEnabled'] = !!input.goldenEnabled;
+    if (input.goldenChance !== undefined) patch['idleGame.goldenChance'] = whole(input.goldenChance, 0, 100, 'Golden bubble chance');
+    if (input.goldenMultiplier !== undefined) patch['idleGame.goldenMultiplier'] = whole(input.goldenMultiplier, 2, 100, 'Golden bubble multiplier');
   } catch (err) {
     return { error: err.message };
   }
@@ -609,23 +924,36 @@ async function resetUpgrades(guild, id = null) {
 module.exports = {
   UPGRADES: DEFAULT_UPGRADES,
   DEFAULT_UPGRADES,
+  PERKS,
   effectiveUpgrades,
   setUpgrade,
   saveUpgrades,
   resetUpgrades,
   idleSettings,
   upgradeCost,
+  perkCost,
   ratePerHour,
   offlineCapHours,
+  dailyXpCapFor,
   pendingBubbles,
   xpLeftToday,
+  prestigeMult,
+  rebirthCost,
+  totalStarsFor,
+  canRebirth,
   getFactory,
   startFactory,
   stopFactory,
   collect,
+  claimDaily,
+  canClaimDaily,
   buyUpgrade,
   cashout,
+  rebirth,
+  buyPerk,
   adminAdjustBubbles,
+  adminGrantStars,
+  adminSetRebirth,
   resetFactory,
   runFullAlertSweep,
   startFullAlertLoop,
@@ -633,6 +961,8 @@ module.exports = {
   startView,
   rowFor,
   upgradesView,
+  prestigeView,
+  rebirthConfirmView,
   handleIdleInteraction,
   leaderboard,
   cleanSettings,

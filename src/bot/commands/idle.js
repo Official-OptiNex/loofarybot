@@ -12,6 +12,7 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('play').setDescription('Open your Bubble Factory'))
   .addSubcommand((s) => s.setName('start').setDescription('Start (or resume) your factory so it makes bubbles'))
   .addSubcommand((s) => s.setName('stop').setDescription('Pause your factory (your banked bubbles are kept)'))
+  .addSubcommand((s) => s.setName('daily').setDescription('Claim your daily 🎁 bubble bonus (builds a streak)'))
   .addSubcommand((s) => s.setName('top').setDescription('The biggest factories in the server'))
   .addSubcommand((s) => s.setName('help').setDescription('How the Bubble Factory works'))
   .addSubcommandGroup((g) =>
@@ -71,6 +72,47 @@ const data = new SlashCommandBuilder()
               .addChoices(...idle.DEFAULT_UPGRADES.map((u) => ({ name: `${u.emoji} ${u.name}`, value: u.id })))
           )
       )
+      .addSubcommand((s) =>
+        s
+          .setName('rebirth')
+          .setDescription('Tune the Rebirth (prestige) system')
+          .addBooleanOption((o) => o.setName('enabled').setDescription('Turn Rebirth on or off'))
+          .addIntegerOption((o) => o.setName('base_cost').setDescription('Lifetime 🫧 needed for the FIRST rebirth').setMinValue(1000).setMaxValue(1000000000))
+          .addNumberOption((o) => o.setName('growth').setDescription('Requirement multiplier each rebirth (e.g. 2.2)').setMinValue(1.1).setMaxValue(100))
+          .addIntegerOption((o) => o.setName('bonus_pct').setDescription('Permanent +% production per rebirth').setMinValue(0).setMaxValue(1000))
+          .addIntegerOption((o) => o.setName('star_divisor').setDescription('Higher = fewer ⭐ Stars (stars = √(lifetime ÷ this))').setMinValue(1).setMaxValue(1000000000))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('stars')
+          .setDescription('Grant (or remove, with a negative amount) ⭐ Prestige Stars')
+          .addUserOption((o) => o.setName('user').setDescription('Who').setRequired(true))
+          .addIntegerOption((o) => o.setName('amount').setDescription('How many ⭐ (negative to remove)').setRequired(true).setMinValue(-1000000).setMaxValue(1000000))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('daily')
+          .setDescription('Tune the 🎁 daily streak bonus')
+          .addBooleanOption((o) => o.setName('enabled').setDescription('Turn the daily bonus on or off'))
+          .addIntegerOption((o) => o.setName('hours').setDescription("Reward = this many hours of the member's production").setMinValue(0).setMaxValue(72))
+          .addIntegerOption((o) => o.setName('streak_pct').setDescription('+% bonus per consecutive day').setMinValue(0).setMaxValue(1000))
+          .addIntegerOption((o) => o.setName('max_streak').setDescription('Streak multiplier stops growing here').setMinValue(1).setMaxValue(365))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('golden')
+          .setDescription('Tune the 💎 Golden Bubble lucky find on collect')
+          .addBooleanOption((o) => o.setName('enabled').setDescription('Turn Golden Bubbles on or off'))
+          .addIntegerOption((o) => o.setName('chance').setDescription('% chance per collect').setMinValue(0).setMaxValue(100))
+          .addIntegerOption((o) => o.setName('multiplier').setDescription('A golden collect is worth this ×').setMinValue(2).setMaxValue(100))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('setrebirth')
+          .setDescription("Set a member's rebirth (prestige) level directly")
+          .addUserOption((o) => o.setName('user').setDescription('Who').setRequired(true))
+          .addIntegerOption((o) => o.setName('count').setDescription('Rebirth level').setRequired(true).setMinValue(0).setMaxValue(100000))
+      )
   );
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
@@ -114,7 +156,77 @@ async function runAdmin(interaction, sub) {
     return interaction.reply({ content: id ? '↩️ That upgrade is back to its default.' : '↩️ All upgrades reset to their defaults.', ephemeral: true });
   }
 
+  if (sub === 'rebirth') {
+    const input = {
+      rebirthEnabled: interaction.options.getBoolean('enabled'),
+      rebirthBaseCost: interaction.options.getInteger('base_cost'),
+      rebirthGrowth: interaction.options.getNumber('growth'),
+      rebirthBonusPct: interaction.options.getInteger('bonus_pct'),
+      starDivisor: interaction.options.getInteger('star_divisor')
+    };
+    Object.keys(input).forEach((k) => input[k] === null && delete input[k]);
+    if (!Object.keys(input).length) return interaction.reply({ content: 'ℹ️ Give at least one setting to change (enabled / base_cost / growth / bonus_pct / star_divisor).', ephemeral: true });
+    const res = await idle.saveSettings(guild, input);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    const r = res.settings;
+    return interaction.reply({
+      content: `✨ **Rebirth** is **${r.rebirthEnabled ? 'ON' : 'OFF'}** · first rebirth at **${fmt(r.rebirthBaseCost)} 🫧** lifetime, ×**${r.rebirthGrowth}** each time · **+${r.rebirthBonusPct}%** production per rebirth · ⭐ ≈ √(lifetime ÷ ${fmt(r.starDivisor)}).`,
+      ephemeral: true
+    });
+  }
+
+  if (sub === 'daily') {
+    const input = {
+      dailyBonusEnabled: interaction.options.getBoolean('enabled'),
+      dailyBonusHours: interaction.options.getInteger('hours'),
+      dailyStreakPct: interaction.options.getInteger('streak_pct'),
+      dailyMaxStreak: interaction.options.getInteger('max_streak')
+    };
+    Object.keys(input).forEach((k) => input[k] === null && delete input[k]);
+    if (!Object.keys(input).length) return interaction.reply({ content: 'ℹ️ Give at least one setting (enabled / hours / streak_pct / max_streak).', ephemeral: true });
+    const res = await idle.saveSettings(guild, input);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    const r = res.settings;
+    return interaction.reply({
+      content: `🎁 **Daily bonus** is **${r.dailyBonusEnabled ? 'ON' : 'OFF'}** · worth **${r.dailyBonusHours}h** of production · **+${r.dailyStreakPct}%** per day up to a **${r.dailyMaxStreak}-day** streak.`,
+      ephemeral: true
+    });
+  }
+
+  if (sub === 'golden') {
+    const input = {
+      goldenEnabled: interaction.options.getBoolean('enabled'),
+      goldenChance: interaction.options.getInteger('chance'),
+      goldenMultiplier: interaction.options.getInteger('multiplier')
+    };
+    Object.keys(input).forEach((k) => input[k] === null && delete input[k]);
+    if (!Object.keys(input).length) return interaction.reply({ content: 'ℹ️ Give at least one setting (enabled / chance / multiplier).', ephemeral: true });
+    const res = await idle.saveSettings(guild, input);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    const r = res.settings;
+    return interaction.reply({
+      content: `💎 **Golden Bubble** is **${r.goldenEnabled ? 'ON' : 'OFF'}** · **${r.goldenChance}%** chance per collect · worth **×${r.goldenMultiplier}**.`,
+      ephemeral: true
+    });
+  }
+
   const target = interaction.options.getUser('user');
+
+  if (sub === 'stars') {
+    const amount = interaction.options.getInteger('amount');
+    const { state, applied } = await idle.adminGrantStars(guild.id, target.id, amount);
+    return interaction.reply({
+      content: `⭐ ${applied >= 0 ? 'Gave' : 'Removed'} **${fmt(Math.abs(applied))} ⭐** ${applied >= 0 ? 'to' : 'from'} **${target.username}** — they now have **${fmt(state.stars)} ⭐**.`,
+      ephemeral: true,
+      allowedMentions: { parse: [] }
+    });
+  }
+
+  if (sub === 'setrebirth') {
+    const count = interaction.options.getInteger('count');
+    const { state } = await idle.adminSetRebirth(guild.id, target.id, count);
+    return interaction.reply({ content: `✨ Set **${target.username}**'s rebirth level to **${fmt(state.rebirths)}**.`, ephemeral: true, allowedMentions: { parse: [] } });
+  }
   if (sub === 'reset') {
     await idle.resetFactory(guild.id, target.id);
     return interaction.reply({ content: `🧹 Reset **${target.username}**'s factory back to a fresh start.`, ephemeral: true, allowedMentions: { parse: [] } });
@@ -160,7 +272,15 @@ async function execute(interaction) {
           name: '1️⃣ Make bubbles',
           value: `Your factory makes **🫧 Bubbles** over time, even while you're away — up to **${s.offlineHours}h** of storage (more with 🛁 Bigger Tub).`
         },
-        { name: '2️⃣ Collect', value: 'Open `/idle play` and press **🫧 Collect** to bank the bubbles waiting for you. Nothing is spendable until you collect it.' },
+        {
+          name: '2️⃣ Collect',
+          value:
+            'Open `/idle play` and press **🫧 Collect** to bank the bubbles waiting for you. Nothing is spendable until you collect it.' +
+            (s.goldenEnabled ? ` Each collect has a **${s.goldenChance}%** chance of a **💎 Golden Bubble** worth **×${s.goldenMultiplier}**!` : '')
+        },
+        ...(s.dailyBonusEnabled
+          ? [{ name: '🎁 Daily bonus', value: `Claim once a day with \`/idle daily\` (or the **🎁 Daily** button) for **${s.dailyBonusHours}h** of production, **+${s.dailyStreakPct}%** for each day of your streak (up to **${s.dailyMaxStreak}** days).` }]
+          : []),
         { name: '3️⃣ Upgrade', value: `Spend banked bubbles on upgrades that make even more:\n${tree}` },
         {
           name: '4️⃣ Cash out → XP',
@@ -168,7 +288,17 @@ async function execute(interaction) {
             s.dailyXpCap > 0
               ? `Turn bubbles into real **XP** at **${fmt(s.bubblesPerXp)} 🫧 = 1 XP**, up to **${fmt(s.dailyXpCap)} XP a day** (resets at midnight UTC).`
               : 'Cash-out is currently **off** here — bubbles are just for show and upgrades.'
-        }
+        },
+        ...(s.rebirthEnabled
+          ? [
+              {
+                name: '5️⃣ ✨ Rebirth (prestige)',
+                value:
+                  `At **${fmt(s.rebirthBaseCost)}** lifetime 🫧 you can **Rebirth**: reset your bank & upgrades for a permanent **+${s.rebirthBonusPct}%** production boost and **⭐ Prestige Stars**. ` +
+                  'Spend Stars in **🌟 Prestige perks** (Golden Touch, Nest Egg, Deep Reserves, Overflow Valve) — they’re permanent and stack through every rebirth. Each rebirth needs more lifetime than the last.'
+              }
+            ]
+          : [])
       )
       .setFooter({ text: s.enabled ? 'Open it with /idle play' : 'An admin needs to turn it on with /idle admin toggle' });
     return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -181,12 +311,18 @@ async function execute(interaction) {
   if (sub === 'start') {
     const { state, already } = await idle.startFactory(guild.id, interaction.user.id);
     if (already) return reply('🫧 Your factory is already running — open it with `/idle play`.');
-    return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: [idle.rowFor(interaction.user.id, s)], ephemeral: true });
+    return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: idle.rowFor(interaction.user.id, s, state), ephemeral: true });
   }
 
   if (sub === 'stop') {
     const { already } = await idle.stopFactory(guild.id, interaction.user.id);
     return reply(already ? '🫧 Your factory isn’t running — start it with `/idle start`.' : '⏸️ Factory paused. Your banked bubbles are safe — resume any time with `/idle start`.');
+  }
+
+  if (sub === 'daily') {
+    const res = await idle.claimDaily(guild.id, interaction.user.id, s);
+    if (res.error) return reply(`🎁 ${res.error}`);
+    return reply(`🎁 **Daily bonus claimed!** **+${fmt(res.reward)} 🫧** into your bank · 🔥 **${res.effStreak}-day streak**${res.maxed ? ' (max!)' : ''} · ×${res.mult.toFixed(2)}. Come back tomorrow to keep it going!`);
   }
 
   if (sub === 'top') {
@@ -197,7 +333,7 @@ async function execute(interaction) {
       .setTitle('🏭 Biggest Bubble Factories')
       .setDescription(
         rows.length
-          ? rows.map((r, i) => `${medal(i)} ${r.name ? r.name : `<@${r.userId}>`} — **${fmt(r.lifetime)} 🫧** lifetime · ${fmt(r.rate)}/hr`).join('\n')
+          ? rows.map((r, i) => `${medal(i)} ${r.name ? r.name : `<@${r.userId}>`}${r.rebirths ? ` ✨${r.rebirths}` : ''} — **${fmt(r.lifetime)} 🫧** lifetime · ${fmt(r.rate)}/hr`).join('\n')
           : 'Nobody has started a factory yet. Be the first with `/idle play`!'
       );
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
@@ -209,7 +345,7 @@ async function execute(interaction) {
     const { embed, row } = idle.startView(state, s, interaction.user.id, name);
     return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
   }
-  return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: [idle.rowFor(interaction.user.id, s)], ephemeral: true });
+  return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: idle.rowFor(interaction.user.id, s, state), ephemeral: true });
 }
 
 module.exports = { data, execute };
