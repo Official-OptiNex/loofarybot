@@ -156,7 +156,15 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] **Staff rebirth cmds:** `/idle admin rebirth …` updates the config (and the dashboard **✨ Rebirth**
       section reflects it); `/idle admin stars @user amount:10` grants ⭐ (negative removes, clamped at 0);
       `/idle admin setrebirth @user count:3` sets their rebirth level. `/idle top` shows **✨N** next to
-      people who've rebirthed. Turning **Enable Rebirth** off hides the rebirth button and panel.
+      people who've rebirthed. **Rebirth is optional:** `/idle admin rebirth enabled:false` (or the
+      dashboard toggle) hides the rebirth button, the Prestige panel and the `5️⃣` help section entirely.
+- [ ] **🎁 Daily bonus:** `/idle daily` (or the **🎁 Daily** button) grants bubbles once per UTC day and
+      shows your streak; claiming again the same day → "already claimed". The button greys to "Daily
+      claimed" after. `/idle admin daily hours:6 streak_pct:15 max_streak:5 enabled:true` retunes it
+      (dashboard **🎁 Daily streak bonus** section matches). Turning it off hides the button.
+- [ ] **💎 Golden Bubble:** with a high `chance` (`/idle admin golden chance:100 multiplier:5`), the next
+      **Collect** pops a **💎 GOLDEN BUBBLE!** animation and banks ×5. Set `chance:0` → always normal.
+      The 🍀 **Lucky Charm** prestige perk raises the odds. Dashboard **💎 Golden Bubble** section matches.
 - [ ] Dashboard: the 🫧 header bubbles animate; the **At these settings** preview tiles update live as
       you change a number (before saving); the **🏭 Upgrades** editor lists every upgrade with editable
       Cost / Effect / Max / On fields, and **Save** / **Reset to defaults** persist and reload; the **"Tub is full" alerts**

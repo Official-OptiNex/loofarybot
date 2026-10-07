@@ -751,7 +751,7 @@ router.get('/guilds/:guildId/leveling/idle', ...guard('leveling'), async (req, r
 router.post('/guilds/:guildId/leveling/idle', ...guard('leveling'), async (req, res) => {
   const b = req.body || {};
   const input = {};
-  for (const k of ['enabled', 'baseRate', 'offlineHours', 'bubblesPerXp', 'dailyXpCap', 'fullAlerts', 'fullAlertChannelId', 'rebirthEnabled', 'rebirthBaseCost', 'rebirthGrowth', 'rebirthBonusPct', 'starDivisor']) if (b[k] !== undefined) input[k] = b[k];
+  for (const k of ['enabled', 'baseRate', 'offlineHours', 'bubblesPerXp', 'dailyXpCap', 'fullAlerts', 'fullAlertChannelId', 'rebirthEnabled', 'rebirthBaseCost', 'rebirthGrowth', 'rebirthBonusPct', 'starDivisor', 'dailyBonusEnabled', 'dailyBonusHours', 'dailyStreakPct', 'dailyMaxStreak', 'goldenEnabled', 'goldenChance', 'goldenMultiplier']) if (b[k] !== undefined) input[k] = b[k];
   const saved = await idleGame.saveSettings(req.guild, input);
   if (saved.error) return bad(res, saved.error);
   res.locals.audit = { section: 'Leveling', action: 'Updated the Bubble Factory', detail: `${saved.settings.enabled ? 'On' : 'Off'} · cap ${saved.settings.dailyXpCap} XP/day` };

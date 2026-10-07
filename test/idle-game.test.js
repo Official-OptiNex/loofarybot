@@ -52,9 +52,9 @@ const H=3600000;
 
   // ---- collect banks pending bubbles (once running)
   let f=await I.getFactory('g','ann'); f.active=true; f.lastTick=now-4*H; await f.save();
-  let c=await I.collect('g','ann',s,now);
+  let c=await I.collect('g','ann',s,now,{rng:()=>1}); // rng=1 → never a golden strike
   assert.equal(c.gained,240); assert.equal(c.state.bank,240); assert.equal(c.state.lifetime,240);
-  c=await I.collect('g','ann',s,now); assert.equal(c.gained,0,'nothing new right after collecting');
+  c=await I.collect('g','ann',s,now,{rng:()=>1}); assert.equal(c.gained,0,'nothing new right after collecting');
   console.log('✓ collect banks the pending bubbles (and nothing extra right after)');
 
   // ---- buying upgrades spends the (already-collected) bank, and does NOT auto-collect pending
@@ -205,6 +205,43 @@ const H=3600000;
   assert.match(I.cleanSettings({rebirthBaseCost:100}).error,/Rebirth base cost/);
   assert.match(I.cleanSettings({rebirthGrowth:1.05}).error,/Rebirth growth/);
   console.log('✓ admin: grant/remove stars (clamped), set rebirth level, config validation');
+
+  // ---- 💎 Golden Bubble on collect (configurable chance/multiplier, Lucky Charm perk)
+  const gs2=I.idleSettings({idleGame:{enabled:true,goldenEnabled:true,goldenChance:50,goldenMultiplier:5}});
+  let gf=await I.getFactory('g','glo'); gf.active=true; gf.lastTick=now-4*H; await gf.save(); // 240 pending @60/hr
+  let gc=await I.collect('g','glo',gs2,now,{rng:()=>0}); // rng=0 < 50% → golden
+  assert.equal(gc.golden,true); assert.equal(gc.base,240); assert.equal(gc.gained,240*5,'golden pays ×5');
+  gf=await I.getFactory('g','glo'); gf.lastTick=now-4*H; await gf.save();
+  gc=await I.collect('g','glo',gs2,now,{rng:()=>0.99}); // 0.99*100=99 ≥ 50 → normal
+  assert.equal(gc.golden,false); assert.equal(gc.gained,240);
+  // Lucky Charm lifts the chance: 0% base + 1 level × 3% = 3%, rng 0.02 → hit.
+  let lf=await I.getFactory('g','luc'); lf.active=true; lf.lastTick=now-4*H; lf.perks={lucky:1}; lf.markModified('perks'); await lf.save();
+  gc=await I.collect('g','luc',{...gs2,goldenChance:0},now,{rng:()=>0.02});
+  assert.equal(gc.golden,true,'Lucky Charm adds +3% golden chance');
+  console.log('✓ golden bubble: configurable chance/multiplier, Lucky Charm boosts the odds');
+
+  // ---- 🎁 Daily streak bonus (self-scales with production, streak multiplier, once a day)
+  const ds=I.idleSettings({idleGame:{enabled:true,dailyBonusEnabled:true,dailyBonusHours:4,dailyStreakPct:10,dailyMaxStreak:3}});
+  const d0=Date.UTC(2027,2,1,12);
+  let df=await I.getFactory('g','day'); df.active=true; await df.save();
+  assert.equal(I.canClaimDaily(df,ds,d0),true);
+  let dc=await I.claimDaily('g','day',ds,d0);
+  assert.equal(dc.reward,240,'4h × 60/hr × streak 1'); assert.equal(dc.effStreak,1);
+  assert.match((await I.claimDaily('g','day',ds,d0)).error,/already claimed/);
+  // Next day → streak 2 (×1.1). (Pin lastTick so no new bubbles muddy the rate.)
+  const d1=d0+24*H; df=await I.getFactory('g','day'); df.lastTick=d1; await df.save();
+  dc=await I.claimDaily('g','day',ds,d1); assert.equal(dc.effStreak,2); assert.equal(dc.reward,Math.round(60*4*1.1),'×1.1 on day 2');
+  // Skip a day → streak resets to 1.
+  const d3=d1+2*24*H; df=await I.getFactory('g','day'); df.lastTick=d3; await df.save();
+  dc=await I.claimDaily('g','day',ds,d3); assert.equal(dc.effStreak,1,'a missed day resets the streak');
+  // Streak multiplier caps at dailyMaxStreak.
+  let cf=await I.getFactory('g','cap'); cf.active=true; cf.dailyDay='2027-02-28'; cf.dailyStreak=10; await cf.save();
+  dc=await I.claimDaily('g','cap',ds,Date.UTC(2027,2,1,12)); assert.equal(dc.effStreak,3,'capped at max streak 3'); assert.equal(dc.mult.toFixed(2),'1.20');
+  // Can be turned off + validation.
+  assert.match((await I.claimDaily('g','day',{...ds,dailyBonusEnabled:false},d3)).error,/turned off/);
+  assert.match(I.cleanSettings({goldenMultiplier:1}).error,/Golden bubble multiplier/);
+  assert.match(I.cleanSettings({dailyMaxStreak:0}).error,/Daily max streak/);
+  console.log('✓ daily bonus: self-scaling reward, streak ×, once/day, resets on a miss, caps, configurable');
 
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});

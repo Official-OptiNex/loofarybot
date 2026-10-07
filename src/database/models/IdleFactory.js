@@ -18,7 +18,9 @@ const IdleFactorySchema = new mongoose.Schema(
     rebirths: { type: Number, default: 0 }, // how many times they've rebirthed (permanent production bonus)
     stars: { type: Number, default: 0 }, // ⭐ Prestige Stars to spend on permanent perks
     starsEarned: { type: Number, default: 0 }, // cumulative stars ever awarded (so rebirths never double-pay)
-    perks: { type: mongoose.Schema.Types.Mixed, default: {} } // permanent prestige perks { perkId: level }
+    perks: { type: mongoose.Schema.Types.Mixed, default: {} }, // permanent prestige perks { perkId: level }
+    dailyDay: { type: String, default: null }, // UTC YYYY-MM-DD of the last 🎁 daily claim
+    dailyStreak: { type: Number, default: 0 } // consecutive days claimed
   },
   { timestamps: true }
 );

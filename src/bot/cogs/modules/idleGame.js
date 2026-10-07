@@ -37,9 +37,11 @@ const PERKS = [
   { id: 'golden', name: 'Golden Touch', emoji: '🌟', base: 5, growth: 1.5, max: 15, prod: 0.08, desc: '+8% production (forever)' },
   { id: 'nest', name: 'Nest Egg', emoji: '🪺', base: 4, growth: 1.4, max: 20, startBank: 250, desc: '+250 bubbles to start each rebirth' },
   { id: 'reserves', name: 'Deep Reserves', emoji: '🛢️', base: 6, growth: 1.5, max: 12, tub: 2, desc: '+2h offline storage' },
-  { id: 'overflow', name: 'Overflow Valve', emoji: '💧', base: 6, growth: 1.45, max: 20, xpcap: 50, desc: '+50 to your daily XP cash-out cap' }
+  { id: 'overflow', name: 'Overflow Valve', emoji: '💧', base: 6, growth: 1.45, max: 20, xpcap: 50, desc: '+50 to your daily XP cash-out cap' },
+  { id: 'lucky', name: 'Lucky Charm', emoji: '🍀', base: 8, growth: 1.5, max: 10, chance: 3, desc: '+3% 💎 Golden Bubble chance' }
 ];
 const PERK_BY_ID = Object.fromEntries(PERKS.map((p) => [p.id, p]));
+const PERK_STAT = { golden: 'prod', nest: 'startBank', reserves: 'tub', overflow: 'xpcap', lucky: 'chance' };
 const perkCost = (perk, level) => Math.ceil(perk.base * Math.pow(perk.growth, level));
 const perkLevel = (state, id) => {
   const p = state?.perks;
@@ -54,7 +56,7 @@ function setPerkLevel(state, id, level) {
   }
   state.markModified?.('perks');
 }
-const perkTotal = (state, id) => perkLevel(state, id) * (PERK_BY_ID[id]?.[({ golden: 'prod', nest: 'startBank', reserves: 'tub', overflow: 'xpcap' })[id]] || 0);
+const perkTotal = (state, id) => perkLevel(state, id) * (PERK_BY_ID[id]?.[PERK_STAT[id]] || 0);
 
 const fmt = (n) => Number(Math.round(n)).toLocaleString('en-US');
 const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
@@ -103,6 +105,13 @@ function idleSettings(config) {
     rebirthGrowth: Number.isFinite(Number(g.rebirthGrowth)) && Number(g.rebirthGrowth) >= 1.1 ? Math.min(Number(g.rebirthGrowth), 100) : 2.2,
     rebirthBonusPct: int(g.rebirthBonusPct, 15, 0, 1000), // permanent +% production per rebirth
     starDivisor: int(g.starDivisor, 4000, 1, 1e9),
+    dailyBonusEnabled: g.dailyBonusEnabled !== false, // 🎁 daily streak login reward
+    dailyBonusHours: int(g.dailyBonusHours, 4, 0, 72), // reward = N hours of production…
+    dailyStreakPct: int(g.dailyStreakPct, 10, 0, 1000), // …× streak multiplier
+    dailyMaxStreak: int(g.dailyMaxStreak, 7, 1, 365),
+    goldenEnabled: g.goldenEnabled !== false, // 💎 golden bubble on collect
+    goldenChance: int(g.goldenChance, 5, 0, 100), // base % chance
+    goldenMultiplier: int(g.goldenMultiplier, 5, 2, 100),
     upgrades,
     upgradeById: Object.fromEntries(upgrades.map((u) => [u.id, u])),
     allUpgrades: all // includes disabled ones, for the dashboard/admin views
@@ -194,17 +203,53 @@ async function stopFactory(guildId, userId) {
   return { state, already };
 }
 
-/** Banks pending bubbles into the factory and returns how many were collected. */
-async function collect(guildId, userId, s, now = Date.now()) {
+/** Banks pending bubbles into the factory. Each collect has a chance to strike a 💎 Golden Bubble
+ * (configurable, boosted by the Lucky Charm perk) worth a multiple of the haul. Returns the total
+ * collected plus whether it was golden. `rng` is injectable for tests. */
+async function collect(guildId, userId, s, now = Date.now(), { rng = Math.random } = {}) {
   const state = await getFactory(guildId, userId);
-  const gained = pendingBubbles(state, s, now);
+  const base = pendingBubbles(state, s, now);
+  let golden = false;
+  let gained = base;
+  if (base > 0 && s.goldenEnabled) {
+    const chance = Math.min(100, s.goldenChance + perkTotal(state, 'lucky'));
+    if (rng() * 100 < chance) {
+      golden = true;
+      gained = base * s.goldenMultiplier;
+    }
+  }
   state.bank += gained;
   state.lifetime += gained;
   state.lastTick = now;
   state.fullNotified = false; // the tub just drained — eligible for a fresh "full" alert later
   await state.save();
-  return { state, gained };
+  return { state, gained, base, golden };
 }
+
+/**
+ * Claims the once-a-day 🎁 streak bonus: a reward worth `dailyBonusHours` of the member's current
+ * production, scaled up by their login streak (capped). Returns { reward, streak, mult } or { error }.
+ */
+async function claimDaily(guildId, userId, s, now = Date.now()) {
+  if (!s.dailyBonusEnabled) return { error: 'The daily bonus is turned off on this server.' };
+  const state = await getFactory(guildId, userId);
+  const today = dayKey(now);
+  if (state.dailyDay === today) return { error: "You've already claimed today's bonus — come back after midnight UTC.", state, already: true };
+  const yesterday = dayKey(now - 24 * HOUR);
+  const streak = state.dailyDay === yesterday ? (state.dailyStreak || 0) + 1 : 1;
+  const effStreak = Math.min(streak, s.dailyMaxStreak);
+  const mult = 1 + (effStreak - 1) * (s.dailyStreakPct / 100);
+  const reward = Math.max(1, Math.round(ratePerHour(state, s) * s.dailyBonusHours * mult));
+  state.bank += reward;
+  state.lifetime += reward;
+  state.dailyDay = today;
+  state.dailyStreak = streak;
+  await state.save();
+  return { state, reward, streak, effStreak, mult, maxed: streak >= s.dailyMaxStreak };
+}
+
+/** Whether the member can claim their daily bonus right now. */
+const canClaimDaily = (state, s, now = Date.now()) => !!s.dailyBonusEnabled && state.dailyDay !== dayKey(now);
 
 /** Buys one level of an upgrade, paying from the bank. Spends collected bubbles only — the player
  * has to Collect their pending bubbles first (so the Collect step actually means something). */
@@ -497,18 +542,30 @@ function rowFor(userId, s, state = null) {
       new ButtonBuilder().setCustomId(`idle:stop:${userId}`).setLabel('Pause').setEmoji('⏸️').setStyle(ButtonStyle.Secondary)
     )
   ];
-  // Second row: Prestige (when they have rebirths/stars) and Rebirth (highlighted when ready).
+  // Second row: 🎁 Daily, ✨ Rebirth (highlighted when ready) and 🌟 Prestige perks (when they have any).
+  const second = new ActionRowBuilder();
+  if (s.dailyBonusEnabled) {
+    const claimable = state ? canClaimDaily(state, s) : true;
+    second.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`idle:daily:${userId}`)
+        .setLabel(claimable ? 'Daily bonus' : 'Daily claimed')
+        .setEmoji('🎁')
+        .setStyle(claimable ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(!claimable)
+    );
+  }
   if (s.rebirthEnabled) {
     const ready = state ? canRebirth(state, s) : false;
     const hasPrestige = state ? (state.rebirths || 0) > 0 || (state.stars || 0) > 0 : false;
-    const second = new ActionRowBuilder().addComponents(
+    second.addComponents(
       new ButtonBuilder().setCustomId(`idle:rebirth:${userId}`).setLabel('Rebirth').setEmoji('✨').setStyle(ready ? ButtonStyle.Danger : ButtonStyle.Secondary).setDisabled(!ready)
     );
     if (hasPrestige) {
       second.addComponents(new ButtonBuilder().setCustomId(`idle:prestige:${userId}`).setLabel('Prestige perks').setEmoji('🌟').setStyle(ButtonStyle.Primary));
     }
-    rows.push(second);
   }
+  if (second.components.length) rows.push(second);
   return rows;
 }
 
@@ -661,22 +718,33 @@ async function handleIdleInteraction(interaction) {
   }
 
   if (action === 'collect') {
-    const { state, gained } = await collect(interaction.guild.id, interaction.user.id, s);
+    const { state, gained, base, golden } = await collect(interaction.guild.id, interaction.user.id, s);
     if (gained <= 0) {
       const embed = factoryEmbed(state, s, { name }).setFooter({ text: '📦 Nothing to collect yet — come back a little later.' });
       return interaction.update({ embeds: [embed], components: rowFor(interaction.user.id, s, state) }).catch(() => null);
     }
-    // A little filling-bubble animation, then the factory settles back in.
+    // A little filling-bubble animation, then the factory settles back in. A golden strike gets a flourish.
     const frame = (n) => new EmbedBuilder().setColor(BLUE).setTitle('🫧 Collecting…').setDescription(`${bar(n, 3)}`);
     await interaction.update({ embeds: [frame(1)], components: [] }).catch(() => null);
     await new Promise((r) => setTimeout(r, 350));
     await interaction.editReply({ embeds: [frame(2)] }).catch(() => null);
     await new Promise((r) => setTimeout(r, 350));
-    await interaction
-      .editReply({ embeds: [new EmbedBuilder().setColor(GREEN).setTitle('🫧 Collected!').setDescription(`${bar(3, 3)}\n**+${fmt(gained)} 🫧** into the bank.`)] })
-      .catch(() => null);
-    await new Promise((r) => setTimeout(r, 450));
+    const done = golden
+      ? new EmbedBuilder().setColor(GOLD).setTitle('💎 GOLDEN BUBBLE!').setDescription(`${bar(3, 3)}\n🎉 A golden bubble burst — **×${s.goldenMultiplier}**!\n**+${fmt(gained)} 🫧** into the bank _(normally ${fmt(base)})_.`)
+      : new EmbedBuilder().setColor(GREEN).setTitle('🫧 Collected!').setDescription(`${bar(3, 3)}\n**+${fmt(gained)} 🫧** into the bank.`);
+    await interaction.editReply({ embeds: [done] }).catch(() => null);
+    await new Promise((r) => setTimeout(r, golden ? 650 : 450));
     return interaction.editReply({ embeds: [factoryEmbed(state, s, { name })], components: rowFor(interaction.user.id, s, state) }).catch(() => null);
+  }
+  if (action === 'daily') {
+    const res = await claimDaily(interaction.guild.id, interaction.user.id, s);
+    const embed = factoryEmbed(res.state, s, { name });
+    embed.setFooter({
+      text: res.error
+        ? `⚠️ ${res.error}`
+        : `🎁 Daily bonus: +${fmt(res.reward)} 🫧 · 🔥 ${res.effStreak}-day streak${res.maxed ? ' (max!)' : ''} · ×${res.mult.toFixed(2)}`
+    });
+    return interaction.update({ embeds: [embed], components: rowFor(interaction.user.id, s, res.state) }).catch(() => null);
   }
   if (action === 'upgrades') {
     const state = await getFactory(interaction.guild.id, interaction.user.id);
@@ -767,6 +835,13 @@ function cleanSettings(input) {
       if (!(g >= 1.1 && g <= 100)) throw new Error('Rebirth growth must be 1.1–100.');
       patch['idleGame.rebirthGrowth'] = Math.round(g * 100) / 100;
     }
+    if (input.dailyBonusEnabled !== undefined) patch['idleGame.dailyBonusEnabled'] = !!input.dailyBonusEnabled;
+    if (input.dailyBonusHours !== undefined) patch['idleGame.dailyBonusHours'] = whole(input.dailyBonusHours, 0, 72, 'Daily bonus hours');
+    if (input.dailyStreakPct !== undefined) patch['idleGame.dailyStreakPct'] = whole(input.dailyStreakPct, 0, 1000, 'Daily streak %');
+    if (input.dailyMaxStreak !== undefined) patch['idleGame.dailyMaxStreak'] = whole(input.dailyMaxStreak, 1, 365, 'Daily max streak');
+    if (input.goldenEnabled !== undefined) patch['idleGame.goldenEnabled'] = !!input.goldenEnabled;
+    if (input.goldenChance !== undefined) patch['idleGame.goldenChance'] = whole(input.goldenChance, 0, 100, 'Golden bubble chance');
+    if (input.goldenMultiplier !== undefined) patch['idleGame.goldenMultiplier'] = whole(input.goldenMultiplier, 2, 100, 'Golden bubble multiplier');
   } catch (err) {
     return { error: err.message };
   }
@@ -870,6 +945,8 @@ module.exports = {
   startFactory,
   stopFactory,
   collect,
+  claimDaily,
+  canClaimDaily,
   buyUpgrade,
   cashout,
   rebirth,

@@ -1067,6 +1067,38 @@
               <div class="setting-control"><input type="number" id="idleStarDivisor" min="1" max="1000000000"><span class="muted">divisor</span></div>
             </div>
 
+            <div class="idle-group-label">🎁 Daily streak bonus</div>
+            <div class="setting-row">
+              <div><div class="setting-title">Enable daily bonus</div><div class="setting-help">A once-a-day login reward that scales with the member's production and grows a day streak.</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="idleDaily"><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Reward size</div><div class="setting-help">The bonus is worth this many hours of the member's current production.</div></div>
+              <div class="setting-control"><input type="number" id="idleDailyHours" min="0" max="72"><span class="muted">h of production</span></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Streak bonus</div><div class="setting-help">Each consecutive day adds this % (resets if a day is missed).</div></div>
+              <div class="setting-control"><input type="number" id="idleDailyStreakPct" min="0" max="1000"><span class="muted">% / day</span></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Max streak</div><div class="setting-help">The streak multiplier stops growing after this many days.</div></div>
+              <div class="setting-control"><input type="number" id="idleDailyMaxStreak" min="1" max="365"><span class="muted">days</span></div>
+            </div>
+
+            <div class="idle-group-label">💎 Golden Bubble</div>
+            <div class="setting-row">
+              <div><div class="setting-title">Enable Golden Bubbles</div><div class="setting-help">Each collect has a chance to strike a golden bubble worth a big multiple (the 🍀 Lucky Charm perk raises the odds).</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="idleGolden"><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Chance</div><div class="setting-help">Base % chance per collect.</div></div>
+              <div class="setting-control"><input type="number" id="idleGoldenChance" min="0" max="100"><span class="muted">%</span></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Payout</div><div class="setting-help">A golden collect is worth this × the normal haul.</div></div>
+              <div class="setting-control"><input type="number" id="idleGoldenMult" min="2" max="100"><span class="muted">×</span></div>
+            </div>
+
             <div class="savebar" style="position:static;"><button class="btn" id="idleSaveBtn" onclick="saveIdle()">Save Bubble Factory</button></div>
           </div>
 

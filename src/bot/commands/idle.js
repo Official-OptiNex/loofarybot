@@ -12,6 +12,7 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('play').setDescription('Open your Bubble Factory'))
   .addSubcommand((s) => s.setName('start').setDescription('Start (or resume) your factory so it makes bubbles'))
   .addSubcommand((s) => s.setName('stop').setDescription('Pause your factory (your banked bubbles are kept)'))
+  .addSubcommand((s) => s.setName('daily').setDescription('Claim your daily 🎁 bubble bonus (builds a streak)'))
   .addSubcommand((s) => s.setName('top').setDescription('The biggest factories in the server'))
   .addSubcommand((s) => s.setName('help').setDescription('How the Bubble Factory works'))
   .addSubcommandGroup((g) =>
@@ -90,6 +91,23 @@ const data = new SlashCommandBuilder()
       )
       .addSubcommand((s) =>
         s
+          .setName('daily')
+          .setDescription('Tune the 🎁 daily streak bonus')
+          .addBooleanOption((o) => o.setName('enabled').setDescription('Turn the daily bonus on or off'))
+          .addIntegerOption((o) => o.setName('hours').setDescription("Reward = this many hours of the member's production").setMinValue(0).setMaxValue(72))
+          .addIntegerOption((o) => o.setName('streak_pct').setDescription('+% bonus per consecutive day').setMinValue(0).setMaxValue(1000))
+          .addIntegerOption((o) => o.setName('max_streak').setDescription('Streak multiplier stops growing here').setMinValue(1).setMaxValue(365))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('golden')
+          .setDescription('Tune the 💎 Golden Bubble lucky find on collect')
+          .addBooleanOption((o) => o.setName('enabled').setDescription('Turn Golden Bubbles on or off'))
+          .addIntegerOption((o) => o.setName('chance').setDescription('% chance per collect').setMinValue(0).setMaxValue(100))
+          .addIntegerOption((o) => o.setName('multiplier').setDescription('A golden collect is worth this ×').setMinValue(2).setMaxValue(100))
+      )
+      .addSubcommand((s) =>
+        s
           .setName('setrebirth')
           .setDescription("Set a member's rebirth (prestige) level directly")
           .addUserOption((o) => o.setName('user').setDescription('Who').setRequired(true))
@@ -157,6 +175,41 @@ async function runAdmin(interaction, sub) {
     });
   }
 
+  if (sub === 'daily') {
+    const input = {
+      dailyBonusEnabled: interaction.options.getBoolean('enabled'),
+      dailyBonusHours: interaction.options.getInteger('hours'),
+      dailyStreakPct: interaction.options.getInteger('streak_pct'),
+      dailyMaxStreak: interaction.options.getInteger('max_streak')
+    };
+    Object.keys(input).forEach((k) => input[k] === null && delete input[k]);
+    if (!Object.keys(input).length) return interaction.reply({ content: 'ℹ️ Give at least one setting (enabled / hours / streak_pct / max_streak).', ephemeral: true });
+    const res = await idle.saveSettings(guild, input);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    const r = res.settings;
+    return interaction.reply({
+      content: `🎁 **Daily bonus** is **${r.dailyBonusEnabled ? 'ON' : 'OFF'}** · worth **${r.dailyBonusHours}h** of production · **+${r.dailyStreakPct}%** per day up to a **${r.dailyMaxStreak}-day** streak.`,
+      ephemeral: true
+    });
+  }
+
+  if (sub === 'golden') {
+    const input = {
+      goldenEnabled: interaction.options.getBoolean('enabled'),
+      goldenChance: interaction.options.getInteger('chance'),
+      goldenMultiplier: interaction.options.getInteger('multiplier')
+    };
+    Object.keys(input).forEach((k) => input[k] === null && delete input[k]);
+    if (!Object.keys(input).length) return interaction.reply({ content: 'ℹ️ Give at least one setting (enabled / chance / multiplier).', ephemeral: true });
+    const res = await idle.saveSettings(guild, input);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    const r = res.settings;
+    return interaction.reply({
+      content: `💎 **Golden Bubble** is **${r.goldenEnabled ? 'ON' : 'OFF'}** · **${r.goldenChance}%** chance per collect · worth **×${r.goldenMultiplier}**.`,
+      ephemeral: true
+    });
+  }
+
   const target = interaction.options.getUser('user');
 
   if (sub === 'stars') {
@@ -219,7 +272,15 @@ async function execute(interaction) {
           name: '1️⃣ Make bubbles',
           value: `Your factory makes **🫧 Bubbles** over time, even while you're away — up to **${s.offlineHours}h** of storage (more with 🛁 Bigger Tub).`
         },
-        { name: '2️⃣ Collect', value: 'Open `/idle play` and press **🫧 Collect** to bank the bubbles waiting for you. Nothing is spendable until you collect it.' },
+        {
+          name: '2️⃣ Collect',
+          value:
+            'Open `/idle play` and press **🫧 Collect** to bank the bubbles waiting for you. Nothing is spendable until you collect it.' +
+            (s.goldenEnabled ? ` Each collect has a **${s.goldenChance}%** chance of a **💎 Golden Bubble** worth **×${s.goldenMultiplier}**!` : '')
+        },
+        ...(s.dailyBonusEnabled
+          ? [{ name: '🎁 Daily bonus', value: `Claim once a day with \`/idle daily\` (or the **🎁 Daily** button) for **${s.dailyBonusHours}h** of production, **+${s.dailyStreakPct}%** for each day of your streak (up to **${s.dailyMaxStreak}** days).` }]
+          : []),
         { name: '3️⃣ Upgrade', value: `Spend banked bubbles on upgrades that make even more:\n${tree}` },
         {
           name: '4️⃣ Cash out → XP',
@@ -256,6 +317,12 @@ async function execute(interaction) {
   if (sub === 'stop') {
     const { already } = await idle.stopFactory(guild.id, interaction.user.id);
     return reply(already ? '🫧 Your factory isn’t running — start it with `/idle start`.' : '⏸️ Factory paused. Your banked bubbles are safe — resume any time with `/idle start`.');
+  }
+
+  if (sub === 'daily') {
+    const res = await idle.claimDaily(guild.id, interaction.user.id, s);
+    if (res.error) return reply(`🎁 ${res.error}`);
+    return reply(`🎁 **Daily bonus claimed!** **+${fmt(res.reward)} 🫧** into your bank · 🔥 **${res.effStreak}-day streak**${res.maxed ? ' (max!)' : ''} · ×${res.mult.toFixed(2)}. Come back tomorrow to keep it going!`);
   }
 
   if (sub === 'top') {

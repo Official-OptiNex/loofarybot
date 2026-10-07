@@ -2583,6 +2583,15 @@ async function loadIdle() {
       v('idleRebirthBonus', s.rebirthBonusPct);
       v('idleStarDivisor', s.starDivisor);
     }
+    if (document.getElementById('idleDaily')) {
+      document.getElementById('idleDaily').checked = s.dailyBonusEnabled !== false;
+      v('idleDailyHours', s.dailyBonusHours);
+      v('idleDailyStreakPct', s.dailyStreakPct);
+      v('idleDailyMaxStreak', s.dailyMaxStreak);
+      document.getElementById('idleGolden').checked = s.goldenEnabled !== false;
+      v('idleGoldenChance', s.goldenChance);
+      v('idleGoldenMult', s.goldenMultiplier);
+    }
     idleState.loaded = true;
   }
   // Live preview recomputes as the admin edits any input.
@@ -2629,6 +2638,15 @@ async function saveIdle() {
     body.rebirthGrowth = v('idleRebirthGrowth');
     body.rebirthBonusPct = v('idleRebirthBonus');
     body.starDivisor = v('idleStarDivisor');
+  }
+  if (document.getElementById('idleDaily')) {
+    body.dailyBonusEnabled = document.getElementById('idleDaily').checked;
+    body.dailyBonusHours = v('idleDailyHours');
+    body.dailyStreakPct = v('idleDailyStreakPct');
+    body.dailyMaxStreak = v('idleDailyMaxStreak');
+    body.goldenEnabled = document.getElementById('idleGolden').checked;
+    body.goldenChance = v('idleGoldenChance');
+    body.goldenMultiplier = v('idleGoldenMult');
   }
   const data = await withButton(document.getElementById('idleSaveBtn'), () => manageApi('POST', 'leveling/idle', body), '🫧 Bubble Factory saved.');
   if (data) {
