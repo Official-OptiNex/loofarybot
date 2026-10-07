@@ -13,7 +13,12 @@ const IdleFactorySchema = new mongoose.Schema(
     upgrades: { type: mongoose.Schema.Types.Mixed, default: {} }, // { upgradeId: level }
     cashoutDay: { type: String, default: null }, // UTC YYYY-MM-DD of the last cash-out
     cashoutXpToday: { type: Number, default: 0 }, // XP cashed out on cashoutDay (against the daily cap)
-    fullNotified: { type: Boolean, default: false } // we DM'd this member that their tub is full (reset on collect/start)
+    fullNotified: { type: Boolean, default: false }, // we DM'd this member that their tub is full (reset on collect/start)
+    // --- Rebirth (prestige) ---
+    rebirths: { type: Number, default: 0 }, // how many times they've rebirthed (permanent production bonus)
+    stars: { type: Number, default: 0 }, // ⭐ Prestige Stars to spend on permanent perks
+    starsEarned: { type: Number, default: 0 }, // cumulative stars ever awarded (so rebirths never double-pay)
+    perks: { type: mongoose.Schema.Types.Mixed, default: {} } // permanent prestige perks { perkId: level }
   },
   { timestamps: true }
 );

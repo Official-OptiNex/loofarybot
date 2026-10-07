@@ -71,6 +71,30 @@ const data = new SlashCommandBuilder()
               .addChoices(...idle.DEFAULT_UPGRADES.map((u) => ({ name: `${u.emoji} ${u.name}`, value: u.id })))
           )
       )
+      .addSubcommand((s) =>
+        s
+          .setName('rebirth')
+          .setDescription('Tune the Rebirth (prestige) system')
+          .addBooleanOption((o) => o.setName('enabled').setDescription('Turn Rebirth on or off'))
+          .addIntegerOption((o) => o.setName('base_cost').setDescription('Lifetime 🫧 needed for the FIRST rebirth').setMinValue(1000).setMaxValue(1000000000))
+          .addNumberOption((o) => o.setName('growth').setDescription('Requirement multiplier each rebirth (e.g. 2.2)').setMinValue(1.1).setMaxValue(100))
+          .addIntegerOption((o) => o.setName('bonus_pct').setDescription('Permanent +% production per rebirth').setMinValue(0).setMaxValue(1000))
+          .addIntegerOption((o) => o.setName('star_divisor').setDescription('Higher = fewer ⭐ Stars (stars = √(lifetime ÷ this))').setMinValue(1).setMaxValue(1000000000))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('stars')
+          .setDescription('Grant (or remove, with a negative amount) ⭐ Prestige Stars')
+          .addUserOption((o) => o.setName('user').setDescription('Who').setRequired(true))
+          .addIntegerOption((o) => o.setName('amount').setDescription('How many ⭐ (negative to remove)').setRequired(true).setMinValue(-1000000).setMaxValue(1000000))
+      )
+      .addSubcommand((s) =>
+        s
+          .setName('setrebirth')
+          .setDescription("Set a member's rebirth (prestige) level directly")
+          .addUserOption((o) => o.setName('user').setDescription('Who').setRequired(true))
+          .addIntegerOption((o) => o.setName('count').setDescription('Rebirth level').setRequired(true).setMinValue(0).setMaxValue(100000))
+      )
   );
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
@@ -114,7 +138,42 @@ async function runAdmin(interaction, sub) {
     return interaction.reply({ content: id ? '↩️ That upgrade is back to its default.' : '↩️ All upgrades reset to their defaults.', ephemeral: true });
   }
 
+  if (sub === 'rebirth') {
+    const input = {
+      rebirthEnabled: interaction.options.getBoolean('enabled'),
+      rebirthBaseCost: interaction.options.getInteger('base_cost'),
+      rebirthGrowth: interaction.options.getNumber('growth'),
+      rebirthBonusPct: interaction.options.getInteger('bonus_pct'),
+      starDivisor: interaction.options.getInteger('star_divisor')
+    };
+    Object.keys(input).forEach((k) => input[k] === null && delete input[k]);
+    if (!Object.keys(input).length) return interaction.reply({ content: 'ℹ️ Give at least one setting to change (enabled / base_cost / growth / bonus_pct / star_divisor).', ephemeral: true });
+    const res = await idle.saveSettings(guild, input);
+    if (res.error) return interaction.reply({ content: `❌ ${res.error}`, ephemeral: true });
+    const r = res.settings;
+    return interaction.reply({
+      content: `✨ **Rebirth** is **${r.rebirthEnabled ? 'ON' : 'OFF'}** · first rebirth at **${fmt(r.rebirthBaseCost)} 🫧** lifetime, ×**${r.rebirthGrowth}** each time · **+${r.rebirthBonusPct}%** production per rebirth · ⭐ ≈ √(lifetime ÷ ${fmt(r.starDivisor)}).`,
+      ephemeral: true
+    });
+  }
+
   const target = interaction.options.getUser('user');
+
+  if (sub === 'stars') {
+    const amount = interaction.options.getInteger('amount');
+    const { state, applied } = await idle.adminGrantStars(guild.id, target.id, amount);
+    return interaction.reply({
+      content: `⭐ ${applied >= 0 ? 'Gave' : 'Removed'} **${fmt(Math.abs(applied))} ⭐** ${applied >= 0 ? 'to' : 'from'} **${target.username}** — they now have **${fmt(state.stars)} ⭐**.`,
+      ephemeral: true,
+      allowedMentions: { parse: [] }
+    });
+  }
+
+  if (sub === 'setrebirth') {
+    const count = interaction.options.getInteger('count');
+    const { state } = await idle.adminSetRebirth(guild.id, target.id, count);
+    return interaction.reply({ content: `✨ Set **${target.username}**'s rebirth level to **${fmt(state.rebirths)}**.`, ephemeral: true, allowedMentions: { parse: [] } });
+  }
   if (sub === 'reset') {
     await idle.resetFactory(guild.id, target.id);
     return interaction.reply({ content: `🧹 Reset **${target.username}**'s factory back to a fresh start.`, ephemeral: true, allowedMentions: { parse: [] } });
@@ -168,7 +227,17 @@ async function execute(interaction) {
             s.dailyXpCap > 0
               ? `Turn bubbles into real **XP** at **${fmt(s.bubblesPerXp)} 🫧 = 1 XP**, up to **${fmt(s.dailyXpCap)} XP a day** (resets at midnight UTC).`
               : 'Cash-out is currently **off** here — bubbles are just for show and upgrades.'
-        }
+        },
+        ...(s.rebirthEnabled
+          ? [
+              {
+                name: '5️⃣ ✨ Rebirth (prestige)',
+                value:
+                  `At **${fmt(s.rebirthBaseCost)}** lifetime 🫧 you can **Rebirth**: reset your bank & upgrades for a permanent **+${s.rebirthBonusPct}%** production boost and **⭐ Prestige Stars**. ` +
+                  'Spend Stars in **🌟 Prestige perks** (Golden Touch, Nest Egg, Deep Reserves, Overflow Valve) — they’re permanent and stack through every rebirth. Each rebirth needs more lifetime than the last.'
+              }
+            ]
+          : [])
       )
       .setFooter({ text: s.enabled ? 'Open it with /idle play' : 'An admin needs to turn it on with /idle admin toggle' });
     return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -181,7 +250,7 @@ async function execute(interaction) {
   if (sub === 'start') {
     const { state, already } = await idle.startFactory(guild.id, interaction.user.id);
     if (already) return reply('🫧 Your factory is already running — open it with `/idle play`.');
-    return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: [idle.rowFor(interaction.user.id, s)], ephemeral: true });
+    return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: idle.rowFor(interaction.user.id, s, state), ephemeral: true });
   }
 
   if (sub === 'stop') {
@@ -197,7 +266,7 @@ async function execute(interaction) {
       .setTitle('🏭 Biggest Bubble Factories')
       .setDescription(
         rows.length
-          ? rows.map((r, i) => `${medal(i)} ${r.name ? r.name : `<@${r.userId}>`} — **${fmt(r.lifetime)} 🫧** lifetime · ${fmt(r.rate)}/hr`).join('\n')
+          ? rows.map((r, i) => `${medal(i)} ${r.name ? r.name : `<@${r.userId}>`}${r.rebirths ? ` ✨${r.rebirths}` : ''} — **${fmt(r.lifetime)} 🫧** lifetime · ${fmt(r.rate)}/hr`).join('\n')
           : 'Nobody has started a factory yet. Be the first with `/idle play`!'
       );
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
@@ -209,7 +278,7 @@ async function execute(interaction) {
     const { embed, row } = idle.startView(state, s, interaction.user.id, name);
     return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
   }
-  return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: [idle.rowFor(interaction.user.id, s)], ephemeral: true });
+  return interaction.reply({ embeds: [idle.factoryEmbed(state, s, { name })], components: idle.rowFor(interaction.user.id, s, state), ephemeral: true });
 }
 
 module.exports = { data, execute };

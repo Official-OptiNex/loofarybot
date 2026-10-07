@@ -143,6 +143,20 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       `available:false` removes it from `/idle upgrades` but keeps it in the dashboard editor.
       `/idle admin upgrades_reset which:🧽 Scrubber` restores one upgrade; `/idle admin upgrades_reset`
       (no `which`) restores them all.
+- [ ] **✨ Rebirth:** with the factory open, below the lifetime threshold the embed shows a **rebirth
+      progress bar** and the **✨ Rebirth** button is greyed out. Lower the requirement (e.g.
+      `/idle admin rebirth base_cost:1000 growth:2`) or `/idle admin give` yourself lots of 🫧 and
+      collect to build lifetime → the embed says **"Rebirth ready!"** and the button turns red.
+- [ ] Press **✨ Rebirth → Rebirth now** → bank and upgrades reset to 0, the title gains **✨1**,
+      Production shows a **×multiplier**, and you're awarded **⭐ Stars**. Your **lifetime** is kept.
+      Rebirthing again needs a higher lifetime (× the growth).
+- [ ] **🌟 Prestige perks** button → spend ⭐ on **Golden Touch** (production ×), **Nest Egg** (start a
+      rebirth with bubbles), **Deep Reserves** (+offline storage), **Overflow Valve** (+your daily XP
+      cap). Perks persist through rebirths; a perk you can't afford is refused.
+- [ ] **Staff rebirth cmds:** `/idle admin rebirth …` updates the config (and the dashboard **✨ Rebirth**
+      section reflects it); `/idle admin stars @user amount:10` grants ⭐ (negative removes, clamped at 0);
+      `/idle admin setrebirth @user count:3` sets their rebirth level. `/idle top` shows **✨N** next to
+      people who've rebirthed. Turning **Enable Rebirth** off hides the rebirth button and panel.
 - [ ] Dashboard: the 🫧 header bubbles animate; the **At these settings** preview tiles update live as
       you change a number (before saving); the **🏭 Upgrades** editor lists every upgrade with editable
       Cost / Effect / Max / On fields, and **Save** / **Reset to defaults** persist and reload; the **"Tub is full" alerts**

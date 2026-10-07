@@ -223,7 +223,13 @@ const GuildConfigSchema = new mongoose.Schema(
       dailyXpCap: { type: Number, default: 300 }, // most XP a member can cash out per UTC day (0 = cash-out off)
       fullAlerts: { type: Boolean, default: true }, // DM a member once when their tub fills up
       fullAlertChannelId: { type: String, default: null }, // fallback channel if the member's DMs are closed
-      upgradeConfig: { type: mongoose.Schema.Types.Mixed, default: {} } // per-upgrade overrides: { id: { baseCost, effect, max, enabled } }
+      upgradeConfig: { type: mongoose.Schema.Types.Mixed, default: {} }, // per-upgrade overrides: { id: { baseCost, effect, max, enabled } }
+      // --- Rebirth (prestige): reset bank + upgrades for permanent power and ⭐ Prestige Stars ---
+      rebirthEnabled: { type: Boolean, default: true },
+      rebirthBaseCost: { type: Number, default: 250000 }, // lifetime 🫧 needed for the first rebirth
+      rebirthGrowth: { type: Number, default: 2.2 }, // the lifetime requirement multiplies by this each rebirth
+      rebirthBonusPct: { type: Number, default: 15 }, // permanent +% production per rebirth
+      starDivisor: { type: Number, default: 4000 } // bigger = fewer Prestige Stars awarded (stars = floor(sqrt(lifetime/divisor)))
     },
     gamblingChannelId: { type: String, default: null }, // null = any channel
     // Safety net: a player who gambles below the minimum bet gets one free bet (at most once per cooldown).

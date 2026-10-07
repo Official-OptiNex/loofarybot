@@ -161,5 +161,50 @@ const H=3600000;
   assert.equal(I.upgradeCost('scrubber',0,s2.upgradeById),100,'back to the default cost after reset');
   console.log('✓ configurable upgrades: cost/effect/max/enabled, disable, bulk save and reset');
 
+  // ---- Rebirth (prestige): reset bank+upgrades for permanent power + ⭐ stars
+  const rs=I.idleSettings({idleGame:{enabled:true,rebirthBaseCost:1000,rebirthGrowth:2,rebirthBonusPct:20,starDivisor:100}});
+  assert.deepEqual([rs.rebirthEnabled,rs.rebirthBaseCost,rs.rebirthGrowth,rs.rebirthBonusPct,rs.starDivisor],[true,1000,2,20,100]);
+  assert.deepEqual([0,1,2].map((n)=>I.rebirthCost(n,rs)),[1000,2000,4000],'requirement doubles each rebirth');
+  assert.equal(I.totalStarsFor(5000,rs),7,'floor(sqrt(5000/100))');
+  assert.equal(I.prestigeMult({rebirths:2},rs).toFixed(2),'1.40','+20% per rebirth');
+  let rx=await I.getFactory('g','rex'); rx.active=true; rx.lifetime=5000; rx.bank=777; rx.upgrades={scrubber:4}; rx.markModified('upgrades'); rx.lastTick=now; await rx.save();
+  assert.equal(I.canRebirth(rx,rs),true,'5000 lifetime ≥ 1000 needed');
+  let rb=await I.rebirth('g','rex',rs,now);
+  assert.equal(rb.rebirths,1); assert.equal(rb.gained,7,'awarded √(5000/100) stars');
+  assert.equal(rb.state.bank,0,'bank reset (no Nest Egg yet)'); assert.equal(rb.state.lifetime,5000,'lifetime kept');
+  assert.deepEqual(rb.state.upgrades,{},'upgrades wiped'); assert.equal(I.ratePerHour(rb.state,rs),72,'60 × 1.2 prestige');
+  // A second rebirth with no new lifetime awards no new stars (no double-paying).
+  let rb2=await I.rebirth('g','rex',rs,now); assert.equal(rb2.rebirths,2); assert.equal(rb2.gained,0,'no new lifetime → no new stars');
+  // Not enough lifetime → blocked.
+  let rx2=await I.getFactory('g','ned'); rx2.active=true; rx2.lifetime=500; await rx2.save();
+  assert.match((await I.rebirth('g','ned',rs,now)).error,/need \*\*1,000\*\* lifetime/);
+  // Rebirth can be turned off.
+  assert.match((await I.rebirth('g','rex',{...rs,rebirthEnabled:false},now)).error,/turned off/);
+  console.log('✓ rebirth: resets run, keeps lifetime, awards √-scaled stars once, blocks under the requirement');
+
+  // ---- Prestige perks (permanent, bought with ⭐) — on a fresh prestige-1 factory (no upgrades)
+  await I.adminSetRebirth('g','rio',1); await I.adminGrantStars('g','rio',100);
+  let bp=await I.buyPerk('g','rio','golden'); assert.equal(bp.newLevel,1); assert.equal(bp.cost,5);
+  assert.equal(I.ratePerHour(bp.state,rs),Math.round(60*1.2*1.08),'Golden Touch adds +8% on top of prestige');
+  bp=await I.buyPerk('g','rio','overflow'); assert.equal(I.dailyXpCapFor(bp.state,rs),rs.dailyXpCap+50,'Overflow lifts the daily XP cap');
+  bp=await I.buyPerk('g','rio','reserves'); assert.equal(I.offlineCapHours(bp.state,rs),rs.offlineHours+2,'Deep Reserves extends offline storage');
+  // Nest Egg gives starting bubbles on rebirth (rex: lifetime 5000, rebirths 2, needs 4000).
+  await I.adminGrantStars('g','rex',100); await I.buyPerk('g','rex','nest');
+  let rbn=await I.rebirth('g','rex',rs,now); assert.equal(rbn.state.bank,250,'Nest Egg gives starting bubbles on rebirth');
+  // Can't afford → unchanged.
+  let poor=await I.getFactory('g','pat'); poor.stars=0; await poor.save();
+  assert.match((await I.buyPerk('g','pat','golden')).error,/costs/);
+  console.log('✓ prestige perks: Golden Touch / Overflow / Deep Reserves / Nest Egg, star costs enforced');
+
+  // ---- admin: stars + set rebirth
+  let gs=await I.adminGrantStars('g','ann',25); assert.equal(gs.state.stars,25);
+  gs=await I.adminGrantStars('g','ann',-10); assert.equal(gs.state.stars,15); assert.equal(gs.applied,-10);
+  gs=await I.adminGrantStars('g','ann',-999); assert.equal(gs.state.stars,0,'stars never below 0');
+  let sr=await I.adminSetRebirth('g','ann',7); assert.equal(sr.state.rebirths,7);
+  // rebirth config validation
+  assert.match(I.cleanSettings({rebirthBaseCost:100}).error,/Rebirth base cost/);
+  assert.match(I.cleanSettings({rebirthGrowth:1.05}).error,/Rebirth growth/);
+  console.log('✓ admin: grant/remove stars (clamped), set rebirth level, config validation');
+
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});

@@ -221,23 +221,31 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
   (300 XP/day by default). The daily cap is what keeps levels sane — even a maxed factory just hits
   the cap faster. Set the cap to `0` to make it bubbles-only (no XP at all).
 - `/idle play` opens your factory — a clean embed with a **ready-to-collect** progress bar, your
-  bank, production, storage, cash-out and lifetime, a "next upgrade" nudge, and buttons for
-  **Collect / Upgrades / Cash out → XP / Refresh**. `/idle top` is the factory leaderboard;
-  `/idle help` is a step-by-step guide with the full upgrade tree. Collecting plays a filling-bubble
-  animation.
+  bank, production (with your prestige **×multiplier**), storage, cash-out, a **✨ Prestige** panel and
+  a **rebirth-progress** bar, a "next upgrade" nudge, and buttons for
+  **Collect / Upgrades / Cash out → XP / Refresh / Pause** plus **✨ Rebirth** and **🌟 Prestige perks**.
+  `/idle top` is the factory leaderboard (showing ✨ rebirth levels); `/idle help` is a step-by-step
+  guide. Collecting plays a filling-bubble animation.
+- **✨ Rebirth (prestige):** once your **lifetime 🫧** passes the threshold you can **Rebirth** — reset
+  your bank and upgrades for a **permanent +% production** boost and **⭐ Prestige Stars**. Each rebirth
+  needs more lifetime than the last (so it stays balanced), and your lifetime, stars and perks are
+  always kept. Spend Stars in **🌟 Prestige perks** — all permanent and stacking through every rebirth:
+  **🌟 Golden Touch** (+8% production), **🪺 Nest Egg** (start each rebirth with bubbles),
+  **🛢️ Deep Reserves** (+offline storage) and **💧 Overflow Valve** (+your daily XP cap).
 - `/idle start` / `/idle stop` start and pause your own factory. **Staff commands**
   (`/idle admin …`, needs Manage Server): `toggle` turns the game on/off server-wide,
-  `give @user <amount>` rewards bubbles straight into someone's bank, `take @user <amount>` removes
-  them, `reset @user` wipes a factory back to a fresh start, and `upgrade` / `upgrades_reset` tune the
-  upgrade tree.
+  `give @user <amount>` rewards bubbles, `take @user <amount>` removes them, `reset @user` wipes a
+  factory, `upgrade` / `upgrades_reset` tune the upgrade tree, `rebirth` configures the prestige loop
+  (base cost, growth, bonus %, star rarity, on/off), `stars @user <amount>` grants/removes ⭐ Stars,
+  and `setrebirth @user <count>` sets a member's rebirth level.
 - **Configurable upgrades:** each upgrade's **base cost**, **effect per level**, **max level** and
   whether it's **available** can be tuned per server — with `/idle admin upgrade` or the dashboard's
   **🏭 Upgrades** editor (Save / Reset to defaults). Disabled upgrades vanish from the shop.
 - The dashboard (Leveling tab) turns it on and sets base production, offline hours, cash-out rate and
-  daily cap — grouped into **Core**, **Cash-out** and **"Tub is full" alerts** sections with a live
-  **"At these settings"** preview (level-0 output, full-tub size, daily cap in bubbles, time to earn
-  the cap), the editable **🏭 Upgrades** table, and the **biggest factories** leaderboard, all under an
-  animated bubble header.
+  daily cap — grouped into **Core**, **Cash-out**, **"Tub is full" alerts** and **✨ Rebirth** sections
+  (enable rebirth, first-rebirth cost, requirement growth, production bonus, star rarity) with a live
+  **"At these settings"** preview, the editable **🏭 Upgrades** table, and the **biggest factories**
+  leaderboard, all under an animated bubble header.
 
 ### XP Gambling (`/gamble ...` or the dashboard's Gambling tab)
 - Every finished game shows the player's updated XP balance and level, win or lose.

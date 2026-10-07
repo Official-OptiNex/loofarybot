@@ -1045,6 +1045,28 @@
               <div class="setting-control"><select id="idleAlertChannel"><%- channelOptions(config.idleGame && config.idleGame.fullAlertChannelId, 'DMs only') %></select></div>
             </div>
 
+            <div class="idle-group-label">✨ Rebirth (prestige)</div>
+            <div class="setting-row">
+              <div><div class="setting-title">Enable Rebirth</div><div class="setting-help">Members reset their bank &amp; upgrades for a permanent production boost and ⭐ Prestige Stars to spend on perks (Golden Touch, Nest Egg, Deep Reserves, Overflow Valve).</div></div>
+              <div class="setting-control"><label class="switch"><input type="checkbox" id="idleRebirth"><span class="track"></span></label></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">First rebirth at</div><div class="setting-help">Lifetime 🫧 needed for a member's first rebirth. Each rebirth after needs this × the growth below.</div></div>
+              <div class="setting-control"><input type="number" id="idleRebirthCost" min="1000" max="1000000000"><span class="muted">lifetime 🫧</span></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Requirement growth</div><div class="setting-help">The lifetime requirement multiplies by this each rebirth (e.g. 2.2×).</div></div>
+              <div class="setting-control"><input type="number" id="idleRebirthGrowth" min="1.1" max="100" step="0.1"><span class="muted">×</span></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Production bonus</div><div class="setting-help">Permanent +% production granted per rebirth.</div></div>
+              <div class="setting-control"><input type="number" id="idleRebirthBonus" min="0" max="1000"><span class="muted">% / rebirth</span></div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-title">Star rarity</div><div class="setting-help">Higher = fewer ⭐ Stars. Stars awarded ≈ √(lifetime ÷ this).</div></div>
+              <div class="setting-control"><input type="number" id="idleStarDivisor" min="1" max="1000000000"><span class="muted">divisor</span></div>
+            </div>
+
             <div class="savebar" style="position:static;"><button class="btn" id="idleSaveBtn" onclick="saveIdle()">Save Bubble Factory</button></div>
           </div>
 
