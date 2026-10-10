@@ -13,7 +13,13 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('start').setDescription('Start (or resume) your factory so it makes bubbles'))
   .addSubcommand((s) => s.setName('stop').setDescription('Pause your factory (your banked bubbles are kept)'))
   .addSubcommand((s) => s.setName('daily').setDescription('Claim your daily 🎁 bubble bonus (builds a streak)'))
-  .addSubcommand((s) => s.setName('top').setDescription('The biggest factories in the server'))
+  .addSubcommand((s) =>
+    s
+      .setName('stats')
+      .setDescription("Detailed stats for your factory (or someone else's)")
+      .addUserOption((o) => o.setName('player').setDescription('Whose factory to look at (defaults to you)'))
+  )
+  .addSubcommand((s) => s.setName('top').setDescription('The biggest factories — scroll pages & boards (lifetime / rebirths / streaks)'))
   .addSubcommand((s) => s.setName('help').setDescription('How the Bubble Factory works'))
   .addSubcommandGroup((g) =>
     g
@@ -325,18 +331,20 @@ async function execute(interaction) {
     return reply(`🎁 **Daily bonus claimed!** **+${fmt(res.reward)} 🫧** into your bank · 🔥 **${res.effStreak}-day streak**${res.maxed ? ' (max!)' : ''} · ×${res.mult.toFixed(2)}. Come back tomorrow to keep it going!`);
   }
 
+  if (sub === 'stats') {
+    const target = interaction.options.getUser('player') || interaction.user;
+    const state = await idle.getFactory(guild.id, target.id);
+    if (!state.lifetime && !state.active && !state.bank) {
+      return reply(target.id === interaction.user.id ? "🫧 You haven't started a factory yet — open one with `/idle play`." : `🫧 **${target.username}** hasn't started a Bubble Factory yet.`);
+    }
+    const tname = guild.members.cache.get(target.id)?.displayName || target.username;
+    return interaction.reply({ embeds: [idle.statsEmbed(state, s, { name: tname })], ephemeral: true, allowedMentions: { parse: [] } });
+  }
+
   if (sub === 'top') {
-    const rows = await idle.leaderboard(guild, { limit: 10 });
-    const medal = (i) => ['🥇', '🥈', '🥉'][i] || `**${i + 1}.**`;
-    const embed = new EmbedBuilder()
-      .setColor(0x4ab3f4)
-      .setTitle('🏭 Biggest Bubble Factories')
-      .setDescription(
-        rows.length
-          ? rows.map((r, i) => `${medal(i)} ${r.name ? r.name : `<@${r.userId}>`}${r.rebirths ? ` ✨${r.rebirths}` : ''} — **${fmt(r.lifetime)} 🫧** lifetime · ${fmt(r.rate)}/hr`).join('\n')
-          : 'Nobody has started a factory yet. Be the first with `/idle play`!'
-      );
-    return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
+    const pageData = await idle.leaderboardPage(guild, { mode: 'lifetime', page: 1 });
+    const view = idle.leaderboardView(pageData, interaction.user.id);
+    return interaction.reply({ embeds: [view.embed], components: view.components, ephemeral: true, allowedMentions: { parse: [] } });
   }
 
   // play — if the factory isn't running yet, show the Start screen; otherwise the factory itself.

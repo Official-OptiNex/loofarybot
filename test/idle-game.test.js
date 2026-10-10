@@ -243,5 +243,44 @@ const H=3600000;
   assert.match(I.cleanSettings({dailyMaxStreak:0}).error,/Daily max streak/);
   console.log('✓ daily bonus: self-scaling reward, streak ×, once/day, resets on a miss, caps, configurable');
 
+  // ---- paginated leaderboard (/idle top boards) + /idle stats embed
+  // Seed a clean guild so page math is predictable.
+  for (let i = 0; i < 12; i++) await M('IdleFactory').create({ guildId: 'lb', userId: `u${i}`, lifetime: (i + 1) * 1000, rebirths: i % 4, dailyStreak: i % 5 });
+  const lg = { id: 'lb', members: { cache: new Map() } };
+  let pg = await I.leaderboardPage(lg, { mode: 'lifetime', page: 1, pageSize: 10 });
+  assert.equal(pg.total, 12); assert.equal(pg.totalPages, 2); assert.equal(pg.mode, 'lifetime');
+  assert.equal(pg.entries.length, 10); assert.equal(pg.entries[0].rank, 1);
+  assert.equal(pg.entries[0].userId, 'u11', 'lifetime board sorts highest lifetime first');
+  let pg2 = await I.leaderboardPage(lg, { mode: 'lifetime', page: 2, pageSize: 10 });
+  assert.equal(pg2.page, 2); assert.equal(pg2.entries.length, 2); assert.equal(pg2.entries[0].rank, 11);
+  let pgOver = await I.leaderboardPage(lg, { mode: 'lifetime', page: 99, pageSize: 10 });
+  assert.equal(pgOver.page, 2, 'page is clamped to totalPages');
+  let pgBad = await I.leaderboardPage(lg, { mode: 'bogus', page: 1 });
+  assert.equal(pgBad.mode, 'lifetime', 'an unknown board falls back to lifetime');
+  let sp = await I.leaderboardPage(lg, { mode: 'streak', page: 1, pageSize: 10 });
+  assert.equal(sp.mode, 'streak'); assert.ok(sp.entries[0].streak >= sp.entries[1].streak, 'streak board sorts by streak');
+  console.log('✓ leaderboardPage: paginates, sorts per board, clamps page, falls back on a bad board');
+
+  // the view builds nav + board buttons owned by the viewer
+  const view = I.leaderboardView(pg, 'viewer1');
+  assert.match(view.embed.data.title, /Biggest Bubble Factories/);
+  assert.match(view.embed.data.footer.text, /Page 1\/2/);
+  assert.equal(view.components.length, 2, 'a nav row and a boards row');
+  const navBtns = view.components[0].components.map((c) => c.data);
+  assert.equal(navBtns[0].disabled, true, 'Prev disabled on page 1');
+  assert.equal(navBtns[1].disabled, false, 'Next enabled with a second page');
+  assert.ok(navBtns[1].custom_id.startsWith('idle:top:viewer1:lifetime:2'), 'Next goes to page 2, owned by the viewer');
+  assert.equal(view.components[1].components.length, Object.keys(I.LEADERBOARD_MODES).length, 'one button per board');
+  console.log('✓ leaderboardView: embed + viewer-owned nav/board buttons');
+
+  // stats embed: a detailed read-out of one member's factory
+  let statState = await I.getFactory('g', 'rio'); // rebirth-1 with perks from earlier
+  const statEm = I.statsEmbed(statState, rs, { name: 'Rio', now }).data;
+  assert.match(statEm.title, /Rio's Bubble Factory/);
+  assert.ok(statEm.fields.find((f) => f.name.includes('Bank')), 'shows the bank');
+  assert.ok(statEm.fields.find((f) => f.name.includes('Lifetime')), 'shows lifetime');
+  assert.ok(statEm.fields.find((f) => /Prestige/i.test(f.name)), 'shows prestige info for a rebirthed factory');
+  console.log('✓ statsEmbed: detailed per-member read-out');
+
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});

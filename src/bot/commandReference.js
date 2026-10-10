@@ -33,7 +33,8 @@ module.exports = [
     commands: [
       { usage: '/daily', perm: null, description: 'Claim daily XP — consecutive days build a streak for bigger rewards.' },
       { usage: '/idle play · start · stop · daily', perm: null, description: 'The Bubble Factory idle game (no gambling): make 🫧 over time, collect (with a 💎 Golden Bubble chance), claim a 🎁 daily streak bonus, upgrade, cash out to XP, and optionally ✨ Rebirth for permanent power.' },
-      { usage: '/idle top · help', perm: null, description: 'The factory leaderboard (with ✨ rebirth levels), and a guide to how the Bubble Factory works.' },
+      { usage: '/idle stats [player]', perm: null, description: 'A detailed read-out of a factory — bank, pending, lifetime, production, storage, prestige, perks, upgrades and daily streak — for yourself or another member.' },
+      { usage: '/idle top · help', perm: null, description: 'The factory leaderboard, paginated with ◀️ ▶️ buttons and flippable between 🫧 Lifetime, ✨ Rebirths and 🔥 Streaks boards — plus a guide to how the Bubble Factory works.' },
       { usage: '/idle admin', perm: 'Manage Server', description: 'Everything is configurable: toggle the game, give/take/reset bubbles, tune upgrades, Rebirth (optional), the 🎁 daily bonus, the 💎 Golden Bubble, and grant ⭐ Stars / set a rebirth level — in-server or on the dashboard.' },
       { usage: '/xpdrop setup', perm: 'Manage Server', description: 'Random XP drops in chat — pick channels, XP range and how often; first to click wins.' },
       { usage: '/xpdrop now · status · toggle', perm: 'Manage Server', description: 'Drop one right now, see recent winners and the next drop, or turn drops on/off.' },

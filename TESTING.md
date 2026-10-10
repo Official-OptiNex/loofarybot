@@ -134,7 +134,13 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       daily cap. Cashing out again after the cap → "you've hit today's cap".
 - [ ] Set **Daily XP cap** to 0 on the dashboard → the Cash out button is disabled (bubbles only).
 - [ ] Someone else clicking your factory's buttons → "that's someone else's factory".
-- [ ] `/idle top` and the dashboard's **Biggest factories** list the same people.
+- [ ] `/idle stats` shows your own detailed read-out; `/idle stats player:@user` shows theirs (bank,
+      pending, lifetime, production, storage, prestige, perks, upgrades, daily streak). A member who never
+      started gets a "hasn't started a factory" note.
+- [ ] `/idle top` opens the leaderboard with ◀️ ▶️ page buttons (disabled at the ends) and three board
+      buttons — **🫧 Lifetime / ✨ Rebirths / 🔥 Streaks**; clicking a board re-sorts and the active one is
+      highlighted. Only the person who ran it can use the buttons. Page 1 of the Lifetime board matches the
+      dashboard's **Biggest factories**.
 - [ ] **Staff:** `/idle admin toggle enabled:false` turns it off (non-staff get "needs Manage Server").
       `/idle admin give @user amount:500` adds 500 🫧 to their bank; `/idle admin take @user amount:200`
       removes 200; `/idle admin reset @user` wipes their factory. Each replies with the new balance.

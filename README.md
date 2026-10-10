@@ -224,8 +224,10 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
   bank, production (with your prestige **×multiplier**), storage, cash-out, a **✨ Prestige** panel and
   a **rebirth-progress** bar, a "next upgrade" nudge, and buttons for
   **Collect / Upgrades / Cash out → XP / Refresh / Pause** plus **✨ Rebirth** and **🌟 Prestige perks**.
-  `/idle top` is the factory leaderboard (showing ✨ rebirth levels); `/idle help` is a step-by-step
-  guide. Collecting plays a filling-bubble animation.
+  `/idle stats [player]` is a detailed read-out of any factory (bank, pending, lifetime, production,
+  storage, prestige, perks, upgrades, daily streak). `/idle top` is the factory leaderboard —
+  **paginated** with ◀️ ▶️ buttons and flippable between **🫧 Lifetime**, **✨ Rebirths** and
+  **🔥 Streaks** boards; `/idle help` is a step-by-step guide. Collecting plays a filling-bubble animation.
 - **🎁 Daily streak bonus:** `/idle daily` (or the **🎁 Daily** button) once a day grants a reward worth
   a few hours of your current production, **+% for each day of your streak** (capped). Miss a day and the
   streak resets. Fully configurable (size, streak %, max streak) — or turn it off.

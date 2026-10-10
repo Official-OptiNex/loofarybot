@@ -698,6 +698,13 @@ async function handleIdleInteraction(interaction) {
   if (!s.enabled) return interaction.reply({ content: '🫧 The Bubble Factory is turned off here.', ephemeral: true }).catch(() => null);
   const name = interaction.member?.displayName || interaction.user.username;
 
+  if (action === 'top') {
+    // customId: idle:top:<userId>:<mode>:<page>
+    const parts = interaction.customId.split(':');
+    const page = await leaderboardPage(interaction.guild, { mode: parts[3], page: Number(parts[4]) || 1 });
+    const view = leaderboardView(page, interaction.user.id);
+    return interaction.update({ embeds: [view.embed], components: view.components }).catch(() => null);
+  }
   if (action === 'start') {
     const { state } = await startFactory(interaction.guild.id, interaction.user.id);
     return interaction.update({ embeds: [factoryEmbed(state, s, { name })], components: rowFor(interaction.user.id, s, state) }).catch(() => null);
@@ -809,6 +816,114 @@ async function leaderboard(guild, { now = Date.now(), limit = 10 } = {}) {
     rebirths: r.rebirths || 0,
     rate: ratePerHour(r, s)
   }));
+}
+
+// The boards you can flip between on /idle top.
+const LEADERBOARD_MODES = {
+  lifetime: { field: 'lifetime', emoji: '🫧', label: 'Lifetime', suffix: '🫧 lifetime' },
+  rebirths: { field: 'rebirths', emoji: '✨', label: 'Rebirths', suffix: '✨ rebirths' },
+  streak: { field: 'dailyStreak', emoji: '🔥', label: 'Streaks', suffix: '🔥-day streak' }
+};
+
+/** One page of the factory leaderboard for a given board (lifetime / rebirths / daily streak). */
+async function leaderboardPage(guild, { mode = 'lifetime', page = 1, pageSize = 10 } = {}) {
+  const m = LEADERBOARD_MODES[mode] ? mode : 'lifetime';
+  const def = LEADERBOARD_MODES[m];
+  const s = idleSettings(await GuildConfig.findOne({ guildId: guild.id }).lean());
+  const filter = { guildId: guild.id };
+  const total = await IdleFactory.countDocuments(filter);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, Math.round(page) || 1), totalPages);
+  const docs = await IdleFactory.find(filter)
+    .sort({ [def.field]: -1, lifetime: -1 })
+    .skip((safePage - 1) * pageSize)
+    .limit(pageSize)
+    .lean();
+  const entries = docs.map((r, i) => ({
+    rank: (safePage - 1) * pageSize + i + 1,
+    userId: r.userId,
+    name: guild.members.cache.get(r.userId)?.displayName || null,
+    lifetime: r.lifetime || 0,
+    rebirths: r.rebirths || 0,
+    stars: r.stars || 0,
+    streak: r.dailyStreak || 0,
+    rate: ratePerHour(r, s)
+  }));
+  return { entries, total, page: safePage, totalPages, mode: m };
+}
+
+/** Builds the leaderboard embed + nav/board buttons. `userId` owns the (ephemeral) message. */
+function leaderboardView({ entries, total, page, totalPages, mode }, userId) {
+  const def = LEADERBOARD_MODES[mode];
+  const medal = (rank) => ['🥇', '🥈', '🥉'][rank - 1] || `**${rank}.**`;
+  const metric = (r) => (mode === 'rebirths' ? `**${r.rebirths}** ✨` : mode === 'streak' ? `**${r.streak}** 🔥` : `**${fmt(r.lifetime)}** 🫧`);
+  const line = (r) =>
+    `${medal(r.rank)} ${r.name ? r.name : `<@${r.userId}>`}${mode !== 'rebirths' && r.rebirths ? ` ✨${r.rebirths}` : ''} — ${metric(r)} · ${fmt(r.rate)}/hr`;
+  const embed = new EmbedBuilder()
+    .setColor(BLUE)
+    .setTitle(`🏭 Biggest Bubble Factories · ${def.emoji} ${def.label}`)
+    .setDescription(entries.length ? entries.map(line).join('\n') : 'Nobody has started a factory yet. Be the first with `/idle play`!')
+    .setFooter({ text: `Page ${page}/${totalPages} · ${fmt(total)} factor${total === 1 ? 'y' : 'ies'}` });
+  const nav = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`idle:top:${userId}:${mode}:${page - 1}`).setLabel('Prev').setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(page <= 1),
+    new ButtonBuilder().setCustomId(`idle:top:${userId}:${mode}:${page + 1}`).setLabel('Next').setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages)
+  );
+  const boards = new ActionRowBuilder().addComponents(
+    ...Object.entries(LEADERBOARD_MODES).map(([key, d]) =>
+      new ButtonBuilder().setCustomId(`idle:top:${userId}:${key}:1`).setLabel(d.label).setEmoji(d.emoji).setStyle(key === mode ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    )
+  );
+  return { embed, components: [nav, boards] };
+}
+
+/** A detailed read-out of one member's factory (for /idle stats). */
+function statsEmbed(state, s, { name, now = Date.now() } = {}) {
+  const rate = ratePerHour(state, s);
+  const mult = prestigeMult(state, s);
+  const capH = offlineCapHours(state, s);
+  const pending = pendingBubbles(state, s, now);
+  const reb = state.rebirths || 0;
+  const owned = (s.upgrades || DEFAULT_UPGRADES).filter((u) => levelOf(state, u.id));
+  const perks = PERKS.filter((p) => perkLevel(state, p.id));
+  const usedXp = state.cashoutDay === dayKey(now) ? state.cashoutXpToday || 0 : 0;
+  const embed = new EmbedBuilder()
+    .setColor(reb > 0 ? GOLD : BLUE)
+    .setTitle(`📊 ${name ? `${name}'s ` : ''}Bubble Factory${reb > 0 ? ` ✨${reb}` : ''}`)
+    .setDescription(state.active ? '🟢 **Running** — making bubbles right now.' : '⏸️ **Paused** — not producing (start with `/idle start`).')
+    .addFields(
+      { name: '🫧 Bank', value: `**${fmt(state.bank)}**`, inline: true },
+      { name: '📦 Ready to collect', value: `**${fmt(pending)}**`, inline: true },
+      { name: '📈 Lifetime', value: `**${fmt(state.lifetime)}**`, inline: true },
+      { name: '⚙️ Production', value: `**${fmt(rate)}**/hr${mult > 1.0001 ? ` · ×${mult.toFixed(2)}` : ''}`, inline: true },
+      { name: '🛁 Storage', value: `**${capH}h** · ~${fmt(rate * capH)} 🫧`, inline: true },
+      {
+        name: '💧 Cash-out today',
+        value: s.dailyXpCap > 0 ? `**${fmt(usedXp)}** / ${fmt(dailyXpCapFor(state, s))} XP` : 'off',
+        inline: true
+      }
+    );
+  if (s.rebirthEnabled) {
+    const cost = rebirthCost(reb, s);
+    embed.addFields({
+      name: '✨ Prestige',
+      value:
+        `Rebirths **${reb}** · ⭐ **${fmt(state.stars || 0)}** stars\n` +
+        (canRebirth(state, s)
+          ? '**Rebirth ready!** — run `/idle play` → ✨ Rebirth'
+          : `Next rebirth at **${fmt(cost)}** 🫧\n${bar(state.lifetime || 0, cost, 12)} ${Math.round(Math.min(100, ((state.lifetime || 0) / cost) * 100))}%`),
+      inline: false
+    });
+  }
+  if (perks.length) {
+    embed.addFields({ name: '🌟 Perks', value: perks.map((p) => `${p.emoji} **${p.name}** Lv ${perkLevel(state, p.id)}/${p.max}`).join('\n'), inline: true });
+  }
+  embed.addFields({
+    name: `🏭 Upgrades${owned.length ? ` · ${owned.length}` : ''}`,
+    value: owned.length ? owned.map((u) => `${u.emoji} **${u.name}** Lv ${levelOf(state, u.id)}${u.max ? `/${u.max}` : ''}`).join('\n') : '_None yet_',
+    inline: true
+  });
+  if (s.dailyBonusEnabled) embed.addFields({ name: '🎁 Daily streak', value: `🔥 **${state.dailyStreak || 0}** day${(state.dailyStreak || 0) === 1 ? '' : 's'}`, inline: true });
+  return embed;
 }
 
 function cleanSettings(input) {
@@ -965,6 +1080,10 @@ module.exports = {
   rebirthConfirmView,
   handleIdleInteraction,
   leaderboard,
+  leaderboardPage,
+  leaderboardView,
+  LEADERBOARD_MODES,
+  statsEmbed,
   cleanSettings,
   saveSettings
 };
