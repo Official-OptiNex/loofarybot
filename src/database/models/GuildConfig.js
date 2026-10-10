@@ -165,7 +165,7 @@ const GuildConfigSchema = new mongoose.Schema(
       enabled: { type: Boolean, default: false },
       categoryId: { type: String, default: null }, // the "📊 Server Stats" category holding the channels
       channels: { type: mongoose.Schema.Types.Mixed, default: {} }, // { statKey: channelId }
-      enabledStats: { type: [String], default: ['members', 'online', 'boosts', 'highestxp'] } // which stats show
+      enabledStats: { type: [String], default: ['members', 'online', 'boosts', 'totalxp'] } // which stats show
     },
     // Music / radio voice player (/music, dashboard Community → Music). Plays Lofi / chill internet
     // radio streams in a voice channel — light and ToS-safe for the free tier. See music.js.

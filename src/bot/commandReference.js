@@ -236,7 +236,7 @@ module.exports = [
       { usage: '/loof help', perm: null, description: 'This help menu.' },
       { usage: '/loof ping', perm: null, description: "Bot latency." },
       { usage: '/serverinfo', perm: null, description: 'Server stats: members, boosts, channels and more.' },
-      { usage: '/serverstats setup · stat · refresh · remove', perm: 'Manage Server', description: 'View-only channels pinned at the top of the server showing live counts (members, online, boosts, top XP, roles, channels), refreshed every ~30 min.' },
+      { usage: '/serverstats setup · stat · refresh · remove', perm: 'Manage Server', description: 'View-only channels pinned at the top of the server showing live counts (members, online, boosts, total server XP, roles, channels), refreshed every ~30 min.' },
       { usage: '/userinfo', perm: null, description: "A member's account age, join date and roles." },
       { usage: '/avatar', perm: null, description: "Someone's full-size avatar." }
     ]

@@ -259,7 +259,7 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 
 ## 9b. Server Stats channels (`/serverstats`, dashboard **Overview → Server Stats**)
 - [ ] `/serverstats setup` → a **📊 Server Stats** category appears at the top of the server with
-      view-only voice channels: 👥 Members, 🟢 Online, 🚀 Boosts, 🏆 Top XP. Members can see them but
+      view-only voice channels: 👥 Members, 🟢 Online, 🚀 Boosts, 📈 Total XP (whole-server XP). Members can see them but
       can't join or type.
 - [ ] `/serverstats stat name:🎭 Roles show:true` → a Roles channel is added; `show:false` removes it.
 - [ ] `/serverstats refresh` updates the numbers now; they also refresh on their own every ~30 min.

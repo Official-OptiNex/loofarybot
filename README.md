@@ -589,7 +589,7 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 ### Server Stats channels (`/serverstats …` or dashboard **Overview → Server Stats**)
 - View-only **voice channels** pinned at the top of the server (under a 📊 Server Stats category) whose
   names show live counts. Members can **see** them but can't join or type.
-- Pick any of: **👥 Members · 🟢 Online · 🚀 Boosts · 🏆 Top XP · 🎭 Roles · 💬 Channels** — each is its
+- Pick any of: **👥 Members · 🟢 Online · 🚀 Boosts · 📈 Total XP · 🎭 Roles · 💬 Channels** — each is its
   own channel and toggleable. The online count uses the server's approximate presence count, so it needs
   no privileged intent.
 - Names refresh **every ~30 minutes** (channel renames are rate-limited, so this is the safe cadence),

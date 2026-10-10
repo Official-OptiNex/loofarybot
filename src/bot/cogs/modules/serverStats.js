@@ -1,5 +1,5 @@
 // Server Stats channels: a stack of view-only voice channels at the top of the server whose names
-// show live counts (members, online, boosts, top XP, …). Members can see them but not enter or talk.
+// show live counts (members, online, boosts, total server XP, …). Members can see them but not enter or talk.
 // The names are refreshed on a timer (every 30 min by default — channel renames are heavily
 // rate-limited, so we never update more often than that).
 const { ChannelType, PermissionFlagsBits, Routes } = require('discord.js');
@@ -14,21 +14,29 @@ const STAT_DEFS = [
   { key: 'members', emoji: '👥', label: 'Members', value: (c) => fmt(c.memberCount) },
   { key: 'online', emoji: '🟢', label: 'Online', value: (c) => fmt(c.online), needsOnline: true },
   { key: 'boosts', emoji: '🚀', label: 'Boosts', value: (c) => `Lvl ${c.boostTier} (${fmt(c.boostCount)})` },
-  { key: 'highestxp', emoji: '🏆', label: 'Top XP', value: (c) => fmt(c.highestXp) },
+  { key: 'totalxp', emoji: '📈', label: 'Total XP', value: (c) => fmt(c.totalXp) },
   { key: 'roles', emoji: '🎭', label: 'Roles', value: (c) => fmt(c.roleCount) },
   { key: 'channels', emoji: '💬', label: 'Channels', value: (c) => fmt(c.channelCount) }
 ];
 const DEF_BY_KEY = Object.fromEntries(STAT_DEFS.map((d) => [d.key, d]));
 const VALID_KEYS = STAT_DEFS.map((d) => d.key);
 
+// Old servers stored 'highestxp' (the single Top-XP member); it's now 'totalxp' (whole-server XP).
+const migrateKey = (k) => (k === 'highestxp' ? 'totalxp' : k);
+
 function serverStatsSettings(config) {
   const g = (config && config.serverStats) || {};
-  const enabledStats = (Array.isArray(g.enabledStats) ? g.enabledStats : ['members', 'online', 'boosts', 'highestxp']).filter((k) => VALID_KEYS.includes(k));
+  const enabledStats = (Array.isArray(g.enabledStats) ? g.enabledStats : ['members', 'online', 'boosts', 'totalxp'])
+    .map(migrateKey)
+    .filter((k) => VALID_KEYS.includes(k));
+  // Migrate the stored channel map key too, so the existing Top-XP channel is just renamed (not deleted).
+  const channels = {};
+  if (g.channels && typeof g.channels === 'object') for (const [k, v] of Object.entries(g.channels)) channels[migrateKey(k)] = v;
   return {
     enabled: !!g.enabled,
     categoryId: g.categoryId || null,
-    channels: g.channels && typeof g.channels === 'object' ? { ...g.channels } : {},
-    enabledStats: enabledStats.length ? enabledStats : ['members']
+    channels,
+    enabledStats: enabledStats.length ? [...new Set(enabledStats)] : ['members']
   };
 }
 
@@ -46,7 +54,7 @@ async function computeContext(client, guild, enabledStats) {
     roleCount: Math.max(0, guild.roles.cache.size - 1), // minus @everyone
     channelCount: guild.channels.cache.filter((c) => c.type !== ChannelType.GuildCategory).size,
     online: 0,
-    highestXp: 0
+    totalXp: 0
   };
   if (enabledStats.includes('online')) {
     // approximate_presence_count needs no privileged intent and no member cache.
@@ -56,9 +64,9 @@ async function computeContext(client, guild, enabledStats) {
       if (!ctx.memberCount) ctx.memberCount = data.approximate_member_count || 0;
     }
   }
-  if (enabledStats.includes('highestxp')) {
-    const top = await UserLevel.findOne({ guildId: guild.id }, { xp: 1 }).sort({ xp: -1 }).lean().catch(() => null);
-    ctx.highestXp = top?.xp || 0;
+  if (enabledStats.includes('totalxp')) {
+    const agg = await UserLevel.aggregate([{ $match: { guildId: guild.id } }, { $group: { _id: null, total: { $sum: '$xp' } } }]).catch(() => null);
+    ctx.totalXp = agg?.[0]?.total || 0;
   }
   return ctx;
 }
@@ -163,7 +171,7 @@ function cleanSettings(input) {
   const patch = {};
   if (input.enabled !== undefined) patch['serverStats.enabled'] = !!input.enabled;
   if (input.enabledStats !== undefined) {
-    const keys = (Array.isArray(input.enabledStats) ? input.enabledStats : []).filter((k) => VALID_KEYS.includes(k));
+    const keys = (Array.isArray(input.enabledStats) ? input.enabledStats : []).map(migrateKey).filter((k) => VALID_KEYS.includes(k));
     patch['serverStats.enabledStats'] = keys.length ? [...new Set(keys)] : ['members'];
   }
   return { patch };
