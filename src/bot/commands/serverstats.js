@@ -6,7 +6,7 @@ const statChoices = stats.STAT_DEFS.map((d) => ({ name: `${d.emoji} ${d.label}`,
 
 const data = new SlashCommandBuilder()
   .setName('serverstats')
-  .setDescription('Live server-stat channels at the top of the server (members, online, boosts, top XP…)')
+  .setDescription('Live server-stat channels at the top of the server (members, online, boosts, total XP…)')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false)
   .addSubcommand((s) => s.setName('setup').setDescription('Turn it on and create the stat channels'))

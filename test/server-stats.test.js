@@ -28,22 +28,26 @@ const cfg=()=> GuildConfig.findOne({guildId:'g'}).lean();
 
   // ---- settings: defaults, bad keys dropped
   let s=S.serverStatsSettings({});
-  assert.deepEqual(s.enabledStats,['members','online','boosts','highestxp'],'sensible defaults');
+  assert.deepEqual(s.enabledStats,['members','online','boosts','totalxp'],'sensible defaults');
   assert.equal(s.enabled,false);
   s=S.serverStatsSettings({serverStats:{enabledStats:['members','bogus','roles']}});
   assert.deepEqual(s.enabledStats,['members','roles'],'unknown stat keys are dropped');
-  console.log('✓ settings: defaults and validation');
+  // Old 'highestxp' configs migrate to 'totalxp' (enabled list + the stored channel key).
+  s=S.serverStatsSettings({serverStats:{enabledStats:['members','highestxp'],channels:{members:'cm',highestxp:'cx'}}});
+  assert.deepEqual(s.enabledStats,['members','totalxp'],'highestxp → totalxp');
+  assert.deepEqual(s.channels,{members:'cm',totalxp:'cx'},'the stored channel key migrates so it is renamed, not recreated');
+  console.log('✓ settings: defaults, validation, and highestxp → totalxp migration');
 
   // ---- context + name formatting
-  const ctx=await S.computeContext(client,guild,['members','online','boosts','highestxp','roles','channels']);
+  const ctx=await S.computeContext(client,guild,['members','online','boosts','totalxp','roles','channels']);
   assert.deepEqual([ctx.memberCount,ctx.online,ctx.boostTier,ctx.boostCount,ctx.roleCount],[233,42,1,2,2]);
-  assert.equal(ctx.highestXp,14250,'top XP from the leaderboard');
+  assert.equal(ctx.totalXp,23250,'total XP = sum of all members (14250 + 9000)');
   const name=(k)=>S.channelName(S.STAT_DEFS.find(d=>d.key===k),ctx);
   assert.equal(name('members'),'👥 Members: 233');
   assert.equal(name('online'),'🟢 Online: 42');
   assert.equal(name('boosts'),'🚀 Boosts: Lvl 1 (2)');
-  assert.equal(name('highestxp'),'🏆 Top XP: 14,250');
-  console.log('✓ context (members/online/boosts/top XP/roles/channels) and channel-name formatting');
+  assert.equal(name('totalxp'),'📈 Total XP: 23,250');
+  console.log('✓ context (members/online/boosts/total XP/roles/channels) and channel-name formatting');
 
   // online is only fetched when the stat is shown
   restCalls=0; await S.computeContext(client,guild,['members','boosts']); assert.equal(restCalls,0,'no REST call when Online is hidden');
@@ -51,7 +55,7 @@ const cfg=()=> GuildConfig.findOne({guildId:'g'}).lean();
   console.log('✓ the live online count is only fetched when the Online stat is enabled');
 
   // ---- sync creates the category + a channel per enabled stat
-  await S.saveSettings(guild,{enabled:true,enabledStats:['members','online','boosts','highestxp']});
+  await S.saveSettings(guild,{enabled:true,enabledStats:['members','online','boosts','totalxp']});
   let r=await S.syncChannels(client,guild);
   assert.equal(r.created,4,'one channel per enabled stat'); assert.equal(r.removed,0);
   const cat=created.find(c=>c.type===ChannelType.GuildCategory);
@@ -70,10 +74,10 @@ const cfg=()=> GuildConfig.findOne({guildId:'g'}).lean();
   console.log('✓ a refresh renames changed channels and leaves the rest alone');
 
   // ---- turning a stat off removes just that channel
-  await S.saveSettings(guild,{enabledStats:['members','online','boosts']}); // drop highestxp
+  await S.saveSettings(guild,{enabledStats:['members','online','boosts']}); // drop totalxp
   r=await S.syncChannels(client,guild);
-  assert.equal(r.removed,1,'the Top XP channel is removed'); assert.equal(r.created,0);
-  assert.ok(!guild.channels.cache.find(c=>c.name.startsWith('🏆')));
+  assert.equal(r.removed,1,'the Total XP channel is removed'); assert.equal(r.created,0);
+  assert.ok(!guild.channels.cache.find(c=>c.name.includes('Total XP')));
   assert.equal(Object.keys((await cfg()).serverStats.channels).length,3);
   console.log('✓ hiding a stat deletes just its channel');
 
