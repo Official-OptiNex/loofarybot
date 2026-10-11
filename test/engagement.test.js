@@ -147,6 +147,24 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   x=await count('ann','103'); const okq=sent.length; await C.handleCountEdited({},{...x.m,content:'103 nice'}); assert.equal(sent.length,okq,'an edit that keeps the number is not corrected');
   console.log('✓ editing a count can’t rewind or disguise it; harmless trailing-text edits are ignored');
 
+  // 67+67 easter egg: the count still advances (67+67 = 134), but the message is swapped for a bot roast.
+  assert.ok(C.isSixtySeven('67+67') && C.isSixtySeven('67 + 67') && C.isSixtySeven('67+67 lol'),'detects the meme (with spaces / trailing chat)');
+  assert.ok(!C.isSixtySeven('67+670') && !C.isSixtySeven('67+68') && !C.isSixtySeven('134'),'only 67+67, not lookalikes');
+  r=await C.saveSettings(guild,{current:133}); assert.equal(r.settings.current,133);
+  const sixBefore=sent.length;
+  x=await count('ben','67+67');
+  assert.equal(cfg().counting.current,134,'67+67 still counts as 134');
+  assert.equal(x.m.deleted,true,'their 67+67 message is removed');
+  assert.deepEqual(x.m.reacts,[],'no ✅ react — it is replaced by the bot post');
+  const roast=sent.at(-1).m; assert.equal(sent.length,sixBefore+1);
+  assert.match(roast.payload.content,/<@ben> typed `67\+67` — the count is \*\*134\*\*/);
+  assert.deepEqual(roast.payload.allowedMentions,{users:['ben']},'only the counter is pinged');
+  assert.equal(cfg().counting.lastMessageId,roast.id,'the bot post becomes the authoritative record (delete handler won’t re-assert)');
+  const afterRoast=sent.length; await C.handleCountDeleted({guildId:'g',channelId:'count',channel:countCh,id:x.m.id,author:{id:'ben',bot:false}});
+  assert.equal(sent.length,afterRoast,'deleting the original 67+67 message does not trigger a re-post');
+  console.log('✓ 67+67 easter egg: counts as 134, message swapped for a @-roast, record re-pointed so grief-protection is clean');
+  await C.saveSettings(guild,{current:103}); // restore the count for the dashboard checks below
+
   // ================================================================ Starboard
   r=await S.saveSettings(guild,{enabled:true}); assert.match(r.error,/channel/);
   r=await S.saveSettings(guild,{emoji:'hello'}); assert.match(r.error,/single emoji/);
