@@ -4,6 +4,7 @@ const { handleRoleButton, handleRoleSelect } = require('../cogs/modules/reaction
 const { handleVote } = require('../cogs/modules/polls');
 const { handleHelpSelect } = require('../cogs/modules/help');
 const { reportError } = require('../utils/errorReporter');
+const { isDbUnavailable } = require('../../database/db');
 const honeypotCommand = require('../commands/honeypot');
 const giveawayForm = require('../cogs/modules/giveawayForm');
 const { handleTicketButton, handleTicketModal } = require('../cogs/modules/tickets');
@@ -66,12 +67,15 @@ module.exports = function registerInteractionCreateEvent(client) {
         : `${interaction.customId ? `Component "${interaction.customId.split(':')[0]}"` : 'Interaction'} failed`;
       reportError(err, { guildId: interaction.guildId, context: label });
       if (interaction.isAutocomplete()) return; // autocomplete can't show an error message
+      // A momentary database blip (free-tier Atlas drops an idle connection now and then) isn't a bug —
+      // tell people to just try again rather than showing a scary "internal error".
+      const msg = isDbUnavailable(err)
+        ? '⏳ The database is catching its breath — please try that again in a few seconds.'
+        : '⚠️ An internal error occurred while processing your command.';
       if (!interaction.replied && !interaction.deferred) {
-        await interaction
-          .reply({ content: '⚠️ An internal error occurred while processing your command.', ephemeral: true })
-          .catch(() => null);
+        await interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
       } else if (interaction.deferred && !interaction.replied) {
-        await interaction.editReply({ content: '⚠️ An internal error occurred while processing your command.' }).catch(() => null);
+        await interaction.editReply({ content: msg }).catch(() => null);
       }
     }
   });

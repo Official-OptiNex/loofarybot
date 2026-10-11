@@ -728,6 +728,12 @@ operations/second) and **Render's free web service** (512 MB RAM):
   - Chat XP skips re-reading records it just wrote.
   - Together these take a chat message from ~5 database operations to ~2.
   - The connection pool is capped at 10.
+- **Database blips:** the M0 cluster occasionally drops an idle connection; Mongoose reconnects on its
+  own within seconds. To keep a brief gap from showing as a command that "did not respond", a query
+  made during the gap **fails fast** (2.5 s, inside Discord's 3 s window) so the command replies with a
+  retry-able *"the database is catching its breath"* message instead of silently timing out, and a
+  keep-alive ping every few minutes makes the drop less likely in the first place. If it keeps
+  happening, check **Network Access → `0.0.0.0/0`** in Atlas (Render's IPs change on redeploys).
 - **Memory:**
   - Discord's message cache is limited to 100 messages per channel, and messages older than 6 hours
     are swept hourly.
