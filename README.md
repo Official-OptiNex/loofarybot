@@ -578,6 +578,9 @@ Members spend XP on fun extras. The shop is open by default and comes with start
   safe evaluator (no `eval`) with every loop capped so it can't be abused.
 - If someone deletes or edits the latest count, the bot re-posts an authoritative record and the
   stored number never changes.
+- **`67+67` easter egg** (needs sums on): if someone writes `67+67` (= 134) as their count, it still
+  counts, but their message is swapped for a bot post that @-mentions them, states the real count, and
+  gently roasts the "6-7" meme. 67 is cringe.
 - `/counting set` (or the dashboard) fixes the count after an unfair reset.
 
 ### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)

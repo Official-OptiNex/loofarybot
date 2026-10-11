@@ -275,6 +275,21 @@ function parseCount(content, mathAllowed = true) {
 
 const react = (message, emoji) => message.react(emoji).catch(() => null);
 
+// The "6-7" brainrot meme. Someone writing 67+67 (= 134) as their count gets gently roasted: we remove
+// their message, @ them, state the real count, and add a cringe line. Matches "67+67", "67 + 67",
+// "67+67 lol" — but not "67+670". (Only fires when it's accepted as the next count; math must be on.)
+const SIXTY_SEVEN_RE = /^\s*67\s*\+\s*67(?![\d.])/;
+const isSixtySeven = (content) => SIXTY_SEVEN_RE.test(String(content || ''));
+const SIXTY_SEVEN_LINES = [
+  "that's cringe 💀 we don't do that here",
+  '6-7 💀 please touch some grass',
+  'certified cringe moment 🫠',
+  'the brainrot is real 😬 go outside',
+  'nobody says that anymore 💀',
+  'caught in 4k being cringe 📸'
+];
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
 /**
  * Called for every guild message. Returns true when the message was a count in the counting channel
  * (right or wrong), so it's handled here.
@@ -308,6 +323,25 @@ async function handleCounting(message, config) {
   ).lean();
 
   if (before) {
+    // 67+67 easter egg: the count still stands, but swap their message for a bot post that roasts the meme.
+    if (isSixtySeven(message.content)) {
+      const record = await message.channel
+        .send({
+          content: `😹 ${message.author} typed \`67+67\` — the count is **${n.toLocaleString('en-US')}**, and ${pick(SIXTY_SEVEN_LINES)}`,
+          allowedMentions: { users: [userId] }
+        })
+        .catch(() => null);
+      // Make the bot post the authoritative last count BEFORE deleting theirs, so the delete handler
+      // (which keys off lastMessageId) sees the new record and doesn't re-assert.
+      if (record?.id) {
+        await GuildConfig.updateOne(
+          { guildId: message.guild.id, 'counting.lastMessageId': message.id, 'counting.current': n },
+          { $set: { 'counting.lastMessageId': record.id } }
+        ).catch(() => null);
+      }
+      if (message.deletable !== false) await message.delete().catch(() => null);
+      return true;
+    }
     // The best run from before this one started — passing it earns a 🏆 (once, on the number that beats it).
     const bestBefore = before.counting?.bestBefore || 0;
     if (n % 1000 === 0) await react(message, '🎉');
@@ -467,4 +501,4 @@ function registerCountingEvents(client) {
   client.on('messageUpdate', (oldMessage, newMessage) => handleCountEdited(oldMessage, newMessage).catch(() => null));
 }
 
-module.exports = { registerCountingEvents, evaluate, parseCount, countingSettings, handleCounting, handleCountDeleted, handleCountEdited, cleanSettings, saveSettings };
+module.exports = { registerCountingEvents, evaluate, parseCount, countingSettings, handleCounting, handleCountDeleted, handleCountEdited, cleanSettings, saveSettings, isSixtySeven };

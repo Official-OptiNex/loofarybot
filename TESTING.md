@@ -241,6 +241,10 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       try `3*4`, `5!`, `√144`, `nCr(6,2)`, `∑(i,1,5,i)`, `∫(x,0,3,2*x)`, `(5+5)*2`. Trailing chat is
       fine (`3*4 lol`). A non-whole or negative result doesn't count. Turning **allow maths** off makes
       `3*4` just read as **3**.
+- [ ] **`67+67` easter egg (allow sums on):** with the count at 133, post `67+67` → the count advances
+      to **134**, your message is **deleted**, and the bot posts a message that @-mentions you, states
+      the count, and roasts the "6-7" meme. Deleting your original `67+67` afterward does **not** make
+      the bot re-post (the bot's own message is now the record).
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the
       author) → it's reposted in #starboard, and the count updates as stars change.
 
