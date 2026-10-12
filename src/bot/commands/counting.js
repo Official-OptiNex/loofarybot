@@ -2,6 +2,8 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
 const counting = require('../cogs/modules/counting');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
+const { parseDuration, formatDuration } = require('../utils/duration');
+const { durationChoices } = require('../utils/autocomplete');
 
 const data = new SlashCommandBuilder()
   .setName('counting')
@@ -27,7 +29,24 @@ const data = new SlashCommandBuilder()
       .setDescription('Set the current number (e.g. to undo an unfair reset)')
       .addIntegerOption((o) => o.setName('number').setDescription('The last number counted — the next one will be this + 1').setRequired(true).setMinValue(0))
   )
+  .addSubcommand((s) =>
+    s
+      .setName('ban')
+      .setDescription('Block a member from the counting channel (adds a role + channel block automatically)')
+      .addUserOption((o) => o.setName('user').setDescription('Who to block from counting').setRequired(true))
+      .addStringOption((o) => o.setName('duration').setDescription('Optional — e.g. 10m, 2h, 7d (leave empty for permanent)').setAutocomplete(true))
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('unban')
+      .setDescription('Let a member type in the counting channel again')
+      .addUserOption((o) => o.setName('user').setDescription('Who to unblock').setRequired(true))
+  )
   .addSubcommand((s) => s.setName('status').setDescription('The current number, best run and settings'));
+
+async function autocomplete(interaction) {
+  return interaction.respond(durationChoices(interaction.options.getFocused()));
+}
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
 
@@ -77,6 +96,28 @@ async function execute(interaction) {
     return interaction.reply({ content: `✅ Count set to **${fmt(s.current)}** — next is **${fmt(s.current + 1)}**.`, ephemeral: true });
   }
 
+  if (sub === 'ban') {
+    const target = o.getUser('user');
+    const durStr = o.getString('duration');
+    let durationMs = null;
+    if (durStr) {
+      durationMs = parseDuration(durStr);
+      if (!durationMs) return interaction.reply({ content: '❌ Invalid duration — use e.g. `10m`, `2h`, `7d`.', ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const res = await counting.banUser(guild, target.id, { durationMs, by: interaction.user.tag });
+    if (res.error) return interaction.editReply({ content: `❌ ${res.error}` });
+    const when = res.until ? ` until <t:${Math.floor(res.until.getTime() / 1000)}:R>` : ' **permanently**';
+    return interaction.editReply({ content: `🔇 ${target} is now blocked from counting${when}.${durationMs ? '' : ' Lift it any time with `/counting unban`.'}` });
+  }
+
+  if (sub === 'unban') {
+    const target = o.getUser('user');
+    await interaction.deferReply({ ephemeral: true });
+    const res = await counting.unbanUser(guild, target.id);
+    return interaction.editReply({ content: res.wasBanned ? `✅ ${target} can count again.` : `${target} wasn’t blocked from counting.` });
+  }
+
   const s = counting.countingSettings(await getOrCreateConfig(guild.id));
   const embed = new EmbedBuilder()
     .setColor(s.enabled ? '#57F287' : '#4E5058')
@@ -94,7 +135,13 @@ async function execute(interaction) {
         inline: true
       }
     );
+  if (s.bans.length) {
+    const lines = s.bans
+      .slice(0, 10)
+      .map((b) => `<@${b.userId}>${b.until ? ` — until <t:${Math.floor(new Date(b.until).getTime() / 1000)}:R>` : ' — permanent'}`);
+    embed.addFields({ name: `🔇 Blocked from counting (${s.bans.length})`, value: lines.join('\n') + (s.bans.length > 10 ? `\n…and ${s.bans.length - 10} more` : ''), inline: false });
+  }
   return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
 }
 
-module.exports = { data, execute };
+module.exports = { data, execute, autocomplete };

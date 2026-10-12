@@ -163,6 +163,7 @@ module.exports = [
       { usage: '/birthday setup · toggle', perm: 'Manage Server', description: 'Where birthday wishes go, the post time, an optional role for the day and an XP gift.' },
       { usage: '/counting setup · toggle', perm: 'Manage Server', description: 'A counting game channel — ✅ for each right number, a wrong one resets. Full maths allowed (PEMDAS, 5!, √, nCr, ∑/∏/∫). Grief protection: numbers-only, double-counts deleted (not a reset), deletes/edits re-posted, and slowmode.' },
       { usage: '/counting set · status', perm: 'Manage Server', description: 'Fix the count after an unfair reset, or see the next number, best run, settings and resets.' },
+      { usage: '/counting ban · unban', perm: 'Manage Server', description: 'Block a member from the counting channel (optionally for a set time like 2h / 7d). Automatically creates a 🔇 Counting Banned role, denies it Send Messages in the channel, and applies/removes it; timed bans lift themselves.' },
       { usage: '/starboard setup · toggle', perm: 'Manage Server', description: 'Repost messages that get enough ⭐ (or your emoji) in a starboard channel.' },
       { usage: '/starboard ignore · top', perm: 'Manage Server', description: "Keep a channel off the starboard, or see the most-starred messages." }
     ]

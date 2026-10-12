@@ -21,6 +21,8 @@ function countingSettings(config) {
     record: Math.max(0, c.record || 0),
     resets: Math.max(0, c.resets || 0),
     lastResetBy: c.lastResetBy || null,
+    bannedRoleId: c.bannedRoleId || null,
+    bans: Array.isArray(c.bans) ? c.bans : [],
     allowSameUser: !!c.allowSameUser,
     mathAllowed: c.mathAllowed !== false,
     numbersOnly: c.numbersOnly !== false,
@@ -492,8 +494,99 @@ async function saveSettings(guild, input) {
   if (settings.enabled && settings.channelId) {
     const ch = guild.channels.cache.get(settings.channelId);
     if (ch?.setRateLimitPerUser) await ch.setRateLimitPerUser(settings.slowmodeSeconds, 'Counting channel slowmode').catch(() => null);
+    // If the channel moved, carry the counting-ban block over to the new one so bans still apply.
+    const role = settings.bannedRoleId && guild.roles.cache.get(settings.bannedRoleId);
+    if (role) await applyBanOverwrite(guild, role, settings.channelId);
   }
   return { settings };
+}
+
+// ---------------------------------------------------------------- Counting bans
+//
+// Block a member from the counting channel without touching their access anywhere else: the bot keeps
+// one dedicated "🔇 Counting Banned" role that's denied Send Messages / Add Reactions in the counting
+// channel, and adds that role to the member. It's all automatic — the role and the channel permission
+// are created on first use. Bans can be permanent or timed; timed ones are lifted by a sweeper (which
+// re-checks on every startup, so they survive restarts).
+
+const BAN_ROLE_NAME = '🔇 Counting Banned';
+const BAN_OVERWRITE = { SendMessages: false, AddReactions: false, SendMessagesInThreads: false };
+
+/** Finds (or creates) the counting-ban role and remembers its id. Returns { role } or { error }. */
+async function ensureBanRole(guild) {
+  const s = countingSettings(await GuildConfig.findOne({ guildId: guild.id }, { counting: 1 }).lean());
+  let role = (s.bannedRoleId && guild.roles.cache.get(s.bannedRoleId)) || guild.roles.cache.find((r) => r.name === BAN_ROLE_NAME && !r.managed);
+  if (!role) {
+    if (!guild.members.me?.permissions?.has(PermissionFlagsBits.ManageRoles)) return { error: 'I need the **Manage Roles** permission to create the counting-ban role.' };
+    role = await guild.roles.create({ name: BAN_ROLE_NAME, color: 0x4e5058, mentionable: false, reason: 'Counting ban role' }).catch(() => null);
+    if (!role) return { error: 'I couldn’t create the counting-ban role.' };
+  }
+  if (role.id !== s.bannedRoleId) await GuildConfig.updateOne({ guildId: guild.id }, { $set: { 'counting.bannedRoleId': role.id } }, { upsert: true });
+  return { role };
+}
+
+/** Denies the ban role in the counting channel. Best effort — needs Manage Channels/Roles. */
+async function applyBanOverwrite(guild, role, channelId) {
+  const channel = channelId && guild.channels.cache.get(channelId);
+  if (channel?.permissionOverwrites?.edit) await channel.permissionOverwrites.edit(role, BAN_OVERWRITE, { reason: 'Counting ban' }).catch(() => null);
+}
+
+/** Bans a member from the counting channel. `durationMs` null = permanent. Returns { until } or { error }. */
+async function banUser(guild, userId, { durationMs = null, by = null } = {}) {
+  const s = countingSettings(await GuildConfig.findOne({ guildId: guild.id }, { counting: 1 }).lean());
+  if (!s.channelId) return { error: 'Set up a counting channel first with `/counting setup`.' };
+  if (userId === guild.members.me?.id) return { error: 'I can’t ban myself from counting.' };
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) return { error: 'That member isn’t in the server.' };
+  const { role, error } = await ensureBanRole(guild);
+  if (error) return { error };
+  if (role.position >= (guild.members.me?.roles?.highest?.position ?? 0)) {
+    return { error: `My highest role must be **above** ${role} so I can assign it — move it up in **Server Settings → Roles**.` };
+  }
+  await applyBanOverwrite(guild, role, s.channelId);
+  await member.roles.add(role.id, by ? `Counting ban by ${by}` : 'Counting ban').catch(() => null);
+  const until = durationMs ? new Date(Date.now() + durationMs) : null;
+  // One record per user — a repeat ban just updates the timing.
+  await GuildConfig.updateOne({ guildId: guild.id }, { $pull: { 'counting.bans': { userId } } });
+  await GuildConfig.updateOne({ guildId: guild.id }, { $push: { 'counting.bans': { userId, until, by, at: new Date() } } }, { upsert: true });
+  return { until, roleId: role.id };
+}
+
+/** Lifts a member's counting ban (removes the role + record). Returns { wasBanned }. */
+async function unbanUser(guild, userId) {
+  const s = countingSettings(await GuildConfig.findOne({ guildId: guild.id }, { counting: 1 }).lean());
+  const member = await guild.members.fetch(userId).catch(() => null);
+  const wasBanned = s.bans.some((b) => b.userId === userId) || !!(s.bannedRoleId && member?.roles.cache.has(s.bannedRoleId));
+  if (s.bannedRoleId && member) await member.roles.remove(s.bannedRoleId, 'Counting unban').catch(() => null);
+  await GuildConfig.updateOne({ guildId: guild.id }, { $pull: { 'counting.bans': { userId } } });
+  return { wasBanned };
+}
+
+/** Lifts every timed counting ban that has run out. Runs on a timer (and once on startup). */
+async function sweepCountingBans(client, now = Date.now()) {
+  // Every guild that has a counting-ban role set (a tiny set); expired bans are filtered below.
+  const due = await GuildConfig.find({ 'counting.bannedRoleId': { $ne: null } }, { guildId: 1, counting: 1 }).lean();
+  let lifted = 0;
+  for (const cfg of due) {
+    const guild = client.guilds.cache.get(cfg.guildId);
+    const roleId = cfg.counting?.bannedRoleId;
+    for (const b of (cfg.counting?.bans || []).filter((x) => x.until && new Date(x.until).getTime() <= now)) {
+      if (guild && roleId) {
+        const member = await guild.members.fetch(b.userId).catch(() => null);
+        if (member) await member.roles.remove(roleId, 'Counting ban expired').catch(() => null);
+      }
+      await GuildConfig.updateOne({ guildId: cfg.guildId }, { $pull: { 'counting.bans': { userId: b.userId } } });
+      lifted++;
+    }
+  }
+  return lifted;
+}
+
+function startCountingBanSweeper(client) {
+  sweepCountingBans(client).catch(() => null); // catch any that expired while the bot was offline
+  const timer = setInterval(() => sweepCountingBans(client).catch(console.error), 60 * 1000);
+  timer.unref?.();
+  return timer;
 }
 
 function registerCountingEvents(client) {
@@ -501,4 +594,20 @@ function registerCountingEvents(client) {
   client.on('messageUpdate', (oldMessage, newMessage) => handleCountEdited(oldMessage, newMessage).catch(() => null));
 }
 
-module.exports = { registerCountingEvents, evaluate, parseCount, countingSettings, handleCounting, handleCountDeleted, handleCountEdited, cleanSettings, saveSettings, isSixtySeven };
+module.exports = {
+  registerCountingEvents,
+  evaluate,
+  parseCount,
+  countingSettings,
+  handleCounting,
+  handleCountDeleted,
+  handleCountEdited,
+  cleanSettings,
+  saveSettings,
+  isSixtySeven,
+  ensureBanRole,
+  banUser,
+  unbanUser,
+  sweepCountingBans,
+  startCountingBanSweeper
+};

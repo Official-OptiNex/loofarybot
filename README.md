@@ -582,6 +582,11 @@ Members spend XP on fun extras. The shop is open by default and comes with start
   counts, but their message is swapped for a bot post that @-mentions them, states the real count, and
   gently roasts the "6-7" meme. 67 is cringe.
 - `/counting set` (or the dashboard) fixes the count after an unfair reset.
+- **`/counting ban user [duration]`** blocks a member from the counting channel — automatically: the bot
+  makes a **🔇 Counting Banned** role (once), denies it **Send Messages** in the counting channel, and
+  adds it to the member. Leave the duration off for a permanent block, or set one (e.g. `2h`, `7d`) and
+  it lifts itself. `/counting unban user` removes it; `/counting status` lists who's blocked. (The bot
+  needs **Manage Roles**, and its own role above the ban role.)
 
 ### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)
 - Messages with enough ⭐ (default 3, or your own emoji) are reposted in the starboard channel with
