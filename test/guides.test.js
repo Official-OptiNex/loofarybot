@@ -87,6 +87,15 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.match(JSON.stringify(faq.body),/a\.png/,'image URL merged into the FAQ body');
   console.log('✓ import: bulk create, images merged, bad rows skipped');
 
+  // ---- reorder: manual order drives listGuides + the legend
+  const slugsBefore=(await G.listGuides('g')).map((x)=>x.slug);
+  const reversed=[...slugsBefore].reverse();
+  await G.reorderGuides(guild,reversed,s);
+  assert.deepEqual((await G.listGuides('g')).map((x)=>x.slug),reversed,'listGuides follows the saved order');
+  const legend2=cache.get((await freshSettings()).legendThreadId);
+  assert.match(JSON.stringify(legend2.starter.payload),/Guides Index/,'legend still rebuilt after reorder');
+  console.log('✓ reorder: order persists and drives the list + legend');
+
   // ---- delete removes the post + record + updates legend
   const faqThreadObj=cache.get(faq.threadId);
   let d=await G.deleteGuide(guild,'faq',s);

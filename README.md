@@ -605,9 +605,13 @@ editor can update it later and the live post edits itself in place — no deleti
 - **Auto-updating index:** the pinned legend lists every guide grouped by tag with jump-links, rebuilt
   automatically whenever a guide is added, edited or removed.
 - **Browse (everyone):** `/guide view <name>`, `/guide list [tag]`, `/guide search <text>`.
-- **Edit (editors):** `/guide create` and `/guide edit` hand off to the **web editor** (a private link to
-  the dashboard Guides page); `/guide delete` removes a guide and its post. Guides use Discord message
-  JSON (the same format as the Embed Builder), so you can design a guide in the builder and paste it in.
+- **Edit (editors):** the dashboard Guides page has a **visual editor with a live preview** — title, click-to-toggle
+  **tag chips**, and per-embed fields (title, description, colour, image, thumbnail, fields) with add/reorder/remove,
+  plus a raw-JSON escape hatch for pasting from an AI or Discohook. `/guide create` and `/guide edit` open it on a
+  private link (`?edit=<slug>`); `/guide delete` removes a guide and its post. `/guide view` shows an inline preview
+  with an **Open full guide** button.
+- **Organise:** the page lists guides with a **filter** box and **▲ ▼ reordering** — the order you set is the order the
+  pinned index uses.
 - **Roles & access:** editors are a role you choose (plus Manage Server). On the dashboard, guide-editor
   roles can open **only** the Guides page — nothing else. Admins additionally get **Settings** and a
   bulk **Import** (paste a JSON array of guides — ideal for porting an existing guide set; each entry

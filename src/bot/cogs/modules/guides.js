@@ -162,7 +162,15 @@ async function deleteGuide(guild, slug, settings) {
 }
 
 async function listGuides(guildId) {
-  return Guide.find({ guildId }).sort({ title: 1 }).lean();
+  return Guide.find({ guildId }).sort({ order: 1, title: 1 }).lean();
+}
+
+/** Sets the manual order of guides (by slug, in the given order) and refreshes the legend. */
+async function reorderGuides(guild, orderedSlugs, settings) {
+  const slugs = Array.isArray(orderedSlugs) ? orderedSlugs : [];
+  for (let i = 0; i < slugs.length; i++) await Guide.updateOne({ guildId: guild.id, slug: slugs[i] }, { $set: { order: i } });
+  await rebuildLegend(guild, settings);
+  return { ok: true };
 }
 
 async function getGuide(guildId, query) {
@@ -319,6 +327,7 @@ module.exports = {
   editGuide,
   deleteGuide,
   listGuides,
+  reorderGuides,
   getGuide,
   searchGuides,
   rebuildLegend,
