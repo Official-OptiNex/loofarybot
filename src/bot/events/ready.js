@@ -53,6 +53,7 @@ const potCommand = require('../commands/pot');
 const idleCommand = require('../commands/idle');
 const serverstatsCommand = require('../commands/serverstats');
 const musicCommand = require('../commands/music');
+const guideCommand = require('../commands/guide');
 
 const ALL_COMMANDS = [
   loofCommand,
@@ -87,7 +88,8 @@ const ALL_COMMANDS = [
   potCommand,
   idleCommand,
   serverstatsCommand,
-  musicCommand
+  musicCommand,
+  guideCommand
 ];
 
 module.exports = function registerReadyEvent(client) {

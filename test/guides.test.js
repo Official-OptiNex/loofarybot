@@ -1,0 +1,107 @@
+// Guides: forum-published articles the bot owns. Covers settings validation, create/edit/delete
+// (forum post create + in-place edit), the auto-updating legend, bulk import, the private editor
+// channel, editor permission checks, and lookup/search.
+process.env.TOKEN='x';process.env.CLIENT_ID='123';process.env.MONGODB_URI='mongodb://x';process.env.REDIRECT_URI='https://x.onrender.com/auth/discord/callback';
+const root=require('path').join(__dirname,'..')+'/'; const assert=require('assert');
+const { Collection, ChannelType, PermissionFlagsBits } = require(root+'node_modules/discord.js');
+const { store } = require('./helpers/memstore');
+const GuildConfig=require(root+'src/database/models/GuildConfig');
+const Guide=require(root+'src/database/models/Guide');
+store(GuildConfig); store(Guide);
+const G=require(root+'src/bot/cogs/modules/guides');
+
+// ---- fakes: a forum channel whose threads keep an editable starter message
+const threads=[]; let tid=100;
+function makeThread(id,name,payload,tags){ const t={id,name,appliedTags:tags||[],pinned:false,deleted:false,
+  starter:{id,payload,edit:async(p)=>{t.starter.payload=p;return t.starter;}},
+  fetchStarterMessage:async()=>t.starter, setName:async(n)=>{t.name=n;}, setAppliedTags:async(a)=>{t.appliedTags=a;},
+  pin:async()=>{t.pinned=true;}, delete:async()=>{t.deleted=true; cache.delete(id);}}; return t; }
+const cache=new Collection();
+const forum={id:'forum',type:ChannelType.GuildForum,name:'guides',availableTags:[{id:'tg1',name:'Guides'},{id:'tg2',name:'FAQ'}],
+  threads:{ create:async({name,message,appliedTags})=>{ const t=makeThread('t'+(tid++),name,message,appliedTags); threads.push(t); cache.set(t.id,t); return t; },
+            fetch:async(id)=>{ const t=cache.get(id); return (t&&!t.deleted)?t:Promise.reject(new Error('unknown')); } }};
+const createdChannels=[];
+const guild={id:'g',name:'Server',channels:{cache,create:async({name,type,permissionOverwrites})=>{ const c={id:'ch'+(tid++),name,type,_ov:permissionOverwrites,permissionOverwrites:{set:async(ov)=>{c._ov=ov;}}}; cache.set(c.id,c); createdChannels.push(c); return c; }},
+  roles:{everyone:{id:'g'},cache:new Collection([['ed',{id:'ed',name:'Editors',managed:false}],['vip',{id:'vip',name:'VIP',managed:false}]])},
+  members:{me:{id:'bot',permissions:{has:()=>true},roles:{highest:{position:10}}}}};
+forum.guild=guild; cache.set('forum',forum);
+const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},roles:{cache:{has:(r)=>roleIds.includes(r)}}});
+
+(async()=>{
+  await GuildConfig.create({guildId:'g'});
+
+  // ---- settings: must be a forum; editor roles filtered to real roles
+  let bad=await G.saveSettings(guild,{enabled:true,forumChannelId:'nope'});
+  assert.match(bad.error,/forum/i,'a non-forum channel is rejected');
+  let sv=await G.saveSettings(guild,{enabled:true,forumChannelId:'forum',editorRoleIds:['ed','ghost']});
+  assert.deepEqual(sv.settings.editorRoleIds,['ed'],'unknown roles are dropped');
+  const freshSettings=async()=>G.guidesSettings(await GuildConfig.findOne({guildId:'g'}).lean());
+  let s=await freshSettings();
+
+  // ---- editor permission check
+  assert.equal(G.isEditor(member(['ed']),s),true,'editor role → can edit');
+  assert.equal(G.isEditor(member(['vip']),s),false,'random role → cannot edit');
+  assert.equal(G.isEditor(member([],true),s),true,'admin → can edit');
+  console.log('✓ settings validated (forum required, roles filtered) + isEditor');
+
+  // ---- create a guide → forum thread + stored ids + legend appears
+  let r=await G.createGuide(guild,{title:'Data Collection',tags:['Guides'],body:'**How** to collect data',authorId:'u1',createdBy:'u1'},s);
+  assert.ok(!r.error,r.error); assert.equal(r.guide.title,'Data Collection'); assert.equal(r.guide.slug,'data-collection');
+  const thread=cache.get(r.guide.threadId);
+  assert.ok(thread,'a forum thread was created'); assert.deepEqual(thread.appliedTags,['tg1'],'tag name mapped to forum tag id');
+  assert.match(JSON.stringify(thread.starter.payload),/How/,'the body is in the post');
+  s=await freshSettings();
+  assert.ok(s.legendThreadId,'a legend thread was created and stored');
+  const legend=cache.get(s.legendThreadId);
+  assert.match(JSON.stringify(legend.starter.payload),/Guides Index/,'legend titled');
+  assert.match(JSON.stringify(legend.starter.payload),/Data Collection/,'legend lists the guide');
+  console.log('✓ create: forum post with mapped tags + body, legend created and lists it');
+
+  // ---- duplicate title gets a unique slug
+  r=await G.createGuide(guild,{title:'Data Collection',tags:[],body:'second',authorId:'u1'},s);
+  assert.equal(r.guide.slug,'data-collection-2','duplicate title → -2 slug');
+
+  // ---- edit updates the SAME thread in place (no new thread)
+  const before=threads.length;
+  let e=await G.editGuide(guild,'data-collection',{title:'Data Collection (v2)',body:'updated body'},'u2',s);
+  assert.ok(!e.error,e.error); assert.equal(threads.length,before,'editing reuses the thread, no new post');
+  assert.equal(thread.name,'Data Collection (v2)','thread renamed');
+  assert.match(JSON.stringify(thread.starter.payload),/updated body/,'starter message edited in place');
+  console.log('✓ edit: same post renamed + body edited in place');
+
+  // ---- lookup + search
+  assert.equal((await G.getGuide('g','data-collection')).slug,'data-collection','lookup by slug');
+  assert.equal((await G.getGuide('g','DATA collection (v2)'))?.slug,'data-collection','lookup by title (case-insensitive)');
+  assert.equal((await G.searchGuides('g','updated')).length>=1,true,'search matches body text');
+  console.log('✓ lookup by slug/title + search');
+
+  // ---- import: bulk create, skip entries with no title
+  const imp=await G.importGuides(guild,[
+    {title:'FAQ',tags:['FAQ'],body:{embeds:[{description:'answers'}]},images:['https://e.com/a.png']},
+    {title:'',body:'no title'},
+    {title:'Targets',body:'hit your targets'}
+  ],'u1',s);
+  assert.deepEqual(imp.imported.sort(),['FAQ','Targets'],'two imported');
+  assert.equal(imp.skipped.length,1,'the titleless one is skipped');
+  const faq=await G.getGuide('g','faq');
+  assert.match(JSON.stringify(faq.body),/a\.png/,'image URL merged into the FAQ body');
+  console.log('✓ import: bulk create, images merged, bad rows skipped');
+
+  // ---- delete removes the post + record + updates legend
+  const faqThreadObj=cache.get(faq.threadId);
+  let d=await G.deleteGuide(guild,'faq',s);
+  assert.ok(d.ok); assert.equal(faqThreadObj.deleted,true,'forum post deleted');
+  assert.equal(await G.getGuide('g','faq'),null,'record removed');
+  console.log('✓ delete: post + record removed, legend refreshed');
+
+  // ---- private editor channel: created, @everyone denied view, editor role allowed
+  const ec=await G.ensureEditorChannel(guild,s,{});
+  assert.ok(!ec.error,ec.error); assert.equal(ec.channel.name,'guide-editors');
+  const ov=ec.channel._ov;
+  const everyone=ov.find((o)=>o.id==='g'); assert.ok(everyone.deny.includes(PermissionFlagsBits.ViewChannel),'@everyone denied view');
+  const edOv=ov.find((o)=>o.id==='ed'); assert.ok(edOv.allow.includes(PermissionFlagsBits.ViewChannel),'editor role allowed view');
+  s=await freshSettings(); assert.equal(s.editorChannelId,ec.channel.id,'editor channel stored');
+  console.log('✓ editor channel: created, locked to editors, stored');
+
+  process.exit(0);
+})().catch((e)=>{console.error(e);process.exit(1);});

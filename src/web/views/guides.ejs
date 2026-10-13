@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guides | <%= guild.name %></title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
+</head>
+<body class="site">
+  <%- include('partials/site-bar') %>
+
+  <main class="site-main" style="max-width:1000px; margin:0 auto; padding:1.2rem 16px;">
+    <div class="page-heading">
+      <div>
+        <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
+        <h1 style="font-size:1.45rem; margin-top:0.2rem;">📖 Guides</h1>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Guides are posted as forum threads the bot owns, so editing here updates the live post. A pinned <strong>📖 Guides Index</strong> is kept up to date automatically.</p>
+      </div>
+    </div>
+
+    <% if (!settings.forumChannelId) { %>
+      <div class="card" style="border-left:3px solid var(--warn,#faa61a);">
+        <strong>Guides aren’t set up yet.</strong>
+        <p class="muted" style="margin:0.3rem 0 0;"><%= isAdmin ? 'Pick a forum channel in Settings below to get started.' : 'Ask an admin to run /guide setup or set a forum channel in Settings.' %></p>
+      </div>
+    <% } %>
+
+    <!-- Editor -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+        <h3 style="margin:0;" id="editorTitle">New guide</h3>
+        <div style="display:flex; gap:0.4rem;">
+          <button class="btn small" type="button" onclick="newGuide()">+ New</button>
+          <a class="btn secondary small" href="/dashboard/<%= guild.id %>/embed" target="_blank" rel="noopener">Design in Embed Builder ↗</a>
+        </div>
+      </div>
+      <p class="muted" style="font-size:0.8rem; margin:0.4rem 0;">Body uses Discord message JSON — <code>{ "content": "", "embeds": [ … ] }</code>. Design it visually in the Embed Builder, copy its JSON, and paste below. Images: add them to an embed, or the importer can take an <code>images</code> list.</p>
+      <input type="hidden" id="slug" value="">
+      <label class="field"><span>Title</span><input id="title" maxlength="100" placeholder="e.g. Data Collection"></label>
+      <label class="field"><span>Tags <span class="muted" style="font-weight:400;">(comma-separated; must match forum tags<% if (forumTags.length) { %>: <%= forumTags.join(', ') %><% } %>)</span></span><input id="tags" placeholder="Guides, FAQ"></label>
+      <label class="field"><span>Body (message JSON)</span><textarea id="body" rows="12" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem; white-space:pre;" placeholder='{ "content": "", "embeds": [ { "title": "Overview", "description": "…" } ] }'></textarea></label>
+      <div class="field-row" style="align-items:center; gap:0.5rem;">
+        <button class="btn" type="button" onclick="saveGuide()">Save guide</button>
+        <button class="btn secondary" type="button" onclick="newGuide()">Clear</button>
+        <span class="muted" id="editorStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div class="card">
+      <h3 style="margin-top:0;">All guides (<span id="guideCount"><%= guides.length %></span>)</h3>
+      <div id="guideList"></div>
+    </div>
+
+    <% if (isAdmin) { %>
+    <!-- Import -->
+    <div class="card">
+      <h3 style="margin-top:0;">📥 Import (admin)</h3>
+      <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong> of guides. Each: <code>{ "title": "...", "tags": ["Guides"], "body": { "content": "", "embeds": [ … ] }, "images": ["https://…"] }</code>. <code>body</code> can also be a markdown string. Existing titles create a second copy.</p>
+      <textarea id="importText" rows="8" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem; white-space:pre;" placeholder='[ { "title": "Data Collection", "tags": ["Guides"], "body": { "embeds": [ { "description": "…" } ] } } ]'></textarea>
+      <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
+        <button class="btn" type="button" onclick="importGuides()">Import</button>
+        <span class="muted" id="importStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="card">
+      <h3 style="margin-top:0;">⚙️ Settings (admin)</h3>
+      <label class="field"><span>Forum channel</span>
+        <select id="forumChannelId">
+          <option value="">— pick a forum —</option>
+          <% forums.forEach((c) => { %><option value="<%= c.id %>" <%= settings.forumChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+        </select>
+      </label>
+      <% if (!forums.length) { %><p class="muted" style="font-size:0.8rem;">No forum channels found — create one in Discord first (Channel type: Forum).</p><% } %>
+      <div class="field"><span>Editor roles <span class="muted" style="font-weight:400;">(can create/edit guides + see this page only)</span></span>
+        <div id="editorRoles" style="display:flex; flex-wrap:wrap; gap:0.4rem; max-height:160px; overflow:auto;">
+          <% roles.forEach((r) => { %>
+            <label class="chip"><input type="checkbox" value="<%= r.id %>" <%= settings.editorRoleIds.includes(r.id) ? 'checked' : '' %>> <%= r.name %></label>
+          <% }) %>
+        </div>
+      </div>
+      <div class="field"><span>Private editor channel</span>
+        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+          <select id="editorChannelId" style="max-width:260px;">
+            <option value="">— none / keep current —</option>
+            <% textChannels.forEach((c) => { %><option value="<%= c.id %>" <%= settings.editorChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+          </select>
+          <label class="chip"><input type="checkbox" id="createEditorChannel"> Create a new #guide-editors</label>
+        </div>
+      </div>
+      <div class="field-row" style="align-items:center; gap:0.5rem;">
+        <button class="btn" type="button" onclick="saveSettings()">Save settings</button>
+        <span class="muted" id="settingsStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+      </div>
+    </div>
+    <% } %>
+  </main>
+
+  <script id="guidesData" type="application/json"><%- JSON.stringify(guides).replace(/</g, '\\u003c') %></script>
+  <script>
+    const GUILD = '<%= guild.id %>';
+    let GUIDES = JSON.parse(document.getElementById('guidesData').textContent);
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const post = async (path, body) => {
+      const r = await fetch(`/dashboard/${GUILD}/guides/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      return { status: r.status, ...(await r.json().catch(() => ({}))) };
+    };
+
+    function renderList() {
+      $('guideCount').textContent = GUIDES.length;
+      if (!GUIDES.length) { $('guideList').innerHTML = '<p class="muted">No guides yet.</p>'; return; }
+      $('guideList').innerHTML = GUIDES.map((g) => `
+        <div class="row" style="display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0; border-top:1px solid var(--border,#2a2d31);">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600;">${esc(g.title)}</div>
+            <div class="muted" style="font-size:0.78rem;">${(g.tags || []).map(esc).join(', ') || '—'}${g.threadId ? ` · <a href="https://discord.com/channels/${GUILD}/${g.threadId}" target="_blank" rel="noopener">open post ↗</a>` : ''}</div>
+          </div>
+          <button class="btn small secondary" onclick="editGuide('${esc(g.slug)}')">Edit</button>
+          <button class="btn small danger" onclick="deleteGuide('${esc(g.slug)}','${esc(g.title)}')">Delete</button>
+        </div>`).join('');
+    }
+
+    function newGuide() {
+      $('slug').value = ''; $('title').value = ''; $('tags').value = '';
+      $('body').value = JSON.stringify({ content: '', embeds: [{ title: '', description: '' }] }, null, 2);
+      $('editorTitle').textContent = 'New guide'; $('editorStatus').textContent = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function editGuide(slug) {
+      const g = GUIDES.find((x) => x.slug === slug); if (!g) return;
+      $('slug').value = g.slug; $('title').value = g.title; $('tags').value = (g.tags || []).join(', ');
+      $('body').value = JSON.stringify(g.body || { content: '', embeds: [] }, null, 2);
+      $('editorTitle').textContent = 'Editing: ' + g.title; $('editorStatus').textContent = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function saveGuide() {
+      const title = $('title').value.trim();
+      if (!title) { $('editorStatus').textContent = '⚠️ Title required.'; return; }
+      let body;
+      try { body = $('body').value.trim() ? JSON.parse($('body').value) : { content: '', embeds: [] }; }
+      catch (e) { $('editorStatus').textContent = '⚠️ Body isn’t valid JSON: ' + e.message; return; }
+      const tags = $('tags').value.split(',').map((t) => t.trim()).filter(Boolean);
+      $('editorStatus').textContent = 'Saving…';
+      const res = await post('save', { slug: $('slug').value || undefined, title, tags, body });
+      if (!res.ok) { $('editorStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
+      $('editorStatus').textContent = '✅ Saved.';
+      await refresh();
+      $('slug').value = res.guide.slug; $('editorTitle').textContent = 'Editing: ' + res.guide.title;
+    }
+
+    async function deleteGuide(slug, title) {
+      if (!confirm('Delete “' + title + '”? This removes the forum post too.')) return;
+      const res = await post('delete', { slug });
+      if (!res.ok) { alert(res.error || 'Failed.'); return; }
+      if ($('slug').value === slug) newGuide();
+      await refresh();
+    }
+
+    async function refresh() {
+      const r = await fetch(`/dashboard/${GUILD}/guides/data`).then((x) => x.json()).catch(() => null);
+      if (r && r.ok) { GUIDES = r.guides; renderList(); }
+    }
+
+    async function importGuides() {
+      let items;
+      try { items = JSON.parse($('importText').value); } catch (e) { $('importStatus').textContent = '⚠️ Not valid JSON: ' + e.message; return; }
+      $('importStatus').textContent = 'Importing…';
+      const res = await post('import', { guides: items });
+      if (!res.ok) { $('importStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
+      $('importStatus').textContent = `✅ Imported ${res.imported.length}${res.skipped.length ? ` · ${res.skipped.length} skipped` : ''}.`;
+      $('importText').value = '';
+      await refresh();
+    }
+
+    async function saveSettings() {
+      const editorRoleIds = [...document.querySelectorAll('#editorRoles input:checked')].map((c) => c.value);
+      $('settingsStatus').textContent = 'Saving…';
+      const res = await post('settings', {
+        forumChannelId: $('forumChannelId').value || null,
+        editorRoleIds,
+        editorChannelId: $('editorChannelId').value || null,
+        createEditorChannel: $('createEditorChannel').checked
+      });
+      if (!res.ok) { $('settingsStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
+      $('settingsStatus').textContent = '✅ Saved.' + (res.warning ? ' ⚠️ ' + res.warning : '');
+      if ($('createEditorChannel')) $('createEditorChannel').checked = false;
+    }
+
+    renderList();
+    // Deep-link from /guide edit: ?edit=<slug>
+    const params = new URLSearchParams(location.search);
+    if (params.get('edit')) editGuide(params.get('edit')); else newGuide();
+  </script>
+</body>
+</html>

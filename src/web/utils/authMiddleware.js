@@ -24,7 +24,8 @@ const MOD_PAGES = {
   engagement: 'Birthdays, Counting & Starboard',
   shop: 'XP Shop',
   embed: 'Embed Builder',
-  botchat: 'Bot Chat (speak as the bot)'
+  botchat: 'Bot Chat (speak as the bot)',
+  guides: 'Guides'
 };
 const DEFAULT_MOD_PAGES = ['leaderboard', 'commands', 'logviewer'];
 
@@ -65,11 +66,16 @@ async function resolveAccess(guild, userId, userGuild) {
   }
 
   if (!member) return null;
-  const config = await GuildConfig.findOne({ guildId: guild.id }, { dashboardAccess: 1 }).lean();
+  const config = await GuildConfig.findOne({ guildId: guild.id }, { dashboardAccess: 1, guides: 1 }).lean();
   const access = config?.dashboardAccess || {};
   const modRoles = access.modRoleIds || [];
-  if (!modRoles.some((id) => member.roles.cache.has(id))) return null;
-  return { level: 'mod', pages: new Set(access.modPages || DEFAULT_MOD_PAGES) };
+  const isMod = modRoles.some((id) => member.roles.cache.has(id));
+  // Guide editors get the Guides page (and nothing else, unless they're also a dashboard moderator).
+  const isGuideEditor = (config?.guides?.editorRoleIds || []).some((id) => member.roles.cache.has(id));
+  if (!isMod && !isGuideEditor) return null;
+  const pages = new Set(isMod ? access.modPages || DEFAULT_MOD_PAGES : []);
+  if (isGuideEditor) pages.add('guides');
+  return { level: 'mod', pages };
 }
 
 /**
