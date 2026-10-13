@@ -142,6 +142,9 @@ module.exports = function registerReadyEvent(client) {
     // Lift temporary bans when they run out.
     require('../cogs/modules/modCases').startTempBanSweeper(client);
 
+    // Lift timed counting bans when they run out (and any that expired while the bot was offline).
+    require('../cogs/modules/counting').startCountingBanSweeper(client);
+
     // Daily XP drop for server boosters.
     require('../cogs/modules/boosterPerks').startBoosterDrops(client);
 

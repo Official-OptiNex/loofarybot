@@ -17,11 +17,12 @@ const S=require(root+'src/bot/cogs/modules/starboard');
 const sent=[];
 function channel(id, extra={}){ const msgs=new Map(); let n=1; const ch={id,name:id,nsfw:false,guild:null,isTextBased:()=>true,isThread:()=>false,permissionsFor:()=>new PermissionsBitField(PermissionsBitField.All),toString(){return `<#${id}>`;},
   send:async(p)=>{ const m={id:`${id}-${n++}`,payload:typeof p==='string'?{content:p}:p,deleted:false,edit:async(np)=>{m.payload=np;return m;},delete:async()=>{m.deleted=true;msgs.delete(m.id);}}; msgs.set(m.id,m); sent.push({ch:id,m}); return m; },
+  permissionOverwrites:{edit:async(role,opts)=>{ ch.overwrites=ch.overwrites||{}; ch.overwrites[role.id||role]={...(ch.overwrites[role.id||role]||{}),...opts}; return ch; }},
   messages:{fetch:async(mid)=>{ const m=msgs.get(mid); if(!m) throw new Error('Unknown'); return m; }}, msgs, ...extra}; return ch; }
 const roleLog=[];
 function member(id, bot=false){ const roles=new Set(); return {id,user:{id,bot,username:id},displayName:id,joinedTimestamp:Date.now()-5*864e5,roles:{cache:{has:(r)=>roles.has(r)},add:async(r)=>{roles.add(r);roleLog.push(['add',id,r]);},remove:async(r)=>{roles.delete(r);roleLog.push(['remove',id,r]);}}}; }
 const members=new Collection([['ann',member('ann')],['ben',member('ben')],['cat',member('cat')],['botty',member('botty',true)]]);
-const guild={id:'g',name:'Loofary Lounge',channels:{cache:new Collection()},roles:{cache:new Collection([['bdrole',{id:'bdrole',position:1,managed:false}],['boost',{id:'boost',position:2,managed:true}]])},emojis:{cache:new Collection()},
+const guild={id:'g',name:'Loofary Lounge',channels:{cache:new Collection()},roles:{cache:new Collection([['bdrole',{id:'bdrole',position:1,managed:false}],['boost',{id:'boost',position:2,managed:true}]]),create:async({name,color})=>{ const r={id:'cban',name,color:color||0,position:3,managed:false,toString(){return `<@&cban>`;}}; guild.roles.cache.set(r.id,r); return r; }},emojis:{cache:new Collection()},
   members:{me:{id:'bot',permissions:new PermissionsBitField(PermissionsBitField.All),roles:{highest:{position:10}}},cache:members,fetch:async(id)=>{ const m=members.get(id); if(!m) throw new Error('Unknown Member'); return m; }}};
 for (const id of ['general','count','stars','memes','secret']) { const c=channel(id); c.guild=guild; guild.channels.cache.set(id,c); }
 const client={guilds:{cache:new Map([['g',guild]])},user:{id:'bot'},channels:{cache:guild.channels.cache}};
@@ -164,6 +165,38 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   assert.equal(sent.length,afterRoast,'deleting the original 67+67 message does not trigger a re-post');
   console.log('✓ 67+67 easter egg: counts as 134, message swapped for a @-roast, record re-pointed so grief-protection is clean');
   await C.saveSettings(guild,{current:103}); // restore the count for the dashboard checks below
+
+  // ---- Counting bans: auto role + channel block, permanent/timed, reuse, unban, status, sweeper
+  roleLog.length=0;
+  const countCh2=guild.channels.cache.get('count');
+  let bx=await C.banUser(guild,'ann',{by:'mod#1'}); // permanent
+  assert.ok(!bx.error, bx.error); assert.equal(bx.until,null);
+  assert.ok(guild.roles.cache.get(bx.roleId),'a 🔇 Counting Banned role was auto-created');
+  assert.deepEqual(roleLog.at(-1),['add','ann',bx.roleId],'the role is added to the member automatically');
+  assert.equal(countCh2.overwrites[bx.roleId].SendMessages,false,'the counting channel denies Send Messages for the ban role');
+  assert.equal(cfg().counting.bannedRoleId,bx.roleId); assert.equal(cfg().counting.bans.length,1);
+  assert.equal(cfg().counting.bans[0].userId,'ann'); assert.equal(cfg().counting.bans[0].until,null,'a permanent ban has no end time');
+  const rolesBefore=guild.roles.cache.size;
+  bx=await C.banUser(guild,'ben',{durationMs:60*60*1000}); // timed
+  assert.equal(guild.roles.cache.size,rolesBefore,'the same ban role is reused, not re-created');
+  assert.ok(bx.until,'a timed ban stores an end time'); assert.equal(cfg().counting.bans.length,2);
+  bx=await C.banUser(guild,'ben',{durationMs:2*60*60*1000}); // re-ban updates, no duplicate
+  assert.equal(cfg().counting.bans.filter(b=>b.userId==='ben').length,1,'a repeat ban updates the record, not duplicates it');
+  assert.match((await C.banUser(guild,'bot',{})).error,/myself/,'the bot can’t ban itself');
+  // Unban removes the role + record; unbanning someone not banned is a gentle no-op.
+  roleLog.length=0;
+  let ux=await C.unbanUser(guild,'ann');
+  assert.equal(ux.wasBanned,true); assert.deepEqual(roleLog.at(-1),['remove','ann',cfg().counting.bannedRoleId]);
+  assert.ok(!cfg().counting.bans.some(b=>b.userId==='ann'),'the ban record is removed');
+  assert.equal((await C.unbanUser(guild,'cat')).wasBanned,false,'unbanning a non-banned member is a no-op');
+  // Sweeper lifts only timed bans that have run out.
+  cfg().counting.bans.find(b=>b.userId==='ben').until=new Date(Date.now()-1000).toISOString();
+  roleLog.length=0;
+  const lifted=await C.sweepCountingBans(client, Date.now());
+  assert.equal(lifted,1,'one expired ban is lifted');
+  assert.deepEqual(roleLog.at(-1),['remove','ben',cfg().counting.bannedRoleId],'the role is taken back when the timed ban ends');
+  assert.equal(cfg().counting.bans.length,0,'no bans remain after the sweep');
+  console.log('✓ counting bans: auto role + channel block, permanent/timed, role reuse, unban, sweeper lifts expired');
 
   // ================================================================ Starboard
   r=await S.saveSettings(guild,{enabled:true}); assert.match(r.error,/channel/);

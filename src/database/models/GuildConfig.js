@@ -157,7 +157,22 @@ const GuildConfigSchema = new mongoose.Schema(
       numbersOnly: { type: Boolean, default: true }, // delete normal chatter so the channel stays numbers-only
       slowmodeSeconds: { type: Number, default: 1200 }, // slowmode applied to the channel (grief protection; 20 min default)
       resets: { type: Number, default: 0 },
-      lastResetBy: { type: String, default: null }
+      lastResetBy: { type: String, default: null },
+      // Counting bans (/counting ban): an auto-created role that's denied Send Messages in the
+      // counting channel. `bans` tracks who's banned and when a temporary ban ends (null = forever).
+      bannedRoleId: { type: String, default: null },
+      bans: {
+        type: [
+          {
+            _id: false,
+            userId: { type: String, required: true },
+            until: { type: Date, default: null }, // null = permanent
+            by: { type: String, default: null },
+            at: { type: Date, default: Date.now }
+          }
+        ],
+        default: []
+      }
     },
     // Server Stats channels (/serverstats, dashboard Overview → Server Stats). View-only voice
     // channels at the top of the server that show live counts, refreshed on a timer. See serverStats.js.

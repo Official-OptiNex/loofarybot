@@ -245,6 +245,12 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       to **134**, your message is **deleted**, and the bot posts a message that @-mentions you, states
       the count, and roasts the "6-7" meme. Deleting your original `67+67` afterward does **not** make
       the bot re-post (the bot's own message is now the record).
+- [ ] **Counting ban:** `/counting ban user:@member` → the bot creates a **🔇 Counting Banned** role,
+      denies it Send Messages in the counting channel, and gives it to the member; they can no longer type
+      there. `/counting status` lists them. `/counting unban user:@member` removes the role and they can
+      count again. `/counting ban user:@member duration:10m` auto-lifts after 10 minutes (the role is
+      taken back). Re-banning the same person updates the record (no duplicate). The bot needs **Manage
+      Roles** with its role above the ban role.
 - [ ] `/starboard setup channel:#starboard stars:2` → star a message with 2 accounts (not the
       author) → it's reposted in #starboard, and the count updates as stars change.
 
