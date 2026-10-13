@@ -182,6 +182,16 @@ const GuildConfigSchema = new mongoose.Schema(
       channels: { type: mongoose.Schema.Types.Mixed, default: {} }, // { statKey: channelId }
       enabledStats: { type: [String], default: ['members', 'online', 'boosts', 'totalxp'] } // which stats show
     },
+    // Guides (/guide, dashboard Guides). Editors publish guides as posts in a forum channel; the bot
+    // keeps a pinned auto-updating legend, and a private channel for editors. See guides.js.
+    guides: {
+      enabled: { type: Boolean, default: false },
+      forumChannelId: { type: String, default: null }, // the forum channel guides are posted in
+      editorRoleIds: { type: [String], default: [] }, // roles that can create/edit guides (+ see the dashboard page)
+      editorChannelId: { type: String, default: null }, // private channel for guide editors
+      legendThreadId: { type: String, default: null }, // the pinned "📖 Guides Index" post
+      legendMessageId: { type: String, default: null }
+    },
     // Music / radio voice player (/music, dashboard Community → Music). Plays Lofi / chill internet
     // radio streams in a voice channel — light and ToS-safe for the free tier. See music.js.
     music: {

@@ -317,6 +317,23 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] Paste invalid JSON and Apply → an "Invalid JSON…" message shows and the builder is unchanged.
 - [ ] Press **Format** on messy JSON → it pretty-prints. **Copy** copies the JSON to the clipboard.
 
+## 8b-3. Guides (`/guide`, dashboard **📖 Guides**)
+- [ ] **Setup:** `/guide setup forum:#guides editor_role:@Guide Editor` → "Guides are on", a private
+      **#guide-editors** channel is created (only that role + admins can see it), and a pinned
+      **📖 Guides Index** post appears in the forum. (Non-forum channel → rejected.)
+- [ ] **Create (editor):** `/guide create title:Test Guide tag:Guides` → a forum post is created and the
+      reply links you to the web editor. In the editor, paste message JSON into **Body**, Save → the
+      forum post updates in place. The **Guides Index** lists it under its tag with a jump-link.
+- [ ] **Edit (editor):** `/guide edit name:Test Guide` → opens the web editor; changing the body and
+      Saving edits the same forum post (no new post). `/guide delete` removes the post and the record.
+- [ ] **Browse (anyone):** `/guide view`, `/guide list [tag]`, `/guide search <text>` return the guides
+      (name autocomplete on view/edit/delete).
+- [ ] **Dashboard access:** a user with **only** the guide-editor role can open the dashboard and sees
+      **only** the 📖 Guides page (no other tabs). An admin sees Settings + the Import box too.
+- [ ] **Import (admin):** paste a JSON array like
+      `[{"title":"FAQ","tags":["Guides"],"body":{"embeds":[{"description":"…"}]},"images":["https://…"]}]`
+      → "Imported N" and each becomes a forum post; the index updates. Entries without a title are skipped.
+
 ## 8c. Bot Chat (💬 top bar → talk through the bot)
 - [ ] Open **Bot Chat** and pick a channel → the last ~25 messages appear, newest at the bottom, and
       refresh on their own every few seconds. The bot's own messages are marked **BOT · you**.

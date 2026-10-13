@@ -596,6 +596,24 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 - Stars from the author (unless allowed) and bots don't count. NSFW channels never feed a non-NSFW
   starboard, and you can ignore channels. Threads follow their parent channel.
 
+### Guides (`/guide …` or the dashboard's **📖 Guides** page)
+A server guide library built on a **forum channel**. Each guide is a forum post the **bot owns**, so an
+editor can update it later and the live post edits itself in place — no deleting and re-posting.
+- **Setup:** `/guide setup forum:#guides editor_role:@Guide Editor` — picks your existing forum, adds an
+  editor role, and auto-creates a private **#guide-editors** channel (or point it at an existing one).
+  It also creates a pinned **📖 Guides Index** post.
+- **Auto-updating index:** the pinned legend lists every guide grouped by tag with jump-links, rebuilt
+  automatically whenever a guide is added, edited or removed.
+- **Browse (everyone):** `/guide view <name>`, `/guide list [tag]`, `/guide search <text>`.
+- **Edit (editors):** `/guide create` and `/guide edit` hand off to the **web editor** (a private link to
+  the dashboard Guides page); `/guide delete` removes a guide and its post. Guides use Discord message
+  JSON (the same format as the Embed Builder), so you can design a guide in the builder and paste it in.
+- **Roles & access:** editors are a role you choose (plus Manage Server). On the dashboard, guide-editor
+  roles can open **only** the Guides page — nothing else. Admins additionally get **Settings** and a
+  bulk **Import** (paste a JSON array of guides — ideal for porting an existing guide set; each entry
+  takes a title, tags, a body and optional image URLs).
+- `/guide editor_add`/`editor_remove` manage editor roles; `/guide legend` rebuilds the index.
+
 ### Server Stats channels (`/serverstats …` or dashboard **Overview → Server Stats**)
 - View-only **voice channels** pinned at the top of the server (under a 📊 Server Stats category) whose
   names show live counts. Members can **see** them but can't join or type.

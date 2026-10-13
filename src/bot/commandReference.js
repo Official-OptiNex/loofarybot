@@ -186,6 +186,18 @@ module.exports = [
     ]
   },
   {
+    id: 'guides',
+    group: 'Guides',
+    icon: '📖',
+    blurb: 'A server guide library — forum posts the bot owns, with a pinned auto-updating index. Rich editing on the dashboard.',
+    commands: [
+      { usage: '/guide view · list · search', perm: null, description: 'Browse the guides — open one, list them (optionally by tag), or search titles and content.' },
+      { usage: '/guide create · edit · delete', perm: 'Guide editor', description: 'Editors manage guides. `create`/`edit` hand off to the web editor (dashboard Guides page); each guide is a forum post that edits in place.' },
+      { usage: '/guide setup', perm: 'Manage Server', description: 'Pick the forum channel, add an editor role, and auto-create a private #guide-editors channel. Also sets up the pinned 📖 Guides Index.' },
+      { usage: '/guide editor_add · editor_remove · legend', perm: 'Manage Server', description: 'Add/remove guide-editor roles (they get dashboard access to the Guides page only), or rebuild the index. Admins can bulk-import guides from JSON on the dashboard.' }
+    ]
+  },
+  {
     id: 'roles',
     group: 'Roles',
     icon: '🎭',
