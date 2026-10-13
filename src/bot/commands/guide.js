@@ -77,7 +77,21 @@ async function execute(interaction) {
     const g = await guides.getGuide(guild.id, o.getString('name'));
     if (!g) return reply('❌ No guide by that name.');
     const link = g.threadId ? `https://discord.com/channels/${guild.id}/${g.threadId}` : null;
-    return reply(`📖 **${g.title}**${g.tags?.length ? ` · ${g.tags.join(', ')}` : ''}\n${link ? `${link}` : '_(not posted yet)_'}`);
+    const body = g.body || {};
+    const embeds = [];
+    // Show a preview: the guide's first embed, or its content as a description.
+    if (Array.isArray(body.embeds) && body.embeds.length) {
+      embeds.push(EmbedBuilder.from(body.embeds[0]));
+    } else if (body.content) {
+      embeds.push(new EmbedBuilder().setColor('#5865f2').setDescription(String(body.content).slice(0, 4096)));
+    }
+    const header = embeds[0] || new EmbedBuilder().setColor('#5865f2');
+    header.setAuthor({ name: `📖 ${g.title}`.slice(0, 256) });
+    if (g.tags?.length) header.setFooter({ text: g.tags.join(' · ') });
+    const rows = link
+      ? [{ type: 1, components: [{ type: 2, style: 5, label: 'Open full guide', url: link }] }]
+      : [];
+    return interaction.reply({ embeds: [header], components: rows, ephemeral: true, allowedMentions: { parse: [] } });
   }
 
   if (sub === 'list' || sub === 'search') {

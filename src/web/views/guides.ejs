@@ -6,103 +6,163 @@
   <title>Guides | <%= guild.name %></title>
   <link rel="stylesheet" href="/css/style.css">
   <script src="/js/theme.js"></script>
+  <style>
+    .gd-wrap{display:grid;grid-template-columns:320px 1fr;gap:1rem;align-items:start;}
+    @media (max-width:860px){ .gd-wrap{grid-template-columns:1fr;} }
+    .gd-list .row{display:flex;align-items:center;gap:0.4rem;padding:0.45rem 0.1rem;border-top:1px solid var(--border,#2a2d31);}
+    .gd-list .row:first-child{border-top:none;}
+    .gd-ord{display:flex;flex-direction:column;gap:1px;}
+    .gd-ord button{line-height:1;padding:0 0.3rem;font-size:0.7rem;}
+    .gd-tagchips{display:flex;flex-wrap:wrap;gap:0.35rem;}
+    .gd-tagchips .chip{cursor:pointer;user-select:none;}
+    .gd-tagchips .chip.on{background:var(--accent,#5865f2);color:#fff;border-color:var(--accent,#5865f2);}
+    .gd-embed{border:1px solid var(--border,#2a2d31);border-radius:8px;padding:0.6rem;margin:0.5rem 0;}
+    .gd-embed summary{cursor:pointer;font-weight:600;}
+    .gd-field{display:flex;gap:0.4rem;align-items:flex-start;margin:0.3rem 0;}
+    .gd-sticky{position:sticky;top:1rem;}
+  </style>
 </head>
 <body class="site">
   <%- include('partials/site-bar') %>
 
-  <main class="site-main" style="max-width:1000px; margin:0 auto; padding:1.2rem 16px;">
+  <main class="site-main" style="max-width:1200px; margin:0 auto; padding:1.2rem 16px;">
     <div class="page-heading">
       <div>
         <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
         <h1 style="font-size:1.45rem; margin-top:0.2rem;">📖 Guides</h1>
-        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Guides are posted as forum threads the bot owns, so editing here updates the live post. A pinned <strong>📖 Guides Index</strong> is kept up to date automatically.</p>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Each guide is a forum post the bot owns — edit here and the live post updates. The pinned <strong>📖 Guides Index</strong> follows your order automatically.</p>
       </div>
     </div>
 
     <% if (!settings.forumChannelId) { %>
       <div class="card" style="border-left:3px solid var(--warn,#faa61a);">
         <strong>Guides aren’t set up yet.</strong>
-        <p class="muted" style="margin:0.3rem 0 0;"><%= isAdmin ? 'Pick a forum channel in Settings below to get started.' : 'Ask an admin to run /guide setup or set a forum channel in Settings.' %></p>
+        <p class="muted" style="margin:0.3rem 0 0;"><%= isAdmin ? 'Pick a forum channel in Settings below to get started.' : 'Ask an admin to set a forum channel in Settings.' %></p>
       </div>
     <% } %>
 
-    <!-- Editor -->
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-        <h3 style="margin:0;" id="editorTitle">New guide</h3>
-        <div style="display:flex; gap:0.4rem;">
+    <div class="gd-wrap">
+      <!-- LEFT: organize -->
+      <div class="card gd-sticky">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+          <h3 style="margin:0;">Guides (<span id="guideCount"><%= guides.length %></span>)</h3>
           <button class="btn small" type="button" onclick="newGuide()">+ New</button>
-          <a class="btn secondary small" href="/dashboard/<%= guild.id %>/embed" target="_blank" rel="noopener">Design in Embed Builder ↗</a>
         </div>
+        <input id="filter" placeholder="Filter by title or tag…" oninput="renderList()" style="width:100%; margin:0.5rem 0;">
+        <p class="muted" style="font-size:0.74rem; margin:0 0 0.3rem;">Use ▲ ▼ to order — this is the order shown in the pinned index.</p>
+        <div class="gd-list" id="guideList"></div>
       </div>
-      <p class="muted" style="font-size:0.8rem; margin:0.4rem 0;">Body uses Discord message JSON — <code>{ "content": "", "embeds": [ … ] }</code>. Design it visually in the Embed Builder, copy its JSON, and paste below. Images: add them to an embed, or the importer can take an <code>images</code> list.</p>
-      <input type="hidden" id="slug" value="">
-      <label class="field"><span>Title</span><input id="title" maxlength="100" placeholder="e.g. Data Collection"></label>
-      <label class="field"><span>Tags <span class="muted" style="font-weight:400;">(comma-separated; must match forum tags<% if (forumTags.length) { %>: <%= forumTags.join(', ') %><% } %>)</span></span><input id="tags" placeholder="Guides, FAQ"></label>
-      <label class="field"><span>Body (message JSON)</span><textarea id="body" rows="12" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem; white-space:pre;" placeholder='{ "content": "", "embeds": [ { "title": "Overview", "description": "…" } ] }'></textarea></label>
-      <div class="field-row" style="align-items:center; gap:0.5rem;">
-        <button class="btn" type="button" onclick="saveGuide()">Save guide</button>
-        <button class="btn secondary" type="button" onclick="newGuide()">Clear</button>
-        <span class="muted" id="editorStatus" style="margin-left:auto; font-size:0.82rem;"></span>
-      </div>
-    </div>
 
-    <!-- List -->
-    <div class="card">
-      <h3 style="margin-top:0;">All guides (<span id="guideCount"><%= guides.length %></span>)</h3>
-      <div id="guideList"></div>
-    </div>
+      <!-- RIGHT: editor -->
+      <div>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <h3 style="margin:0;" id="editorTitle">New guide</h3>
+            <div style="display:flex; gap:0.4rem;">
+              <button class="btn" type="button" onclick="saveGuide()">💾 Save</button>
+              <button class="btn secondary small" type="button" onclick="newGuide()">Clear</button>
+            </div>
+          </div>
+          <input type="hidden" id="slug" value="">
 
-    <% if (isAdmin) { %>
-    <!-- Import -->
-    <div class="card">
-      <h3 style="margin-top:0;">📥 Import (admin)</h3>
-      <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong> of guides. Each: <code>{ "title": "...", "tags": ["Guides"], "body": { "content": "", "embeds": [ … ] }, "images": ["https://…"] }</code>. <code>body</code> can also be a markdown string. Existing titles create a second copy.</p>
-      <textarea id="importText" rows="8" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem; white-space:pre;" placeholder='[ { "title": "Data Collection", "tags": ["Guides"], "body": { "embeds": [ { "description": "…" } ] } } ]'></textarea>
-      <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
-        <button class="btn" type="button" onclick="importGuides()">Import</button>
-        <span class="muted" id="importStatus" style="margin-left:auto; font-size:0.82rem;"></span>
-      </div>
-    </div>
+          <label class="field"><span>Title</span><input id="title" maxlength="100" placeholder="e.g. Data Collection" oninput="syncPreview()"></label>
 
-    <!-- Settings -->
-    <div class="card">
-      <h3 style="margin-top:0;">⚙️ Settings (admin)</h3>
-      <label class="field"><span>Forum channel</span>
-        <select id="forumChannelId">
-          <option value="">— pick a forum —</option>
-          <% forums.forEach((c) => { %><option value="<%= c.id %>" <%= settings.forumChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
-        </select>
-      </label>
-      <% if (!forums.length) { %><p class="muted" style="font-size:0.8rem;">No forum channels found — create one in Discord first (Channel type: Forum).</p><% } %>
-      <div class="field"><span>Editor roles <span class="muted" style="font-weight:400;">(can create/edit guides + see this page only)</span></span>
-        <div id="editorRoles" style="display:flex; flex-wrap:wrap; gap:0.4rem; max-height:160px; overflow:auto;">
-          <% roles.forEach((r) => { %>
-            <label class="chip"><input type="checkbox" value="<%= r.id %>" <%= settings.editorRoleIds.includes(r.id) ? 'checked' : '' %>> <%= r.name %></label>
-          <% }) %>
+          <div class="field"><span>Tags <span class="muted" style="font-weight:400;">(click to toggle — must match the forum’s tags)</span></span>
+            <div class="gd-tagchips" id="tagChips"></div>
+            <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
+              <input id="newTag" placeholder="Add a tag…" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag();}">
+              <button class="btn secondary small" type="button" onclick="addTag()">Add tag</button>
+            </div>
+          </div>
+
+          <details id="contentWrap"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Message text above the embeds (optional)</summary>
+            <textarea id="content" maxlength="2000" rows="2" placeholder="Shown above the embeds. Mentions here actually ping." oninput="syncPreview()" style="width:100%; margin-top:0.4rem;"></textarea>
+          </details>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:0.6rem 0 0.2rem;">
+            <strong style="font-size:0.9rem;">Embeds</strong>
+            <button class="btn secondary small" type="button" onclick="addEmbed()" id="addEmbedBtn">+ Add embed</button>
+          </div>
+          <div id="embeds"></div>
+
+          <details style="margin-top:0.6rem;"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Advanced: raw message JSON (paste from an AI or Discohook)</summary>
+            <textarea id="rawJson" rows="8" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre; margin-top:0.4rem;"></textarea>
+            <div style="display:flex; gap:0.4rem; margin-top:0.3rem;">
+              <button class="btn small" type="button" onclick="applyRaw()">Apply JSON → editor</button>
+              <button class="btn secondary small" type="button" onclick="fillRaw()">Copy editor → JSON</button>
+            </div>
+          </details>
+
+          <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.6rem;">
+            <button class="btn" type="button" onclick="saveGuide()">💾 Save guide</button>
+            <button class="btn danger small" type="button" id="deleteBtn" style="display:none;" onclick="deleteCurrent()">Delete</button>
+            <span class="muted" id="editorStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+          </div>
         </div>
-      </div>
-      <div class="field"><span>Private editor channel</span>
-        <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
-          <select id="editorChannelId" style="max-width:260px;">
-            <option value="">— none / keep current —</option>
-            <% textChannels.forEach((c) => { %><option value="<%= c.id %>" <%= settings.editorChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
-          </select>
-          <label class="chip"><input type="checkbox" id="createEditorChannel"> Create a new #guide-editors</label>
+
+        <!-- Live preview -->
+        <div class="card">
+          <h3 style="margin-top:0;">Live preview</h3>
+          <div class="discord-chat eb-preview">
+            <div class="p-msg">
+              <div class="p-content" id="pContent"></div>
+              <div id="pEmbeds"></div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="field-row" style="align-items:center; gap:0.5rem;">
-        <button class="btn" type="button" onclick="saveSettings()">Save settings</button>
-        <span class="muted" id="settingsStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+
+        <% if (isAdmin) { %>
+        <div class="card">
+          <h3 style="margin-top:0;">📥 Import (admin)</h3>
+          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string.</p>
+          <textarea id="importText" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre;"></textarea>
+          <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
+            <button class="btn" type="button" onclick="importGuides()">Import</button>
+            <span class="muted" id="importStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;">⚙️ Settings (admin)</h3>
+          <label class="field"><span>Forum channel</span>
+            <select id="forumChannelId">
+              <option value="">— pick a forum —</option>
+              <% forums.forEach((c) => { %><option value="<%= c.id %>" <%= settings.forumChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+            </select>
+          </label>
+          <% if (!forums.length) { %><p class="muted" style="font-size:0.8rem;">No forum channels found — create one in Discord first (Channel type: Forum).</p><% } %>
+          <div class="field"><span>Editor roles <span class="muted" style="font-weight:400;">(can edit guides + see this page only)</span></span>
+            <div id="editorRoles" style="display:flex; flex-wrap:wrap; gap:0.4rem; max-height:150px; overflow:auto;">
+              <% roles.forEach((r) => { %><label class="chip"><input type="checkbox" value="<%= r.id %>" <%= settings.editorRoleIds.includes(r.id) ? 'checked' : '' %>> <%= r.name %></label><% }) %>
+            </div>
+          </div>
+          <div class="field"><span>Private editor channel</span>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+              <select id="editorChannelId" style="max-width:240px;">
+                <option value="">— none / keep current —</option>
+                <% textChannels.forEach((c) => { %><option value="<%= c.id %>" <%= settings.editorChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+              </select>
+              <label class="chip"><input type="checkbox" id="createEditorChannel"> Create #guide-editors</label>
+            </div>
+          </div>
+          <div class="field-row" style="align-items:center; gap:0.5rem;">
+            <button class="btn" type="button" onclick="saveSettings()">Save settings</button>
+            <span class="muted" id="settingsStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+          </div>
+        </div>
+        <% } %>
       </div>
     </div>
-    <% } %>
   </main>
 
   <script id="guidesData" type="application/json"><%- JSON.stringify(guides).replace(/</g, '\\u003c') %></script>
+  <script id="forumTagsData" type="application/json"><%- JSON.stringify(forumTags).replace(/</g, '\\u003c') %></script>
+  <script src="/js/embed-json.js"></script>
   <script>
     const GUILD = '<%= guild.id %>';
+    const E = window.EmbedJson;
     let GUIDES = JSON.parse(document.getElementById('guidesData').textContent);
+    const FORUM_TAGS = JSON.parse(document.getElementById('forumTagsData').textContent);
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const post = async (path, body) => {
@@ -110,92 +170,195 @@
       return { status: r.status, ...(await r.json().catch(() => ({}))) };
     };
 
-    function renderList() {
-      $('guideCount').textContent = GUIDES.length;
-      if (!GUIDES.length) { $('guideList').innerHTML = '<p class="muted">No guides yet.</p>'; return; }
-      $('guideList').innerHTML = GUIDES.map((g) => `
-        <div class="row" style="display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0; border-top:1px solid var(--border,#2a2d31);">
-          <div style="flex:1; min-width:0;">
-            <div style="font-weight:600;">${esc(g.title)}</div>
-            <div class="muted" style="font-size:0.78rem;">${(g.tags || []).map(esc).join(', ') || '—'}${g.threadId ? ` · <a href="https://discord.com/channels/${GUILD}/${g.threadId}" target="_blank" rel="noopener">open post ↗</a>` : ''}</div>
+    // ---- editor state
+    let state = { content: '', embeds: [], tags: [] };
+
+    // ---- minimal Discord-ish markdown for the preview
+    function md(raw) {
+      let h = esc(raw || '');
+      h = h.replace(/```([\s\S]*?)```/g, (_, c) => `<pre class="md-code">${c.replace(/^\n/, '')}</pre>`);
+      h = h.split('\n').map((line) => {
+        if (/^### /.test(line)) return `<span class="md-h3">${line.slice(4)}</span>`;
+        if (/^## /.test(line)) return `<span class="md-h2">${line.slice(3)}</span>`;
+        if (/^# /.test(line)) return `<span class="md-h1">${line.slice(2)}</span>`;
+        if (/^&gt; /.test(line)) return `<span class="md-quote">${line.slice(5)}</span>`;
+        if (/^\s*[-*] /.test(line)) return `<span class="md-li">• ${line.replace(/^\s*[-*] /, '')}</span>`;
+        return line;
+      }).join('\n');
+      h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>')
+           .replace(/__([^_]+)__/g, '<u>$1</u>').replace(/~~([^~]+)~~/g, '<s>$1</s>')
+           .replace(/`([^`]+)`/g, '<code>$1</code>')
+           .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+           .replace(/\n/g, '<br>');
+      return h;
+    }
+    function previewEmbed(raw) {
+      const e = E.normalizeEmbed(raw); if (!e) return '';
+      const color = e.color === undefined ? '#1e1f22' : E.intToHex(e.color);
+      const title = e.title ? `<div class="p-title">${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${md(e.title)}</a>` : md(e.title)}</div>` : '';
+      const fields = (e.fields || []).map((f) => `<div class="p-field"><div class="p-field-name">${md(f.name)}</div><div class="p-field-value">${md(f.value)}</div></div>`).join('');
+      return `<div class="p-embed" style="border-left:4px solid ${color};">
+        <div class="p-embed-grid ${e.thumbnail ? 'has-thumb' : ''}"><div class="p-embed-main">
+          ${title}${e.description ? `<div class="p-desc md">${md(e.description)}</div>` : ''}
+          ${fields ? `<div class="p-fields">${fields}</div>` : ''}
+        </div>${e.thumbnail ? `<img class="p-thumb" src="${esc(e.thumbnail.url)}" alt="">` : ''}</div>
+        ${e.image ? `<img class="p-image" src="${esc(e.image.url)}" alt="">` : ''}</div>`;
+    }
+    function syncPreview() {
+      state.content = $('content').value;
+      $('pContent').innerHTML = md('**📖 ' + ($('title').value || 'Untitled') + '**\n' + state.content);
+      $('pEmbeds').innerHTML = state.embeds.map(previewEmbed).join('');
+    }
+
+    // ---- tags
+    function renderTagChips() {
+      const all = [...new Set([...FORUM_TAGS, ...state.tags])];
+      $('tagChips').innerHTML = all.length ? all.map((t) => `<span class="chip ${state.tags.includes(t) ? 'on' : ''}" onclick="toggleTag('${esc(t)}')">${esc(t)}</span>`).join('') : '<span class="muted" style="font-size:0.8rem;">No forum tags — add some to the forum, or type a tag below.</span>';
+    }
+    function toggleTag(t){ state.tags = state.tags.includes(t) ? state.tags.filter((x)=>x!==t) : [...state.tags, t].slice(0,5); renderTagChips(); }
+    function addTag(){ const v=$('newTag').value.trim(); if(v && !state.tags.includes(v)){ state.tags=[...state.tags,v].slice(0,5);} $('newTag').value=''; renderTagChips(); }
+
+    // ---- embeds editor
+    function renderEmbeds() {
+      $('embeds').innerHTML = state.embeds.map((e, i) => `
+        <details class="gd-embed" ${i===0?'open':''}>
+          <summary>Embed ${i + 1}${e.title ? ' — ' + esc(e.title).slice(0,40) : ''}</summary>
+          <label class="field"><span>Title</span><input value="${esc(e.title||'')}" oninput="upd(${i},'title',this.value)" maxlength="256"></label>
+          <label class="field"><span>Description <span class="muted" style="font-weight:400;">(markdown, 4096)</span></span><textarea rows="5" oninput="upd(${i},'description',this.value)" maxlength="4096">${esc(e.description||'')}</textarea></label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${e.color||'#5865f2'}" oninput="upd(${i},'color',this.value)" style="width:100%; height:36px;"></label>
+            <label class="field" style="flex:3; min-width:200px;"><span>Image URL</span><input value="${esc(e.image||'')}" oninput="upd(${i},'image',this.value)" placeholder="https://…"></label>
           </div>
-          <button class="btn small secondary" onclick="editGuide('${esc(g.slug)}')">Edit</button>
-          <button class="btn small danger" onclick="deleteGuide('${esc(g.slug)}','${esc(g.title)}')">Delete</button>
-        </div>`).join('');
+          <label class="field"><span>Thumbnail URL</span><input value="${esc(e.thumbnail||'')}" oninput="upd(${i},'thumbnail',this.value)" placeholder="https://…"></label>
+          <div style="margin:0.3rem 0;"><strong style="font-size:0.82rem;">Fields</strong></div>
+          <div id="fields${i}">${(e.fields||[]).map((f,fi)=>fieldRow(i,fi,f)).join('')}</div>
+          <div style="display:flex; gap:0.4rem; margin-top:0.3rem;">
+            <button class="btn secondary small" type="button" onclick="addField(${i})">+ Field</button>
+            <button class="btn small" type="button" onclick="moveEmbed(${i},-1)" ${i===0?'disabled':''}>▲</button>
+            <button class="btn small" type="button" onclick="moveEmbed(${i},1)" ${i===state.embeds.length-1?'disabled':''}>▼</button>
+            <button class="btn danger small" type="button" onclick="removeEmbed(${i})" style="margin-left:auto;">Remove embed</button>
+          </div>
+        </details>`).join('');
+      $('addEmbedBtn').style.display = state.embeds.length >= 10 ? 'none' : '';
     }
-
-    function newGuide() {
-      $('slug').value = ''; $('title').value = ''; $('tags').value = '';
-      $('body').value = JSON.stringify({ content: '', embeds: [{ title: '', description: '' }] }, null, 2);
-      $('editorTitle').textContent = 'New guide'; $('editorStatus').textContent = '';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    function fieldRow(ei, fi, f) {
+      return `<div class="gd-field">
+        <input placeholder="Name" value="${esc(f.name||'')}" oninput="updField(${ei},${fi},'name',this.value)" maxlength="256" style="flex:1;">
+        <input placeholder="Value" value="${esc(f.value||'')}" oninput="updField(${ei},${fi},'value',this.value)" maxlength="1024" style="flex:2;">
+        <label class="chip" title="Inline"><input type="checkbox" ${f.inline?'checked':''} onchange="updField(${ei},${fi},'inline',this.checked)"> inline</label>
+        <button class="btn danger small" type="button" onclick="removeField(${ei},${fi})">✕</button>
+      </div>`;
     }
+    function upd(i,k,v){ state.embeds[i][k]=v; syncPreview(); if(k==='title'){/* keep summary fresh on reopen */} }
+    function updField(ei,fi,k,v){ state.embeds[ei].fields[fi][k]=v; syncPreview(); }
+    function addEmbed(){ state.embeds.push({title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}); renderEmbeds(); syncPreview(); }
+    function removeEmbed(i){ state.embeds.splice(i,1); renderEmbeds(); syncPreview(); }
+    function moveEmbed(i,d){ const j=i+d; if(j<0||j>=state.embeds.length) return; [state.embeds[i],state.embeds[j]]=[state.embeds[j],state.embeds[i]]; renderEmbeds(); syncPreview(); }
+    function addField(i){ (state.embeds[i].fields=state.embeds[i].fields||[]).push({name:'',value:'',inline:false}); renderEmbeds(); syncPreview(); }
+    function removeField(ei,fi){ state.embeds[ei].fields.splice(fi,1); renderEmbeds(); syncPreview(); }
 
-    function editGuide(slug) {
-      const g = GUIDES.find((x) => x.slug === slug); if (!g) return;
-      $('slug').value = g.slug; $('title').value = g.title; $('tags').value = (g.tags || []).join(', ');
-      $('body').value = JSON.stringify(g.body || { content: '', embeds: [] }, null, 2);
-      $('editorTitle').textContent = 'Editing: ' + g.title; $('editorStatus').textContent = '';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    // ---- body <-> editor
+    function bodyToState(body){
+      body = body || {}; state.content = body.content || '';
+      state.embeds = (Array.isArray(body.embeds)?body.embeds:[]).map((e)=>({
+        title:e.title||'', description:e.description||'', color: typeof e.color==='number'?E.intToHex(e.color):(e.color||'#5865f2'),
+        image: e.image?.url||e.image||'', thumbnail: e.thumbnail?.url||e.thumbnail||'',
+        fields:(e.fields||[]).map((f)=>({name:f.name||'',value:f.value||'',inline:!!f.inline}))
+      }));
     }
-
-    async function saveGuide() {
-      const title = $('title').value.trim();
-      if (!title) { $('editorStatus').textContent = '⚠️ Title required.'; return; }
-      let body;
-      try { body = $('body').value.trim() ? JSON.parse($('body').value) : { content: '', embeds: [] }; }
-      catch (e) { $('editorStatus').textContent = '⚠️ Body isn’t valid JSON: ' + e.message; return; }
-      const tags = $('tags').value.split(',').map((t) => t.trim()).filter(Boolean);
-      $('editorStatus').textContent = 'Saving…';
-      const res = await post('save', { slug: $('slug').value || undefined, title, tags, body });
-      if (!res.ok) { $('editorStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
-      $('editorStatus').textContent = '✅ Saved.';
-      await refresh();
-      $('slug').value = res.guide.slug; $('editorTitle').textContent = 'Editing: ' + res.guide.title;
-    }
-
-    async function deleteGuide(slug, title) {
-      if (!confirm('Delete “' + title + '”? This removes the forum post too.')) return;
-      const res = await post('delete', { slug });
-      if (!res.ok) { alert(res.error || 'Failed.'); return; }
-      if ($('slug').value === slug) newGuide();
-      await refresh();
-    }
-
-    async function refresh() {
-      const r = await fetch(`/dashboard/${GUILD}/guides/data`).then((x) => x.json()).catch(() => null);
-      if (r && r.ok) { GUIDES = r.guides; renderList(); }
-    }
-
-    async function importGuides() {
-      let items;
-      try { items = JSON.parse($('importText').value); } catch (e) { $('importStatus').textContent = '⚠️ Not valid JSON: ' + e.message; return; }
-      $('importStatus').textContent = 'Importing…';
-      const res = await post('import', { guides: items });
-      if (!res.ok) { $('importStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
-      $('importStatus').textContent = `✅ Imported ${res.imported.length}${res.skipped.length ? ` · ${res.skipped.length} skipped` : ''}.`;
-      $('importText').value = '';
-      await refresh();
-    }
-
-    async function saveSettings() {
-      const editorRoleIds = [...document.querySelectorAll('#editorRoles input:checked')].map((c) => c.value);
-      $('settingsStatus').textContent = 'Saving…';
-      const res = await post('settings', {
-        forumChannelId: $('forumChannelId').value || null,
-        editorRoleIds,
-        editorChannelId: $('editorChannelId').value || null,
-        createEditorChannel: $('createEditorChannel').checked
+    function stateToBody(){
+      const embeds = state.embeds.map((e)=>{
+        const o={}; if(e.title) o.title=e.title; if(e.description) o.description=e.description;
+        if(e.color) o.color=e.color; if(e.image) o.image={url:e.image}; if(e.thumbnail) o.thumbnail={url:e.thumbnail};
+        const fs=(e.fields||[]).filter((f)=>f.name||f.value); if(fs.length) o.fields=fs; return o;
       });
-      if (!res.ok) { $('settingsStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
-      $('settingsStatus').textContent = '✅ Saved.' + (res.warning ? ' ⚠️ ' + res.warning : '');
-      if ($('createEditorChannel')) $('createEditorChannel').checked = false;
+      return { content: state.content, embeds };
+    }
+    function applyRaw(){
+      try{
+        const b=JSON.parse($('rawJson').value);
+        const body = Array.isArray(b) ? { embeds: b } : (('embeds' in b) || ('content' in b)) ? b : { embeds: [b] };
+        bodyToState(body); if(!state.embeds.length) state.embeds=[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}];
+        renderEmbeds(); $('content').value=state.content; syncPreview(); $('editorStatus').textContent='✅ JSON applied.';
+      }catch(e){ $('editorStatus').textContent='⚠️ Invalid JSON: '+e.message; }
+    }
+    function fillRaw(){ $('rawJson').value = JSON.stringify(stateToBody(), null, 2); }
+
+    // ---- list (organize)
+    function renderList() {
+      const f = ($('filter').value||'').toLowerCase();
+      const shown = GUIDES.filter((g)=> !f || g.title.toLowerCase().includes(f) || (g.tags||[]).some((t)=>t.toLowerCase().includes(f)));
+      $('guideCount').textContent = GUIDES.length;
+      if (!shown.length){ $('guideList').innerHTML = '<p class="muted" style="font-size:0.85rem;">'+(GUIDES.length?'No matches.':'No guides yet — press + New.')+'</p>'; return; }
+      $('guideList').innerHTML = shown.map((g) => {
+        const idx = GUIDES.findIndex((x)=>x.slug===g.slug);
+        return `<div class="row">
+          <div class="gd-ord">
+            <button class="btn small" ${idx===0?'disabled':''} onclick="move('${esc(g.slug)}',-1)">▲</button>
+            <button class="btn small" ${idx===GUIDES.length-1?'disabled':''} onclick="move('${esc(g.slug)}',1)">▼</button>
+          </div>
+          <div style="flex:1; min-width:0; cursor:pointer;" onclick="editGuide('${esc(g.slug)}')">
+            <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(g.title)}</div>
+            <div class="muted" style="font-size:0.74rem;">${(g.tags||[]).map(esc).join(', ')||'—'}</div>
+          </div>
+          ${g.threadId?`<a class="btn small secondary" href="https://discord.com/channels/${GUILD}/${g.threadId}" target="_blank" rel="noopener" title="Open post">↗</a>`:''}
+          <button class="btn small danger" onclick="deleteGuide('${esc(g.slug)}','${esc(g.title).replace(/'/g,"\\'")}')">✕</button>
+        </div>`;
+      }).join('');
+    }
+    async function move(slug, d){
+      const i = GUIDES.findIndex((x)=>x.slug===slug); const j=i+d; if(j<0||j>=GUIDES.length) return;
+      [GUIDES[i],GUIDES[j]]=[GUIDES[j],GUIDES[i]]; renderList();
+      await post('reorder', { slugs: GUIDES.map((g)=>g.slug) });
+    }
+
+    function newGuide(){
+      $('slug').value=''; $('title').value=''; state={content:'',embeds:[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}],tags:[]};
+      $('content').value=''; $('editorTitle').textContent='New guide'; $('deleteBtn').style.display='none'; $('editorStatus').textContent='';
+      renderTagChips(); renderEmbeds(); syncPreview(); window.scrollTo({top:0,behavior:'smooth'});
+    }
+    function editGuide(slug){
+      const g = GUIDES.find((x)=>x.slug===slug); if(!g) return;
+      $('slug').value=g.slug; $('title').value=g.title; state.tags=[...(g.tags||[])];
+      bodyToState(g.body||{content:'',embeds:[]}); if(!state.embeds.length) state.embeds=[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}];
+      $('content').value=state.content; $('editorTitle').textContent='Editing: '+g.title; $('deleteBtn').style.display=''; $('editorStatus').textContent='';
+      renderTagChips(); renderEmbeds(); syncPreview(); window.scrollTo({top:0,behavior:'smooth'});
+    }
+
+    async function saveGuide(){
+      const title=$('title').value.trim(); if(!title){ $('editorStatus').textContent='⚠️ Title required.'; return; }
+      state.content=$('content').value;
+      $('editorStatus').textContent='Saving…';
+      const res = await post('save', { slug: $('slug').value||undefined, title, tags: state.tags, body: stateToBody() });
+      if(!res.ok){ $('editorStatus').textContent='❌ '+(res.error||'Failed.'); return; }
+      $('editorStatus').textContent='✅ Saved.'; $('slug').value=res.guide.slug; $('editorTitle').textContent='Editing: '+res.guide.title; $('deleteBtn').style.display='';
+      await refresh();
+    }
+    async function deleteCurrent(){ const slug=$('slug').value; if(slug) deleteGuide(slug, $('title').value); }
+    async function deleteGuide(slug,title){
+      if(!confirm('Delete “'+title+'”? This removes the forum post too.')) return;
+      const res=await post('delete',{slug}); if(!res.ok){ alert(res.error||'Failed.'); return; }
+      if($('slug').value===slug) newGuide(); await refresh();
+    }
+    async function refresh(){ const r=await fetch(`/dashboard/${GUILD}/guides/data`).then((x)=>x.json()).catch(()=>null); if(r&&r.ok){ GUIDES=r.guides; renderList(); } }
+
+    async function importGuides(){
+      let items; try{ items=JSON.parse($('importText').value);}catch(e){ $('importStatus').textContent='⚠️ Not valid JSON: '+e.message; return; }
+      $('importStatus').textContent='Importing…';
+      const res=await post('import',{guides:items}); if(!res.ok){ $('importStatus').textContent='❌ '+(res.error||'Failed.'); return; }
+      $('importStatus').textContent=`✅ Imported ${res.imported.length}${res.skipped.length?` · ${res.skipped.length} skipped`:''}.`; $('importText').value=''; await refresh();
+    }
+    async function saveSettings(){
+      const editorRoleIds=[...document.querySelectorAll('#editorRoles input[type=checkbox]:checked')].map((c)=>c.value);
+      $('settingsStatus').textContent='Saving…';
+      const res=await post('settings',{ forumChannelId:$('forumChannelId').value||null, editorRoleIds, editorChannelId:$('editorChannelId').value||null, createEditorChannel:$('createEditorChannel').checked });
+      if(!res.ok){ $('settingsStatus').textContent='❌ '+(res.error||'Failed.'); return; }
+      $('settingsStatus').textContent='✅ Saved.'+(res.warning?' ⚠️ '+res.warning:''); if($('createEditorChannel')) $('createEditorChannel').checked=false;
     }
 
     renderList();
-    // Deep-link from /guide edit: ?edit=<slug>
-    const params = new URLSearchParams(location.search);
-    if (params.get('edit')) editGuide(params.get('edit')); else newGuide();
+    const params=new URLSearchParams(location.search);
+    if(params.get('edit')) editGuide(params.get('edit')); else newGuide();
   </script>
 </body>
 </html>

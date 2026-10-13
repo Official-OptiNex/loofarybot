@@ -86,6 +86,14 @@ router.post('/:guildId/guides/delete', requireAuth, requireGuildAccess, requireP
   res.json({ ok: true });
 });
 
+// Reorder guides (editors). Body: { slugs: [...] } in the desired order.
+router.post('/:guildId/guides/reorder', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
+  const s = await settingsOf(req.guild);
+  const slugs = Array.isArray(req.body.slugs) ? req.body.slugs.map(String) : [];
+  await guides.reorderGuides(req.guild, slugs, s);
+  res.json({ ok: true });
+});
+
 // Bulk import (admins). Accepts an array of { title, tags, body, images }.
 router.post('/:guildId/guides/import', requireAuth, requireGuildAccess, requirePage('guides'), adminOnly, auditTrail, async (req, res) => {
   try {

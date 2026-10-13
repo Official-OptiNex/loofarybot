@@ -322,8 +322,13 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       **#guide-editors** channel is created (only that role + admins can see it), and a pinned
       **📖 Guides Index** post appears in the forum. (Non-forum channel → rejected.)
 - [ ] **Create (editor):** `/guide create title:Test Guide tag:Guides` → a forum post is created and the
-      reply links you to the web editor. In the editor, paste message JSON into **Body**, Save → the
-      forum post updates in place. The **Guides Index** lists it under its tag with a jump-link.
+      reply links you to the web editor. The editor is **visual**: set the title, toggle **tag chips**, fill an
+      embed's title/description/colour/image and add fields — the **live preview** updates as you type. Save →
+      the forum post updates in place and the **Guides Index** lists it. The **Advanced: raw JSON** box still
+      accepts pasted message JSON (Apply → editor).
+- [ ] **Organise:** the left list has a **filter** box and **▲ ▼** buttons; reordering immediately saves and the
+      pinned index re-sorts to match.
+- [ ] **`/guide view`** replies with an inline preview embed and an **Open full guide** button.
 - [ ] **Edit (editor):** `/guide edit name:Test Guide` → opens the web editor; changing the body and
       Saving edits the same forum post (no new post). `/guide delete` removes the post and the record.
 - [ ] **Browse (anyone):** `/guide view`, `/guide list [tag]`, `/guide search <text>` return the guides
