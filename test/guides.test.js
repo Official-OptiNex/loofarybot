@@ -111,6 +111,58 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.equal(await G.getGuide('g','faq'),null,'record removed');
   console.log('✓ delete: post + record removed, legend refreshed');
 
+  // ---- Start Here: shown at the top of the pinned index post, never posted on its own
+  const idx=cache.get((await freshSettings()).legendThreadId);
+  const nThreads=threads.length;
+  let sh=await G.createGuide(guild,{title:'Welcome',tags:['Start Here'],body:'read me first'},s);
+  assert.ok(!sh.error,sh.error); assert.equal(threads.length,nThreads,'no separate post for the Start Here guide');
+  assert.equal(sh.guide.threadId,idx.id,'Start Here links to the index post');
+  const ip=JSON.stringify(idx.starter.payload);
+  assert.ok(ip.indexOf('read me first')>=0 && ip.indexOf('read me first')<ip.indexOf('Guides Index'),'intro sits above the index');
+  assert.ok(!/Welcome\]\(/.test(ip),'Start Here is not listed as a guide in the index');
+  assert.match(idx.name,/Start Here/,'index post renamed to Start Here');
+  await G.deleteGuide(guild,'welcome',s);
+  assert.equal(idx.deleted,false,'deleting Start Here keeps the index post');
+  assert.doesNotMatch(JSON.stringify(idx.starter.payload),/read me first/,'intro removed from the index');
+  assert.equal(idx.name,'📖 Guides Index','index name restored');
+  // an existing guide re-tagged as Start Here gives up its own post
+  const tg=await G.getGuide('g','targets'); const tgThread=cache.get(tg.threadId);
+  await G.editGuide(guild,'targets',{tags:['Start Here']},'u1',s);
+  assert.equal(tgThread.deleted,true,'its own post is removed'); assert.equal((await G.getGuide('g','targets')).threadId,idx.id,'now points at the index');
+  await G.editGuide(guild,'targets',{tags:['Guides']},'u1',s);
+  const back=await G.getGuide('g','targets'); assert.notEqual(back.threadId,idx.id,'untagged → gets its own post again'); assert.ok(cache.get(back.threadId),'new post exists');
+  console.log('✓ start here: merged into the pinned index post');
+
+  // ---- "include in index" option: same as Start Here, works on import, several guides stack in order
+  const nT=threads.length;
+  const imp2=await G.importGuides(guild,[{title:'Mega Guide',inIndex:true,body:'mega intro'},{title:'Legend Box',tags:['Guides'],body:'legend text'}],'u1',s);
+  assert.equal(imp2.imported.length,2);
+  assert.equal(threads.length,nT+1,'only the normal guide got its own post');
+  const mg=await G.getGuide('g','mega guide'); assert.equal(mg.inIndex,true); assert.equal(mg.threadId,idx.id,'in-index guide links to the index post');
+  await G.editGuide(guild,'legend-box',{inIndex:true},'u1',s);
+  const p2=JSON.stringify(idx.starter.payload);
+  assert.ok(p2.indexOf('mega intro')>=0 && p2.indexOf('legend text')>=0 && p2.indexOf('legend text')<p2.indexOf('Guides Index'),'both included guides sit above the list');
+  assert.match(idx.name,/Start Here/);
+  await G.editGuide(guild,'mega-guide',{inIndex:false},'u1',s);
+  const mg2=await G.getGuide('g','mega guide'); assert.notEqual(mg2.threadId,idx.id,'unticked → own post again');
+  assert.doesNotMatch(JSON.stringify(idx.starter.payload),/mega intro/,'removed from the index');
+  await G.deleteGuide(guild,'mega-guide',s); await G.deleteGuide(guild,'legend-box',s);
+  assert.equal(idx.deleted,false,'index post survives'); assert.equal(idx.name,'📖 Guides Index');
+  console.log('✓ include in index: flag, import, multiple, untick');
+
+  // ---- index post look: name, title, colour, intro above the list, footer with {count}
+  assert.deepEqual(G.cleanIndex({color:'#ff0000',name:'x'.repeat(150),intro:'  hi  '}),{name:'x'.repeat(100),title:'',color:0xff0000,intro:'hi',footer:''},'cleaned + capped');
+  await G.saveIndex(guild,{name:'📖 Start Here',title:'Welcome!',color:'#00ff00',intro:'New? read this',footer:'{count} total'},await freshSettings());
+  const look=JSON.stringify(idx.starter.payload);
+  assert.equal(idx.name,'📖 Start Here','custom post name');
+  assert.match(look,/Welcome!/); assert.match(look,/"color":65280/);
+  assert.ok(look.indexOf('New? read this')<look.indexOf('Targets'),'intro sits above the guide list');
+  assert.match(look,/\d+ guides? total/,'footer {count} filled in');
+  assert.equal((await freshSettings()).index.title,'Welcome!','stored');
+  await G.saveIndex(guild,{},await freshSettings());
+  assert.equal(idx.name,'📖 Guides Index','cleared → defaults again');
+  console.log('✓ index post: name, title, colour, intro, footer');
+
   // ---- private editor channel: created, @everyone denied view, editor role allowed
   const ec=await G.ensureEditorChannel(guild,s,{});
   assert.ok(!ec.error,ec.error); assert.equal(ec.channel.name,'guide-editors');

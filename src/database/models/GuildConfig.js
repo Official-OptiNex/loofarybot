@@ -190,7 +190,9 @@ const GuildConfigSchema = new mongoose.Schema(
       editorRoleIds: { type: [String], default: [] }, // roles that can create/edit guides (+ see the dashboard page)
       editorChannelId: { type: String, default: null }, // private channel for guide editors
       legendThreadId: { type: String, default: null }, // the pinned "📖 Guides Index" post
-      legendMessageId: { type: String, default: null }
+      legendMessageId: { type: String, default: null },
+      // How the pinned index post looks: { name, title, color, intro, footer } (see guides.cleanIndex).
+      index: { type: mongoose.Schema.Types.Mixed, default: null }
     },
     // Music / radio voice player (/music, dashboard Community → Music). Plays Lofi / chill internet
     // radio streams in a voice channel — light and ToS-safe for the free tier. See music.js.

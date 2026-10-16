@@ -20,6 +20,82 @@
     .gd-embed summary{cursor:pointer;font-weight:600;}
     .gd-field{display:flex;gap:0.4rem;align-items:flex-start;margin:0.3rem 0;}
     .gd-sticky{position:sticky;top:1rem;}
+    /* ---- visual editor */
+    .gd-list .row.active{background:var(--bg-elevated);border-radius:8px;}
+    .gd-index-row{cursor:pointer;border:1px dashed var(--border-strong,#353950)!important;border-radius:8px;padding:0.5rem!important;margin-bottom:0.3rem;}
+    .gd-index-row:hover{border-color:var(--accent-blue,#4f7cff)!important;}
+    .gd-modes{display:inline-flex;border:1px solid var(--border-card,#26293a);border-radius:8px;overflow:hidden;}
+    .gd-modes button{background:transparent;border:0;color:var(--text-muted,#9aa0b4);padding:0.4rem 0.7rem;font-size:0.82rem;cursor:pointer;font-weight:600;}
+    .gd-modes button.on{background:var(--accent-blue,#4f7cff);color:#fff;}
+    .gd-toolbar{position:sticky;top:68px;z-index:15;display:flex;flex-wrap:wrap;gap:2px;align-items:center;padding:0.35rem;margin:0.7rem 0 0.4rem;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-card,#26293a);border-radius:8px;}
+    .gd-toolbar button{background:transparent;border:1px solid transparent;color:var(--text-main,#e6e8ef);border-radius:6px;padding:0.3rem 0.5rem;font-size:0.8rem;cursor:pointer;min-width:2rem;}
+    .gd-toolbar button:hover{background:var(--bg-card-hover,#22263a);border-color:var(--border-strong,#353950);}
+    .gd-toolbar .sep{width:1px;align-self:stretch;background:var(--border-card,#26293a);margin:0 0.25rem;}
+    .gd-emoji-pop{position:relative;z-index:30;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-strong,#353950);border-radius:10px;padding:0.5rem;margin-bottom:0.5rem;box-shadow:0 10px 30px rgba(0,0,0,.35);}
+    .gd-emoji-pop input{width:100%;margin-bottom:0.4rem;}
+    .gd-emoji-grid{display:flex;flex-wrap:wrap;gap:2px;max-height:220px;overflow:auto;}
+    .gd-emoji-grid button{background:transparent;border:0;border-radius:6px;width:2.2rem;height:2.2rem;font-size:1.25rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+    .gd-emoji-grid button:hover{background:var(--bg-card-hover,#22263a);}
+    .gd-emoji-grid img{width:1.6rem;height:1.6rem;object-fit:contain;}
+    .gd-emoji-head{width:100%;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text-muted,#9aa0b4);margin:0.3rem 0 0.1rem;}
+    .gd-canvas{background:#313338!important;color:#dbdee1;border-radius:10px;padding:0.9rem 1rem;font-size:0.95rem;line-height:1.375;}
+    .gd-bot{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;}
+    .gd-bot-av{width:2rem;height:2rem;border-radius:50%;background:#5865f2;display:inline-flex;align-items:center;justify-content:center;}
+    .gd-bot-name{font-weight:600;color:#f2f3f5;}
+    .gd-app{background:#5865f2;color:#fff;font-size:0.62rem;padding:1px 4px;border-radius:3px;vertical-align:middle;}
+    .gd-canvas .p-embed{background:#2b2d31;border-radius:4px;padding:0.5rem 1rem 0.75rem 0.75rem;margin:0.4rem 0;max-width:640px;position:relative;}
+    .gd-canvas .p-title{font-weight:600;font-size:1rem;color:#f2f3f5;margin-top:0.35rem;}
+    .gd-canvas .p-desc,.gd-canvas .gd-content{margin-top:0.35rem;font-size:0.875rem;}
+    .gd-canvas a{color:#00a8fc;}
+    .gd-footer{font-size:0.75rem;color:#b5bac1;margin-top:0.5rem;}
+    .gd-fields{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.5rem;}
+    .gd-fields .p-field{flex:1 1 100%;min-width:0;}
+    .gd-fields .p-field.inline{flex:1 1 30%;}
+    .p-field-name{font-weight:600;color:#f2f3f5;font-size:0.875rem;}
+    .v-ed{outline:none;border-radius:4px;white-space:pre-wrap;word-wrap:break-word;min-height:1.3em;position:relative;transition:box-shadow .12s;}
+    .v-ed:hover{box-shadow:0 0 0 1px rgba(255,255,255,.12);}
+    .v-ed:focus{box-shadow:0 0 0 2px #5865f2;background:rgba(0,0,0,.12);}
+    .v-ed.is-empty::before{content:attr(data-placeholder);color:#80848e;position:absolute;left:0;top:0;pointer-events:none;font-weight:400;font-size:0.875rem;}
+    .vb{min-height:1.375em;}
+    .vb-h1{font-size:1.5rem;font-weight:700;line-height:1.3;margin:0.3rem 0 0.1rem;color:#f2f3f5;}
+    .vb-h2{font-size:1.25rem;font-weight:700;line-height:1.3;margin:0.3rem 0 0.1rem;color:#f2f3f5;}
+    .vb-h3{font-size:1rem;font-weight:700;line-height:1.3;margin:0.3rem 0 0.1rem;color:#f2f3f5;}
+    .vb-sub{font-size:0.75rem;color:#949ba4;}
+    .vb-li{padding-left:1.1em;position:relative;}
+    .vb-li::before{content:'•';position:absolute;left:0.25em;}
+    .vb-ol{padding-left:1.6em;position:relative;}
+    .vb-ol::before{content:attr(data-n) '.';position:absolute;left:0;min-width:1.3em;text-align:right;}
+    .vb-quote{border-left:4px solid #4e5058;padding-left:0.6em;}
+    .vb-code,.gd-canvas code{background:#1e1f22;border-radius:4px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.82rem;}
+    .vb-code{display:block;padding:0.5em;margin:0.2em 0;white-space:pre-wrap;}
+    .gd-canvas code{padding:0 0.2em;}
+    .v-spoiler{background:#1e1f22;border-radius:3px;padding:0 2px;}
+    .v-emoji{height:1.375em;width:auto;vertical-align:-0.3em;margin:0 0.05em;}
+    .v-atom.mention-pill{background:rgba(88,101,242,.3);color:#c9cdfb;border-radius:3px;padding:0 2px;}
+    .v-emoji-missing{color:#949ba4;}
+    .v-tools{display:flex;flex-wrap:wrap;gap:0.25rem;align-items:center;font-size:0.75rem;margin:-0.1rem 0 0.3rem;padding-bottom:0.35rem;border-bottom:1px dashed #3f4147;}
+    .v-tools-label{color:#949ba4;font-weight:700;margin-right:auto;}
+    .gd-tbtn{background:#383a40;border:0;color:#dbdee1;border-radius:4px;padding:0.15rem 0.45rem;font-size:0.75rem;cursor:pointer;}
+    .gd-tbtn:hover:not(:disabled){background:#4e5058;}
+    .gd-tbtn:disabled{opacity:.4;cursor:default;}
+    .gd-color{display:inline-flex;align-items:center;gap:2px;color:#949ba4;cursor:pointer;}
+    .gd-color input{width:1.6rem;height:1.3rem;padding:0;border:0;background:none;cursor:pointer;}
+    .v-settings{display:none;gap:0.3rem;flex-direction:column;margin-bottom:0.4rem;}
+    .v-settings.open{display:flex;}
+    .gd-mini{background:#1e1f22!important;border:1px solid #3f4147!important;color:#dbdee1!important;padding:0.35rem 0.5rem!important;font-size:0.8rem!important;border-radius:4px!important;width:100%;}
+    .v-footer{margin-top:0.5rem;font-size:0.75rem!important;}
+    .v-thumb{float:right;max-width:80px;max-height:80px;border-radius:4px;margin:0.3rem 0 0.3rem 0.8rem;}
+    .v-image,.gd-canvas .p-image{max-width:100%;border-radius:4px;margin-top:0.6rem;display:block;}
+    .v-field{background:rgba(0,0,0,.12);border-radius:4px;padding:0.3rem;}
+    .v-field-ctl{display:flex;justify-content:space-between;align-items:center;font-size:0.72rem;color:#949ba4;margin-top:0.2rem;}
+    .gd-autolist-label{font-size:0.7rem;color:#949ba4;margin-top:0.6rem;text-transform:uppercase;font-weight:700;letter-spacing:.03em;}
+    .gd-autolist{opacity:.85;border-left:2px dashed #4e5058;padding-left:0.5rem;}
+    .gd-inc{cursor:pointer;border-radius:6px;}
+    .gd-inc:hover{box-shadow:0 0 0 1px #5865f2;}
+    .gd-inc-label{font-size:0.72rem;color:#949ba4;margin:0.3rem 0 -0.2rem;}
+    .gd-inc-empty{font-size:0.8rem;color:#949ba4;border:1px dashed #4e5058;border-radius:6px;padding:0.5rem;margin:0.3rem 0;}
+    .gd-count{font-size:0.78rem;color:var(--text-muted,#9aa0b4);}
+    .gd-count.over{color:var(--accent-red,#ff5c6c);font-weight:700;}
   </style>
 </head>
 <body class="site">
@@ -58,34 +134,93 @@
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
             <h3 style="margin:0;" id="editorTitle">New guide</h3>
-            <div style="display:flex; gap:0.4rem;">
-              <button class="btn" type="button" onclick="saveGuide()">💾 Save</button>
-              <button class="btn secondary small" type="button" onclick="newGuide()">Clear</button>
+            <div style="display:flex; gap:0.4rem; align-items:center;">
+              <div class="gd-modes" role="tablist">
+                <button type="button" id="modeVisual" class="on" onclick="setMode('visual')" title="Edit right on the post, like a document">✨ Visual</button>
+                <button type="button" id="modeCode" onclick="setMode('code')" title="Edit the raw Discord markdown">&lt;/&gt; Markdown</button>
+              </div>
+              <button class="btn" type="button" onclick="save()">💾 Save</button>
+              <button class="btn secondary small" type="button" id="clearBtn" onclick="newGuide()">Clear</button>
             </div>
           </div>
           <input type="hidden" id="slug" value="">
 
-          <label class="field"><span>Title</span><input id="title" maxlength="100" placeholder="e.g. Data Collection" oninput="syncPreview()"></label>
+          <!-- guide fields -->
+          <div id="guideMeta">
+            <label class="field"><span>Post title <span class="muted" style="font-weight:400;">(the forum post’s name)</span></span><input id="title" maxlength="100" placeholder="e.g. Data Collection" oninput="dirty(); syncPreview()"></label>
+            <div class="field"><span>Tags <span class="muted" style="font-weight:400;">(click to toggle — must match the forum’s tags)</span></span>
+              <div class="gd-tagchips" id="tagChips"></div>
+              <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
+                <input id="newTag" placeholder="Add a tag…" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag();}">
+                <button class="btn secondary small" type="button" onclick="addTag()">Add tag</button>
+              </div>
+            </div>
+            <label class="field" style="flex-direction:row; align-items:center; gap:0.5rem;"><input type="checkbox" id="inIndex" style="width:auto;" onchange="dirty()"> <span>📌 Include in index <span class="muted" style="font-weight:400;">(shown at the top of the pinned index post instead of as its own post)</span></span></label>
+          </div>
 
-          <div class="field"><span>Tags <span class="muted" style="font-weight:400;">(click to toggle — must match the forum’s tags)</span></span>
-            <div class="gd-tagchips" id="tagChips"></div>
-            <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
-              <input id="newTag" placeholder="Add a tag…" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag();}">
-              <button class="btn secondary small" type="button" onclick="addTag()">Add tag</button>
+          <!-- index post fields -->
+          <div id="indexMeta" style="display:none;">
+            <p class="muted" style="font-size:0.84rem; margin:0.3rem 0 0.6rem;">This is the pinned post at the top of the forum. Guides marked <strong>📌 Include in index</strong> show first (edit those in their own entry), then this box with the list of every other guide — the list updates itself.</p>
+            <label class="field"><span>Post title <span class="muted" style="font-weight:400;">(blank = “📖 Guides Index”, or “📖 Start Here — Guides Index” when guides are included)</span></span><input id="indexName" maxlength="100" placeholder="📖 Start Here — Guides Index" oninput="dirty()"></label>
+          </div>
+
+          <!-- format toolbar (both modes) -->
+          <div class="gd-toolbar" id="toolbar" data-vmd-keep>
+            <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+            <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+            <span class="sep"></span>
+            <button type="button" data-block="h1" title="Big heading">H1</button>
+            <button type="button" data-block="h2" title="Medium heading">H2</button>
+            <button type="button" data-block="h3" title="Small heading">H3</button>
+            <button type="button" data-block="sub" title="Small grey text">ᵃ small</button>
+            <span class="sep"></span>
+            <button type="button" data-block="li" title="Bullet list">• List</button>
+            <button type="button" data-block="ol" title="Numbered list">1. List</button>
+            <button type="button" data-block="quote" title="Quote">❝ Quote</button>
+            <span class="sep"></span>
+            <button type="button" data-cmd="link" title="Link">🔗 Link</button>
+            <button type="button" data-cmd="code" title="Inline code">&lt;/&gt;</button>
+            <button type="button" data-cmd="spoiler" title="Spoiler">▒ Spoiler</button>
+            <span class="sep"></span>
+            <button type="button" id="emojiBtn" title="Insert emoji">😀 Emoji</button>
+            <button type="button" data-cmd="removeFormat" title="Clear formatting">⌫ Clear</button>
+          </div>
+          <div class="gd-emoji-pop" id="emojiPop" style="display:none;" data-vmd-keep>
+            <input id="emojiSearch" placeholder="Search emojis…" oninput="renderEmojiPicker()">
+            <div class="gd-emoji-grid" id="emojiGrid"></div>
+          </div>
+
+          <!-- VISUAL editor: edit right on the Discord-looking post -->
+          <div id="visualWrap">
+            <div class="discord-chat gd-canvas">
+              <div class="gd-bot"><span class="gd-bot-av">🤖</span><span class="gd-bot-name">LoofaryBot <span class="gd-app">APP</span></span></div>
+              <div id="vIncluded"></div>
+              <div class="gd-content-wrap" id="vContentWrap"><div id="vContent" class="gd-content"></div></div>
+              <div id="vEmbeds"></div>
+              <div id="vIndexList"></div>
+            </div>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.5rem;" id="vAddRow">
+              <button class="btn secondary small" type="button" onclick="addEmbed()" id="vAddEmbed">+ Add embed</button>
+              <span class="muted" style="font-size:0.78rem; align-self:center;">Tip: click any text to edit it. Select text, then use the toolbar. Typing <code>:Name:</code> turns into that server emoji.</span>
             </div>
           </div>
 
-          <details id="contentWrap"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Message text above the embeds (optional)</summary>
-            <textarea id="content" maxlength="2000" rows="2" placeholder="Shown above the embeds. Mentions here actually ping." oninput="syncPreview()" style="width:100%; margin-top:0.4rem;"></textarea>
-          </details>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; margin:0.6rem 0 0.2rem;">
-            <strong style="font-size:0.9rem;">Embeds</strong>
-            <button class="btn secondary small" type="button" onclick="addEmbed()" id="addEmbedBtn">+ Add embed</button>
+          <!-- MARKDOWN editor: the raw fields -->
+          <div id="codeWrap" style="display:none;">
+            <details id="contentWrap"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Message text above the embeds (optional)</summary>
+              <textarea id="content" maxlength="2000" rows="2" placeholder="Shown above the embeds. Mentions here actually ping." oninput="state.content=this.value; dirty(); syncPreview()" style="width:100%; margin-top:0.4rem;"></textarea>
+            </details>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:0.6rem 0 0.2rem;" id="codeEmbedsHead">
+              <strong style="font-size:0.9rem;">Embeds</strong>
+              <button class="btn secondary small" type="button" onclick="addEmbed()" id="addEmbedBtn">+ Add embed</button>
+            </div>
+            <div id="embeds"></div>
+            <div id="codeIndex" style="display:none;"></div>
           </div>
-          <div id="embeds"></div>
 
-          <details style="margin-top:0.6rem;"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Advanced: raw message JSON (paste from an AI or Discohook)</summary>
+          <details style="margin-top:0.6rem;" id="rawWrap"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Advanced: raw message JSON (paste from an AI or Discohook)</summary>
             <textarea id="rawJson" rows="8" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre; margin-top:0.4rem;"></textarea>
             <div style="display:flex; gap:0.4rem; margin-top:0.3rem;">
               <button class="btn small" type="button" onclick="applyRaw()">Apply JSON → editor</button>
@@ -93,28 +228,28 @@
             </div>
           </details>
 
-          <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.6rem;">
-            <button class="btn" type="button" onclick="saveGuide()">💾 Save guide</button>
+          <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.6rem; flex-wrap:wrap;">
+            <button class="btn" type="button" onclick="save()" id="saveBtn">💾 Save guide</button>
             <button class="btn danger small" type="button" id="deleteBtn" style="display:none;" onclick="deleteCurrent()">Delete</button>
+            <span class="gd-count" id="sizeCount"></span>
             <span class="muted" id="editorStatus" style="margin-left:auto; font-size:0.82rem;"></span>
           </div>
         </div>
 
-        <!-- Live preview -->
-        <div class="card">
+        <!-- Live preview (markdown mode) -->
+        <div class="card" id="previewCard" style="display:none;">
           <h3 style="margin-top:0;">Live preview</h3>
-          <div class="discord-chat eb-preview">
-            <div class="p-msg">
-              <div class="p-content" id="pContent"></div>
-              <div id="pEmbeds"></div>
-            </div>
+          <div class="discord-chat gd-canvas">
+            <div id="pIncluded"></div>
+            <div class="gd-content" id="pContent"></div>
+            <div id="pEmbeds"></div>
           </div>
         </div>
 
         <% if (isAdmin) { %>
         <div class="card">
           <h3 style="margin-top:0;">📥 Import (admin)</h3>
-          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string.</p>
+          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Add <code>"inIndex": true</code> to show a guide at the top of the pinned index post instead of as its own post.</p>
           <textarea id="importText" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre;"></textarea>
           <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
             <button class="btn" type="button" onclick="importGuides()">Import</button>
@@ -157,57 +292,106 @@
 
   <script id="guidesData" type="application/json"><%- JSON.stringify(guides).replace(/</g, '\\u003c') %></script>
   <script id="forumTagsData" type="application/json"><%- JSON.stringify(forumTags).replace(/</g, '\\u003c') %></script>
+  <script id="editorData" type="application/json"><%- JSON.stringify(editorData).replace(/</g, '\\u003c') %></script>
+  <script id="indexData" type="application/json"><%- JSON.stringify(settings.index || {}).replace(/</g, '\\u003c') %></script>
   <script src="/js/embed-json.js"></script>
+  <script src="/js/visual-md.js"></script>
   <script>
     const GUILD = '<%= guild.id %>';
     const E = window.EmbedJson;
-    let GUIDES = JSON.parse(document.getElementById('guidesData').textContent);
-    const FORUM_TAGS = JSON.parse(document.getElementById('forumTagsData').textContent);
+    const V = window.VisualMD;
+    const readJson = (id) => JSON.parse(document.getElementById(id).textContent);
+    let GUIDES = readJson('guidesData');
+    const FORUM_TAGS = readJson('forumTagsData');
+    const EDITOR_DATA = readJson('editorData');
+    let INDEX = readJson('indexData');
+    V.setData(EDITOR_DATA);
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const post = async (path, body) => {
       const r = await fetch(`/dashboard/${GUILD}/guides/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       return { status: r.status, ...(await r.json().catch(() => ({}))) };
     };
+    const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
-    // ---- editor state
+    const LEGEND_TITLE = '📖 Guides Index';
+    const DEFAULT_COLOR = '#5865f2';
+    const UNICODE_EMOJIS = '📖 📌 ✅ ❌ ⚠️ 💡 🎉 ⭐ 🔥 💎 💰 💸 🏆 🎯 📋 📈 📉 🔒 🗺️ 🎮 🏁 ➡️ 👉 ❗ ❓ 🤔 👍 👀 ⏱️ 🎲 🌀 🌟 🌳 🪜 🎬 📅 📝 🧮 🐷 🛒 ⚙️ 🔗 🆕 ❤️'.split(' ');
+
+    // ---- state
+    let mode = store.get('gd-mode') === 'code' ? 'code' : 'visual';
+    let editing = 'guide'; // 'guide' | 'index'
     let state = { content: '', embeds: [], tags: [] };
+    let indexState = { name: '', title: '', color: DEFAULT_COLOR, intro: '', footer: '' };
+    let isDirty = false;
+    function dirty() { isDirty = true; updateCount(); }
+    window.addEventListener('beforeunload', (e) => { if (isDirty) { e.preventDefault(); e.returnValue = ''; } });
+    const blankEmbed = () => ({ title: '', description: '', color: DEFAULT_COLOR, url: '', image: '', thumbnail: '', footer: '', footerIcon: '', fields: [], extra: {} });
+    const inIndexGuide = (g) => !!g.inIndex || (g.tags || []).some((t) => String(t).trim().toLowerCase() === 'start here');
 
-    // ---- minimal Discord-ish markdown for the preview
-    function md(raw) {
-      let h = esc(raw || '');
-      h = h.replace(/```([\s\S]*?)```/g, (_, c) => `<pre class="md-code">${c.replace(/^\n/, '')}</pre>`);
-      h = h.split('\n').map((line) => {
-        if (/^### /.test(line)) return `<span class="md-h3">${line.slice(4)}</span>`;
-        if (/^## /.test(line)) return `<span class="md-h2">${line.slice(3)}</span>`;
-        if (/^# /.test(line)) return `<span class="md-h1">${line.slice(2)}</span>`;
-        if (/^&gt; /.test(line)) return `<span class="md-quote">${line.slice(5)}</span>`;
-        if (/^\s*[-*] /.test(line)) return `<span class="md-li">• ${line.replace(/^\s*[-*] /, '')}</span>`;
-        return line;
-      }).join('\n');
-      h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>')
-           .replace(/__([^_]+)__/g, '<u>$1</u>').replace(/~~([^~]+)~~/g, '<s>$1</s>')
-           .replace(/`([^`]+)`/g, '<code>$1</code>')
-           .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-           .replace(/\n/g, '<br>');
-      return h;
+    // ---- body <-> editor (keeps embed parts the editor doesn't show, e.g. author/timestamp)
+    function bodyToState(body) {
+      body = body || {};
+      state.content = body.content || '';
+      state.embeds = (Array.isArray(body.embeds) ? body.embeds : []).map((e) => {
+        const { title, description, color, url, image, thumbnail, footer, fields, ...extra } = e || {};
+        return {
+          title: title || '', description: description || '',
+          color: typeof color === 'number' ? E.intToHex(color) : (color || ''),
+          url: url || '', image: image?.url || (typeof image === 'string' ? image : ''), thumbnail: thumbnail?.url || (typeof thumbnail === 'string' ? thumbnail : ''),
+          footer: footer?.text || '', footerIcon: footer?.icon_url || '',
+          fields: (fields || []).map((f) => ({ name: f.name || '', value: f.value || '', inline: !!f.inline })),
+          extra
+        };
+      });
     }
-    function previewEmbed(raw) {
+    function stateToBody() {
+      const embeds = state.embeds.map((e) => {
+        const o = { ...(e.extra || {}) };
+        if (e.title) o.title = e.title;
+        if (e.url) o.url = e.url;
+        if (e.description) o.description = e.description;
+        if (e.color) o.color = E.colorToInt(e.color);
+        const fs = (e.fields || []).filter((f) => f.name || f.value);
+        if (fs.length) o.fields = fs;
+        if (e.image) o.image = { url: e.image };
+        if (e.thumbnail) o.thumbnail = { url: e.thumbnail };
+        if (e.footer) o.footer = e.footerIcon ? { text: e.footer, icon_url: e.footerIcon } : { text: e.footer };
+        return o;
+      });
+      return state.content ? { content: state.content, embeds } : { embeds };
+    }
+
+    // ---- read-only rendering (previews, included guides, the generated list)
+    function previewEmbedHtml(raw) {
       const e = E.normalizeEmbed(raw); if (!e) return '';
       const color = e.color === undefined ? '#1e1f22' : E.intToHex(e.color);
-      const title = e.title ? `<div class="p-title">${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${md(e.title)}</a>` : md(e.title)}</div>` : '';
-      const fields = (e.fields || []).map((f) => `<div class="p-field"><div class="p-field-name">${md(f.name)}</div><div class="p-field-value">${md(f.value)}</div></div>`).join('');
-      return `<div class="p-embed" style="border-left:4px solid ${color};">
-        <div class="p-embed-grid ${e.thumbnail ? 'has-thumb' : ''}"><div class="p-embed-main">
-          ${title}${e.description ? `<div class="p-desc md">${md(e.description)}</div>` : ''}
-          ${fields ? `<div class="p-fields">${fields}</div>` : ''}
-        </div>${e.thumbnail ? `<img class="p-thumb" src="${esc(e.thumbnail.url)}" alt="">` : ''}</div>
-        ${e.image ? `<img class="p-image" src="${esc(e.image.url)}" alt="">` : ''}</div>`;
+      const title = e.title ? `<div class="p-title">${V.inlineToHtml(e.title)}</div>` : '';
+      const fields = (e.fields || []).map((f) => `<div class="p-field ${f.inline ? 'inline' : ''}"><div class="p-field-name">${V.inlineToHtml(f.name)}</div><div class="p-field-value v-ro">${V.toHtml(f.value)}</div></div>`).join('');
+      return `<div class="p-embed gd-embed-view" style="border-left:4px solid ${color};">
+        ${e.thumbnail ? `<img class="p-thumb" src="${esc(e.thumbnail.url)}" alt="" style="float:right;">` : ''}
+        ${title}${e.description ? `<div class="p-desc v-ro">${V.toHtml(e.description)}</div>` : ''}
+        ${fields ? `<div class="gd-fields">${fields}</div>` : ''}
+        ${e.image ? `<img class="p-image" src="${esc(e.image.url)}" alt="">` : ''}
+        ${e.footer?.text ? `<div class="gd-footer">${esc(e.footer.text)}</div>` : ''}</div>`;
     }
-    function syncPreview() {
-      state.content = $('content').value;
-      $('pContent').innerHTML = md('**📖 ' + ($('title').value || 'Untitled') + '**\n' + state.content);
-      $('pEmbeds').innerHTML = state.embeds.map(previewEmbed).join('');
+    function indexListMd() {
+      const byTag = {};
+      for (const g of GUIDES.filter((x) => !inIndexGuide(x))) for (const t of ((g.tags || []).length ? g.tags : ['Other'])) (byTag[t] = byTag[t] || []).push(g);
+      const parts = [];
+      for (const tag of Object.keys(byTag).sort((a, b) => a.localeCompare(b))) {
+        parts.push(`\n**${tag}**`);
+        for (const g of byTag[tag]) parts.push(`• [${g.title}](https://discord.com/channels/${GUILD}/${g.threadId || ''})`);
+      }
+      return parts.join('\n').trim() || '_No guides yet._';
+    }
+    const indexCount = () => { const n = GUIDES.filter((x) => !inIndexGuide(x)).length; return `${n} guide${n === 1 ? '' : 's'}`; };
+    function includedHtml() {
+      const inc = GUIDES.filter(inIndexGuide);
+      if (!inc.length) return '<div class="gd-inc-empty">No guides are included yet — tick <strong>📌 Include in index</strong> on a guide (e.g. a “start here” guide) to show it here.</div>';
+      return inc.map((g) => `<div class="gd-inc" onclick="editGuide('${esc(g.slug)}')" title="Click to edit this guide">
+        <div class="gd-inc-label">📌 ${esc(g.title)} — included guide · click to edit</div>
+        ${(g.body?.embeds || []).map(previewEmbedHtml).join('')}</div>`).join('');
     }
 
     // ---- tags
@@ -215,27 +399,145 @@
       const all = [...new Set([...FORUM_TAGS, ...state.tags])];
       $('tagChips').innerHTML = all.length ? all.map((t) => `<span class="chip ${state.tags.includes(t) ? 'on' : ''}" onclick="toggleTag('${esc(t)}')">${esc(t)}</span>`).join('') : '<span class="muted" style="font-size:0.8rem;">No forum tags — add some to the forum, or type a tag below.</span>';
     }
-    function toggleTag(t){ state.tags = state.tags.includes(t) ? state.tags.filter((x)=>x!==t) : [...state.tags, t].slice(0,5); renderTagChips(); }
-    function addTag(){ const v=$('newTag').value.trim(); if(v && !state.tags.includes(v)){ state.tags=[...state.tags,v].slice(0,5);} $('newTag').value=''; renderTagChips(); }
+    function toggleTag(t) { state.tags = state.tags.includes(t) ? state.tags.filter((x) => x !== t) : [...state.tags, t].slice(0, 5); renderTagChips(); dirty(); }
+    function addTag() { const v = $('newTag').value.trim(); if (v && !state.tags.includes(v)) { state.tags = [...state.tags, v].slice(0, 5); dirty(); } $('newTag').value = ''; renderTagChips(); }
 
-    // ---- embeds editor
+    /* ================================================================ VISUAL MODE */
+
+    function el(tag, cls, html) { const n = document.createElement(tag); if (cls) n.className = cls; if (html !== undefined) n.innerHTML = html; return n; }
+    function editable(cls, md, opts) { const n = el('div', cls + ' v-ed'); V.attach(n, md, opts); return n; }
+    function smallInput(placeholder, value, oninput, cls = '') {
+      const i = el('input', 'gd-mini ' + cls); i.placeholder = placeholder; i.value = value || ''; i.addEventListener('input', () => oninput(i.value)); return i;
+    }
+    function colorInput(value, oninput) {
+      const wrap = el('label', 'gd-color', '🎨 ');
+      const i = el('input'); i.type = 'color'; i.value = value || DEFAULT_COLOR; i.title = 'Embed colour';
+      i.addEventListener('input', () => oninput(i.value)); wrap.appendChild(i); return wrap;
+    }
+    function toolBtn(label, title, fn, disabled) { const b = el('button', 'gd-tbtn', label); b.type = 'button'; b.title = title; b.disabled = !!disabled; b.addEventListener('click', fn); return b; }
+
+    function visualEmbed(i) {
+      const e = state.embeds[i];
+      const card = el('div', 'p-embed v-embed');
+      const paint = () => (card.style.borderLeft = `4px solid ${e.color || '#1e1f22'}`);
+      paint();
+
+      const tools = el('div', 'v-tools');
+      tools.append(
+        el('span', 'v-tools-label', `Embed ${i + 1}`),
+        colorInput(e.color, (v) => { e.color = v; paint(); dirty(); }),
+        toolBtn('⚙️ Images & links', 'Image, thumbnail, title link, footer icon', () => settings.classList.toggle('open')),
+        toolBtn('+ Field', 'Add a name/value field', () => { e.fields.push({ name: '', value: '', inline: false }); renderVisual(); dirty(); }),
+        toolBtn('▲', 'Move up', () => moveEmbed(i, -1), i === 0),
+        toolBtn('▼', 'Move down', () => moveEmbed(i, 1), i === state.embeds.length - 1),
+        toolBtn('⧉', 'Duplicate', () => { state.embeds.splice(i + 1, 0, JSON.parse(JSON.stringify(e))); renderVisual(); dirty(); }, state.embeds.length >= 10),
+        toolBtn('🗑', 'Remove embed', () => { if (confirm('Remove this embed?')) removeEmbed(i); })
+      );
+      card.appendChild(tools);
+
+      const settings = el('div', 'v-settings');
+      settings.append(
+        smallInput('Title link (https://…) — makes the title clickable', e.url, (v) => { e.url = v.trim(); dirty(); }),
+        smallInput('Big image URL (https://…)', e.image, (v) => { e.image = v.trim(); dirty(); refreshImages(); }),
+        smallInput('Thumbnail URL (small image, top right)', e.thumbnail, (v) => { e.thumbnail = v.trim(); dirty(); refreshImages(); }),
+        smallInput('Footer icon URL', e.footerIcon, (v) => { e.footerIcon = v.trim(); dirty(); })
+      );
+      card.appendChild(settings);
+
+      const thumb = el('img', 'p-thumb v-thumb'); thumb.alt = '';
+      card.appendChild(thumb);
+      const titleEd = editable('p-title', e.title, { multiline: false, placeholder: 'Embed title (optional)', onChange: (v) => { e.title = v; dirty(); } });
+      titleEd.dataset.ei = i;
+      card.appendChild(titleEd);
+      card.appendChild(editable('p-desc', e.description, { placeholder: 'Write here… select text and use the toolbar to format it.', onChange: (v) => { e.description = v; dirty(); } }));
+
+      if (e.fields.length) {
+        const fw = el('div', 'gd-fields');
+        e.fields.forEach((f, fi) => {
+          const box = el('div', 'p-field v-field' + (f.inline ? ' inline' : ''));
+          box.appendChild(editable('p-field-name', f.name, { multiline: false, placeholder: 'Field name', onChange: (v) => { f.name = v; dirty(); } }));
+          box.appendChild(editable('p-field-value', f.value, { placeholder: 'Field value', onChange: (v) => { f.value = v; dirty(); } }));
+          const ctl = el('div', 'v-field-ctl');
+          const lab = el('label', '', ' side by side'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = f.inline;
+          cb.addEventListener('change', () => { f.inline = cb.checked; box.classList.toggle('inline', cb.checked); dirty(); });
+          lab.prepend(cb);
+          ctl.append(lab, toolBtn('✕', 'Remove field', () => { e.fields.splice(fi, 1); renderVisual(); dirty(); }));
+          box.appendChild(ctl);
+          fw.appendChild(box);
+        });
+        card.appendChild(fw);
+      }
+      const img = el('img', 'p-image v-image'); img.alt = '';
+      card.appendChild(img);
+      const refreshImages = () => {
+        thumb.style.display = e.thumbnail ? '' : 'none'; if (e.thumbnail) thumb.src = e.thumbnail;
+        img.style.display = e.image ? '' : 'none'; if (e.image) img.src = e.image;
+      };
+      refreshImages();
+      card.appendChild(smallInput('Footer text (optional, plain text)', e.footer, (v) => { e.footer = v; dirty(); }, 'v-footer'));
+      return card;
+    }
+
+    function visualIndexEmbed() {
+      const x = indexState;
+      const card = el('div', 'p-embed v-embed');
+      const paint = () => (card.style.borderLeft = `4px solid ${x.color || DEFAULT_COLOR}`);
+      paint();
+      const tools = el('div', 'v-tools');
+      tools.append(el('span', 'v-tools-label', 'Index box'), colorInput(x.color, (v) => { x.color = v; paint(); dirty(); }));
+      card.appendChild(tools);
+      card.appendChild(editable('p-title', x.title, { multiline: false, placeholder: LEGEND_TITLE, onChange: (v) => { x.title = v; dirty(); } }));
+      card.appendChild(editable('p-desc', x.intro, { placeholder: 'Intro text above the guide list (optional) — e.g. “New here? Start with…”', onChange: (v) => { x.intro = v; dirty(); } }));
+      const list = el('div', 'p-desc v-ro gd-autolist', V.toHtml(indexListMd()));
+      list.title = 'This list updates itself from your guides and their order';
+      card.appendChild(el('div', 'gd-autolist-label', '🔄 Guide list — updates automatically'));
+      card.appendChild(list);
+      const foot = smallInput(`Footer (blank = “${indexCount()}”; use {count} for the number)`, x.footer, (v) => { x.footer = v; dirty(); }, 'v-footer');
+      card.appendChild(foot);
+      return card;
+    }
+
+    function renderVisual() {
+      const idx = editing === 'index';
+      $('vIncluded').innerHTML = idx ? includedHtml() : '';
+      $('vContentWrap').style.display = idx ? 'none' : '';
+      $('vAddRow').style.display = idx ? 'none' : '';
+      const ve = $('vEmbeds'); ve.innerHTML = '';
+      if (idx) ve.appendChild(visualIndexEmbed());
+      else {
+        $('vContentWrap').replaceChildren(editable('gd-content', state.content, { placeholder: 'Message text above the embeds (optional)', onChange: (v) => { state.content = v; $('content').value = v; dirty(); } }));
+        state.embeds.forEach((_, i) => ve.appendChild(visualEmbed(i)));
+        $('vAddEmbed').style.display = state.embeds.length >= 10 ? 'none' : '';
+      }
+      updateCount();
+    }
+
+    /* ================================================================ MARKDOWN MODE */
+
     function renderEmbeds() {
       $('embeds').innerHTML = state.embeds.map((e, i) => `
-        <details class="gd-embed" ${i===0?'open':''}>
-          <summary>Embed ${i + 1}${e.title ? ' — ' + esc(e.title).slice(0,40) : ''}</summary>
-          <label class="field"><span>Title</span><input value="${esc(e.title||'')}" oninput="upd(${i},'title',this.value)" maxlength="256"></label>
-          <label class="field"><span>Description <span class="muted" style="font-weight:400;">(markdown, 4096)</span></span><textarea rows="5" oninput="upd(${i},'description',this.value)" maxlength="4096">${esc(e.description||'')}</textarea></label>
+        <details class="gd-embed" ${i === 0 ? 'open' : ''}>
+          <summary>Embed ${i + 1}${e.title ? ' — ' + esc(e.title).slice(0, 40) : ''}</summary>
+          <label class="field"><span>Title</span><input class="md-in" value="${esc(e.title)}" oninput="upd(${i},'title',this.value)" maxlength="256"></label>
+          <label class="field"><span>Description <span class="muted" style="font-weight:400;">(markdown, 4096)</span></span><textarea class="md-in" rows="8" oninput="upd(${i},'description',this.value)" maxlength="4096">${esc(e.description)}</textarea></label>
           <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${e.color||'#5865f2'}" oninput="upd(${i},'color',this.value)" style="width:100%; height:36px;"></label>
-            <label class="field" style="flex:3; min-width:200px;"><span>Image URL</span><input value="${esc(e.image||'')}" oninput="upd(${i},'image',this.value)" placeholder="https://…"></label>
+            <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${e.color || DEFAULT_COLOR}" oninput="upd(${i},'color',this.value)" style="width:100%; height:36px;"></label>
+            <label class="field" style="flex:3; min-width:200px;"><span>Title link</span><input value="${esc(e.url)}" oninput="upd(${i},'url',this.value)" placeholder="https://…"></label>
           </div>
-          <label class="field"><span>Thumbnail URL</span><input value="${esc(e.thumbnail||'')}" oninput="upd(${i},'thumbnail',this.value)" placeholder="https://…"></label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <label class="field" style="flex:1; min-width:200px;"><span>Image URL</span><input value="${esc(e.image)}" oninput="upd(${i},'image',this.value)" placeholder="https://…"></label>
+            <label class="field" style="flex:1; min-width:200px;"><span>Thumbnail URL</span><input value="${esc(e.thumbnail)}" oninput="upd(${i},'thumbnail',this.value)" placeholder="https://…"></label>
+          </div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <label class="field" style="flex:3; min-width:200px;"><span>Footer</span><input value="${esc(e.footer)}" oninput="upd(${i},'footer',this.value)" maxlength="2048"></label>
+            <label class="field" style="flex:2; min-width:160px;"><span>Footer icon URL</span><input value="${esc(e.footerIcon)}" oninput="upd(${i},'footerIcon',this.value)" placeholder="https://…"></label>
+          </div>
           <div style="margin:0.3rem 0;"><strong style="font-size:0.82rem;">Fields</strong></div>
-          <div id="fields${i}">${(e.fields||[]).map((f,fi)=>fieldRow(i,fi,f)).join('')}</div>
+          <div>${(e.fields || []).map((f, fi) => fieldRow(i, fi, f)).join('')}</div>
           <div style="display:flex; gap:0.4rem; margin-top:0.3rem;">
             <button class="btn secondary small" type="button" onclick="addField(${i})">+ Field</button>
-            <button class="btn small" type="button" onclick="moveEmbed(${i},-1)" ${i===0?'disabled':''}>▲</button>
-            <button class="btn small" type="button" onclick="moveEmbed(${i},1)" ${i===state.embeds.length-1?'disabled':''}>▼</button>
+            <button class="btn small" type="button" onclick="moveEmbed(${i},-1)" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button class="btn small" type="button" onclick="moveEmbed(${i},1)" ${i === state.embeds.length - 1 ? 'disabled' : ''}>▼</button>
             <button class="btn danger small" type="button" onclick="removeEmbed(${i})" style="margin-left:auto;">Remove embed</button>
           </div>
         </details>`).join('');
@@ -243,104 +545,248 @@
     }
     function fieldRow(ei, fi, f) {
       return `<div class="gd-field">
-        <input placeholder="Name" value="${esc(f.name||'')}" oninput="updField(${ei},${fi},'name',this.value)" maxlength="256" style="flex:1;">
-        <input placeholder="Value" value="${esc(f.value||'')}" oninput="updField(${ei},${fi},'value',this.value)" maxlength="1024" style="flex:2;">
-        <label class="chip" title="Inline"><input type="checkbox" ${f.inline?'checked':''} onchange="updField(${ei},${fi},'inline',this.checked)"> inline</label>
+        <input class="md-in" placeholder="Name" value="${esc(f.name)}" oninput="updField(${ei},${fi},'name',this.value)" maxlength="256" style="flex:1;">
+        <textarea class="md-in" placeholder="Value" rows="2" oninput="updField(${ei},${fi},'value',this.value)" maxlength="1024" style="flex:2;">${esc(f.value)}</textarea>
+        <label class="chip" title="Inline"><input type="checkbox" ${f.inline ? 'checked' : ''} onchange="updField(${ei},${fi},'inline',this.checked)"> inline</label>
         <button class="btn danger small" type="button" onclick="removeField(${ei},${fi})">✕</button>
       </div>`;
     }
-    function upd(i,k,v){ state.embeds[i][k]=v; syncPreview(); if(k==='title'){/* keep summary fresh on reopen */} }
-    function updField(ei,fi,k,v){ state.embeds[ei].fields[fi][k]=v; syncPreview(); }
-    function addEmbed(){ state.embeds.push({title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}); renderEmbeds(); syncPreview(); }
-    function removeEmbed(i){ state.embeds.splice(i,1); renderEmbeds(); syncPreview(); }
-    function moveEmbed(i,d){ const j=i+d; if(j<0||j>=state.embeds.length) return; [state.embeds[i],state.embeds[j]]=[state.embeds[j],state.embeds[i]]; renderEmbeds(); syncPreview(); }
-    function addField(i){ (state.embeds[i].fields=state.embeds[i].fields||[]).push({name:'',value:'',inline:false}); renderEmbeds(); syncPreview(); }
-    function removeField(ei,fi){ state.embeds[ei].fields.splice(fi,1); renderEmbeds(); syncPreview(); }
+    function renderCodeIndex() {
+      const x = indexState;
+      $('codeIndex').innerHTML = `
+        <label class="field"><span>Box title</span><input class="md-in" value="${esc(x.title)}" placeholder="${esc(LEGEND_TITLE)}" oninput="indexState.title=this.value; dirty(); syncPreview()" maxlength="256"></label>
+        <label class="field"><span>Intro text above the guide list <span class="muted" style="font-weight:400;">(markdown)</span></span><textarea class="md-in" rows="6" oninput="indexState.intro=this.value; dirty(); syncPreview()" maxlength="3000">${esc(x.intro)}</textarea></label>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${x.color || DEFAULT_COLOR}" oninput="indexState.color=this.value; dirty(); syncPreview()" style="width:100%; height:36px;"></label>
+          <label class="field" style="flex:3; min-width:200px;"><span>Footer <span class="muted" style="font-weight:400;">({count} = number of guides)</span></span><input value="${esc(x.footer)}" placeholder="${esc(indexCount())}" oninput="indexState.footer=this.value; dirty(); syncPreview()" maxlength="200"></label>
+        </div>`;
+    }
+    function upd(i, k, v) { state.embeds[i][k] = v; dirty(); syncPreview(); }
+    function updField(ei, fi, k, v) { state.embeds[ei].fields[fi][k] = v; dirty(); syncPreview(); }
+    function addField(i) { state.embeds[i].fields.push({ name: '', value: '', inline: false }); renderEditor(); dirty(); }
+    function removeField(ei, fi) { state.embeds[ei].fields.splice(fi, 1); renderEditor(); dirty(); }
 
-    // ---- body <-> editor
-    function bodyToState(body){
-      body = body || {}; state.content = body.content || '';
-      state.embeds = (Array.isArray(body.embeds)?body.embeds:[]).map((e)=>({
-        title:e.title||'', description:e.description||'', color: typeof e.color==='number'?E.intToHex(e.color):(e.color||'#5865f2'),
-        image: e.image?.url||e.image||'', thumbnail: e.thumbnail?.url||e.thumbnail||'',
-        fields:(e.fields||[]).map((f)=>({name:f.name||'',value:f.value||'',inline:!!f.inline}))
-      }));
+    function syncPreview() {
+      if (mode !== 'code') return;
+      if (editing === 'index') {
+        const x = indexState;
+        const desc = (x.intro ? x.intro + '\n\n' : '') + indexListMd();
+        $('pIncluded').innerHTML = includedHtml();
+        $('pContent').innerHTML = '';
+        $('pEmbeds').innerHTML = previewEmbedHtml({ title: x.title || LEGEND_TITLE, description: desc, color: x.color || DEFAULT_COLOR, footer: { text: x.footer ? x.footer.replace(/\{count\}/gi, indexCount()) : indexCount() } });
+      } else {
+        $('pIncluded').innerHTML = '';
+        $('pContent').innerHTML = V.toHtml(state.content);
+        $('pEmbeds').innerHTML = stateToBody().embeds.map(previewEmbedHtml).join('');
+      }
     }
-    function stateToBody(){
-      const embeds = state.embeds.map((e)=>{
-        const o={}; if(e.title) o.title=e.title; if(e.description) o.description=e.description;
-        if(e.color) o.color=e.color; if(e.image) o.image={url:e.image}; if(e.thumbnail) o.thumbnail={url:e.thumbnail};
-        const fs=(e.fields||[]).filter((f)=>f.name||f.value); if(fs.length) o.fields=fs; return o;
-      });
-      return { content: state.content, embeds };
+
+    /* ================================================================ SHARED */
+
+    function addEmbed() { if (state.embeds.length >= 10) return; state.embeds.push(blankEmbed()); renderEditor(); dirty(); }
+    function removeEmbed(i) { state.embeds.splice(i, 1); renderEditor(); dirty(); }
+    function moveEmbed(i, d) { const j = i + d; if (j < 0 || j >= state.embeds.length) return; [state.embeds[i], state.embeds[j]] = [state.embeds[j], state.embeds[i]]; renderEditor(); dirty(); }
+
+    function renderEditor() {
+      const idx = editing === 'index';
+      $('guideMeta').style.display = idx ? 'none' : '';
+      $('indexMeta').style.display = idx ? '' : 'none';
+      $('rawWrap').style.display = idx ? 'none' : '';
+      $('visualWrap').style.display = mode === 'visual' ? '' : 'none';
+      $('codeWrap').style.display = mode === 'code' ? '' : 'none';
+      $('previewCard').style.display = mode === 'code' ? '' : 'none';
+      $('modeVisual').classList.toggle('on', mode === 'visual');
+      $('modeCode').classList.toggle('on', mode === 'code');
+      $('contentWrap').style.display = idx ? 'none' : '';
+      $('codeEmbedsHead').style.display = idx ? 'none' : '';
+      $('embeds').style.display = idx ? 'none' : '';
+      $('codeIndex').style.display = idx ? '' : 'none';
+      if (mode === 'visual') renderVisual();
+      else { if (idx) renderCodeIndex(); else { renderEmbeds(); $('content').value = state.content; } syncPreview(); }
+      updateCount();
     }
-    function applyRaw(){
-      try{
-        const b=JSON.parse($('rawJson').value);
+    function setMode(m) { mode = m; store.set('gd-mode', m); renderEditor(); }
+
+    function updateCount() {
+      const box = $('sizeCount');
+      if (editing === 'index') { box.textContent = ''; return; }
+      const body = E.normalizeMessage(stateToBody());
+      const total = body.embeds.reduce((n, e) => n + E.embedLength(e), 0);
+      const longDesc = state.embeds.findIndex((e) => e.description.length > 4096);
+      box.textContent = `${total.toLocaleString()} / 6,000 characters` + (longDesc >= 0 ? ` · ⚠️ Embed ${longDesc + 1}’s text is over 4,096` : '');
+      box.classList.toggle('over', total > 6000 || longDesc >= 0);
+    }
+
+    // ---- toolbar: formats the visual editor, or wraps markdown around the selection in Markdown mode
+    let lastText = null;
+    document.addEventListener('focusin', (e) => { if (e.target.classList?.contains('md-in') || e.target.id === 'content') lastText = e.target; });
+    const MARKS = { bold: '**', italic: '*', underline: '__', strikeThrough: '~~', code: '`', spoiler: '||' };
+    const PREFIX = { h1: '# ', h2: '## ', h3: '### ', sub: '-# ', li: '- ', ol: '1. ', quote: '> ' };
+    function textFormat(ta, cmd, block, arg) {
+      if (!ta || !document.body.contains(ta)) return false;
+      const v = ta.value; let a = ta.selectionStart, b = ta.selectionEnd; let out; let caret;
+      if (block) {
+        a = v.lastIndexOf('\n', a - 1) + 1; const nb = v.indexOf('\n', b); b = nb < 0 ? v.length : nb;
+        const lines = v.slice(a, b).split('\n'); const p = PREFIX[block];
+        const strip = (l) => l.replace(/^(#{1,3} |-# |> |\s*[-*] |\s*\d+\. )/, '');
+        const all = lines.every((l) => l.startsWith(p) || (block === 'ol' && /^\d+\. /.test(l)));
+        out = lines.map((l, i) => (all ? strip(l) : (block === 'ol' ? `${i + 1}. ` : p) + strip(l))).join('\n'); caret = a + out.length;
+      } else if (cmd === 'link') { const t = v.slice(a, b) || 'link text'; out = `[${t}](${arg})`; caret = a + out.length; }
+      else if (cmd === 'insert') { out = arg; caret = a + out.length; }
+      else if (cmd === 'removeFormat') { out = v.slice(a, b).replace(/\*\*|__|~~|\|\||`|\*/g, ''); caret = a + out.length; }
+      else { const m = MARKS[cmd]; if (!m) return false; out = m + v.slice(a, b) + m; caret = a === b ? a + m.length : a + out.length; }
+      ta.focus(); ta.setRangeText(out, a, b, 'end'); ta.setSelectionRange(caret, caret);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    }
+    function runTool(cmd, block, arg) {
+      const ok = mode === 'visual' ? V.format(block ? 'block' : cmd, block || arg) : textFormat(lastText, cmd, block, arg);
+      if (!ok) flash('Click into the text you want to change first.');
+    }
+    $('toolbar').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+    $('toolbar').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'emojiBtn') return toggleEmoji();
+      if (b.dataset.block) return runTool(null, b.dataset.block);
+      if (b.dataset.cmd === 'link') {
+        // Discord can't link part of an embed title — a link there makes the whole title clickable.
+        const ed = mode === 'visual' && V.activeEditor();
+        if (ed && ed.dataset.ei !== undefined) {
+          const e = state.embeds[Number(ed.dataset.ei)];
+          const url = prompt('Make this embed title a link to (https://…) — leave empty to remove', e.url || 'https://');
+          if (url !== null) { e.url = /^https?:\/\/\S+$/.test(url.trim()) ? url.trim() : ''; dirty(); renderVisual(); flash(e.url ? '🔗 Title is now a link.' : 'Title link removed.'); }
+          return;
+        }
+        const url = prompt('Link to (https://…)', 'https://'); if (url && /^https?:\/\/\S+$/.test(url.trim())) runTool('link', null, url.trim()); return;
+      }
+      runTool(b.dataset.cmd);
+    });
+    function flash(msg) { $('editorStatus').textContent = msg; clearTimeout(flash.t); flash.t = setTimeout(() => { if ($('editorStatus').textContent === msg) $('editorStatus').textContent = ''; }, 3000); }
+
+    // ---- emoji picker
+    function toggleEmoji() { const p = $('emojiPop'); const open = p.style.display === 'none'; p.style.display = open ? '' : 'none'; if (open) { renderEmojiPicker(); $('emojiSearch').focus({ preventScroll: true }); } }
+    function renderEmojiPicker() {
+      const q = $('emojiSearch').value.trim().toLowerCase();
+      const custom = EDITOR_DATA.emojis.filter((e) => !q || e.name.toLowerCase().includes(q));
+      $('emojiGrid').innerHTML =
+        (custom.length ? `<div class="gd-emoji-head">Server emojis</div>` + custom.map((e, i) => `<button type="button" data-c="${EDITOR_DATA.emojis.indexOf(e)}" title=":${esc(e.name)}:"><img src="${esc(e.url)}" alt=":${esc(e.name)}:"></button>`).join('') : (q ? '' : '<div class="gd-emoji-head">No server emojis</div>')) +
+        (q ? '' : `<div class="gd-emoji-head">Common</div>` + UNICODE_EMOJIS.map((u) => `<button type="button" data-u="${u}">${u}</button>`).join(''));
+    }
+    $('emojiPop').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+    $('emojiGrid').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      const emoji = b.dataset.c !== undefined ? EDITOR_DATA.emojis[Number(b.dataset.c)] : b.dataset.u;
+      const ok = mode === 'visual' ? V.format('insert', V.emojiInsertHtml(emoji)) : textFormat(lastText, 'insert', null, typeof emoji === 'string' ? emoji : `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`);
+      if (!ok) flash('Click into the text where the emoji should go first.');
+    });
+    document.addEventListener('mousedown', (e) => { if (!e.target.closest('#emojiPop') && !e.target.closest('#emojiBtn')) $('emojiPop').style.display = 'none'; });
+
+    // ---- raw JSON
+    function applyRaw() {
+      try {
+        const b = JSON.parse($('rawJson').value);
         const body = Array.isArray(b) ? { embeds: b } : (('embeds' in b) || ('content' in b)) ? b : { embeds: [b] };
-        bodyToState(body); if(!state.embeds.length) state.embeds=[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}];
-        renderEmbeds(); $('content').value=state.content; syncPreview(); $('editorStatus').textContent='✅ JSON applied.';
-      }catch(e){ $('editorStatus').textContent='⚠️ Invalid JSON: '+e.message; }
+        bodyToState(body); if (!state.embeds.length) state.embeds = [blankEmbed()];
+        renderEditor(); dirty(); $('editorStatus').textContent = '✅ JSON applied.';
+      } catch (e) { $('editorStatus').textContent = '⚠️ Invalid JSON: ' + e.message; }
     }
-    function fillRaw(){ $('rawJson').value = JSON.stringify(stateToBody(), null, 2); }
+    function fillRaw() { $('rawJson').value = JSON.stringify(stateToBody(), null, 2); }
 
     // ---- list (organize)
     function renderList() {
-      const f = ($('filter').value||'').toLowerCase();
-      const shown = GUIDES.filter((g)=> !f || g.title.toLowerCase().includes(f) || (g.tags||[]).some((t)=>t.toLowerCase().includes(f)));
+      const f = ($('filter').value || '').toLowerCase();
+      const shown = GUIDES.filter((g) => !f || g.title.toLowerCase().includes(f) || (g.tags || []).some((t) => t.toLowerCase().includes(f)));
       $('guideCount').textContent = GUIDES.length;
-      if (!shown.length){ $('guideList').innerHTML = '<p class="muted" style="font-size:0.85rem;">'+(GUIDES.length?'No matches.':'No guides yet — press + New.')+'</p>'; return; }
-      $('guideList').innerHTML = shown.map((g) => {
-        const idx = GUIDES.findIndex((x)=>x.slug===g.slug);
-        return `<div class="row">
+      const indexRow = `<div class="row gd-index-row ${editing === 'index' ? 'active' : ''}" onclick="editIndex()" title="Edit the pinned index post">
+          <div style="font-size:1.1rem;">📌</div>
+          <div style="flex:1; min-width:0;"><div style="font-weight:700;">Index post</div><div class="muted" style="font-size:0.74rem;">Pinned at the top of the forum · intro + guide list</div></div>
+        </div>`;
+      if (!shown.length) { $('guideList').innerHTML = indexRow + '<p class="muted" style="font-size:0.85rem;">' + (GUIDES.length ? 'No matches.' : 'No guides yet — press + New.') + '</p>'; return; }
+      const cur = $('slug').value;
+      $('guideList').innerHTML = indexRow + shown.map((g) => {
+        const idx = GUIDES.indexOf(g);
+        return `<div class="row ${editing === 'guide' && cur === g.slug ? 'active' : ''}">
           <div class="gd-ord">
-            <button class="btn small" ${idx===0?'disabled':''} onclick="move('${esc(g.slug)}',-1)">▲</button>
-            <button class="btn small" ${idx===GUIDES.length-1?'disabled':''} onclick="move('${esc(g.slug)}',1)">▼</button>
+            <button class="btn small" ${idx === 0 ? 'disabled' : ''} onclick="move('${esc(g.slug)}',-1)">▲</button>
+            <button class="btn small" ${idx === GUIDES.length - 1 ? 'disabled' : ''} onclick="move('${esc(g.slug)}',1)">▼</button>
           </div>
           <div style="flex:1; min-width:0; cursor:pointer;" onclick="editGuide('${esc(g.slug)}')">
             <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(g.title)}</div>
-            <div class="muted" style="font-size:0.74rem;">${(g.tags||[]).map(esc).join(', ')||'—'}</div>
+            <div class="muted" style="font-size:0.74rem;">${inIndexGuide(g) ? '📌 In index · ' : ''}${(g.tags || []).map(esc).join(', ') || '—'}</div>
           </div>
-          ${g.threadId?`<a class="btn small secondary" href="https://discord.com/channels/${GUILD}/${g.threadId}" target="_blank" rel="noopener" title="Open post">↗</a>`:''}
-          <button class="btn small danger" onclick="deleteGuide('${esc(g.slug)}','${esc(g.title).replace(/'/g,"\\'")}')">✕</button>
+          ${g.threadId ? `<a class="btn small secondary" href="https://discord.com/channels/${GUILD}/${g.threadId}" target="_blank" rel="noopener" title="Open post">↗</a>` : ''}
+          <button class="btn small danger" onclick="deleteGuide('${esc(g.slug)}','${esc(g.title).replace(/'/g, "\\'")}')">✕</button>
         </div>`;
       }).join('');
     }
-    async function move(slug, d){
-      const i = GUIDES.findIndex((x)=>x.slug===slug); const j=i+d; if(j<0||j>=GUIDES.length) return;
-      [GUIDES[i],GUIDES[j]]=[GUIDES[j],GUIDES[i]]; renderList();
-      await post('reorder', { slugs: GUIDES.map((g)=>g.slug) });
+    async function move(slug, d) {
+      const i = GUIDES.findIndex((x) => x.slug === slug); const j = i + d; if (j < 0 || j >= GUIDES.length) return;
+      [GUIDES[i], GUIDES[j]] = [GUIDES[j], GUIDES[i]]; renderList();
+      await post('reorder', { slugs: GUIDES.map((g) => g.slug) });
+    }
+    const leaveOk = () => !isDirty || confirm('You have unsaved changes — discard them?');
+
+    function newGuide(force) {
+      if (!force && !leaveOk()) return;
+      editing = 'guide';
+      $('slug').value = ''; $('title').value = ''; $('inIndex').checked = false;
+      state = { content: '', embeds: [blankEmbed()], tags: [] };
+      $('editorTitle').textContent = 'New guide'; $('deleteBtn').style.display = 'none'; $('saveBtn').textContent = '💾 Save guide'; $('clearBtn').style.display = '';
+      $('editorStatus').textContent = '';
+      renderTagChips(); renderEditor(); renderList(); isDirty = false; updateCount();
+    }
+    function editGuide(slug) {
+      const g = GUIDES.find((x) => x.slug === slug); if (!g) return;
+      if (!leaveOk()) return;
+      editing = 'guide';
+      $('slug').value = g.slug; $('title').value = g.title; $('inIndex').checked = !!g.inIndex;
+      state = { content: '', embeds: [], tags: [...(g.tags || [])] };
+      bodyToState(g.body || { content: '', embeds: [] }); if (!state.embeds.length) state.embeds = [blankEmbed()];
+      $('editorTitle').textContent = 'Editing: ' + g.title; $('deleteBtn').style.display = ''; $('saveBtn').textContent = '💾 Save guide'; $('clearBtn').style.display = '';
+      $('editorStatus').textContent = '';
+      renderTagChips(); renderEditor(); renderList(); isDirty = false; updateCount();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function editIndex() {
+      if (!leaveOk()) return;
+      editing = 'index';
+      const x = INDEX || {};
+      indexState = { name: x.name || '', title: x.title || '', color: Number.isInteger(x.color) ? E.intToHex(x.color) : DEFAULT_COLOR, intro: x.intro || '', footer: x.footer || '' };
+      $('indexName').value = indexState.name;
+      $('editorTitle').textContent = 'Editing: 📌 Index post'; $('deleteBtn').style.display = 'none'; $('saveBtn').textContent = '💾 Save index post'; $('clearBtn').style.display = 'none';
+      $('editorStatus').textContent = '';
+      renderEditor(); renderList(); isDirty = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function newGuide(){
-      $('slug').value=''; $('title').value=''; state={content:'',embeds:[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}],tags:[]};
-      $('content').value=''; $('editorTitle').textContent='New guide'; $('deleteBtn').style.display='none'; $('editorStatus').textContent='';
-      renderTagChips(); renderEmbeds(); syncPreview(); window.scrollTo({top:0,behavior:'smooth'});
+    async function save() { return editing === 'index' ? saveIndex() : saveGuide(); }
+    async function saveGuide() {
+      const title = $('title').value.trim(); if (!title) { $('editorStatus').textContent = '⚠️ Post title required.'; $('title').focus(); return; }
+      $('editorStatus').textContent = 'Saving…';
+      const res = await post('save', { slug: $('slug').value || undefined, title, tags: state.tags, inIndex: $('inIndex').checked, body: stateToBody() });
+      if (!res.ok) { $('editorStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
+      isDirty = false;
+      $('editorStatus').textContent = '✅ Saved — the forum post is updated.'; $('slug').value = res.guide.slug; $('editorTitle').textContent = 'Editing: ' + res.guide.title; $('deleteBtn').style.display = '';
+      await refresh();
+      const g = GUIDES.find((x) => x.slug === res.guide.slug);
+      if (g) { bodyToState(g.body); if (!state.embeds.length) state.embeds = [blankEmbed()]; renderEditor(); isDirty = false; } // show emojis the server resolved
     }
-    function editGuide(slug){
-      const g = GUIDES.find((x)=>x.slug===slug); if(!g) return;
-      $('slug').value=g.slug; $('title').value=g.title; state.tags=[...(g.tags||[])];
-      bodyToState(g.body||{content:'',embeds:[]}); if(!state.embeds.length) state.embeds=[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}];
-      $('content').value=state.content; $('editorTitle').textContent='Editing: '+g.title; $('deleteBtn').style.display=''; $('editorStatus').textContent='';
-      renderTagChips(); renderEmbeds(); syncPreview(); window.scrollTo({top:0,behavior:'smooth'});
+    async function saveIndex() {
+      $('editorStatus').textContent = 'Saving…';
+      const x = indexState;
+      const res = await post('index', { name: $('indexName').value, title: x.title, color: x.color, intro: x.intro, footer: x.footer });
+      if (!res.ok) { $('editorStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
+      INDEX = res.index; isDirty = false;
+      $('editorStatus').textContent = '✅ Saved — the pinned index post is updated.';
     }
-
-    async function saveGuide(){
-      const title=$('title').value.trim(); if(!title){ $('editorStatus').textContent='⚠️ Title required.'; return; }
-      state.content=$('content').value;
-      $('editorStatus').textContent='Saving…';
-      const res = await post('save', { slug: $('slug').value||undefined, title, tags: state.tags, body: stateToBody() });
-      if(!res.ok){ $('editorStatus').textContent='❌ '+(res.error||'Failed.'); return; }
-      $('editorStatus').textContent='✅ Saved.'; $('slug').value=res.guide.slug; $('editorTitle').textContent='Editing: '+res.guide.title; $('deleteBtn').style.display='';
+    async function deleteCurrent() { const slug = $('slug').value; if (slug) deleteGuide(slug, $('title').value); }
+    async function deleteGuide(slug, title) {
+      if (!confirm('Delete “' + title + '”? This removes the forum post too.')) return;
+      const res = await post('delete', { slug }); if (!res.ok) { alert(res.error || 'Failed.'); return; }
+      if ($('slug').value === slug) { isDirty = false; newGuide(true); }
       await refresh();
     }
-    async function deleteCurrent(){ const slug=$('slug').value; if(slug) deleteGuide(slug, $('title').value); }
-    async function deleteGuide(slug,title){
-      if(!confirm('Delete “'+title+'”? This removes the forum post too.')) return;
-      const res=await post('delete',{slug}); if(!res.ok){ alert(res.error||'Failed.'); return; }
-      if($('slug').value===slug) newGuide(); await refresh();
-    }
-    async function refresh(){ const r=await fetch(`/dashboard/${GUILD}/guides/data`).then((x)=>x.json()).catch(()=>null); if(r&&r.ok){ GUIDES=r.guides; renderList(); } }
+    async function refresh() { const r = await fetch(`/dashboard/${GUILD}/guides/data`).then((x) => x.json()).catch(() => null); if (r && r.ok) { GUIDES = r.guides; renderList(); if (editing === 'index') renderEditor(); } }
 
     async function importGuides(){
       let items; try{ items=JSON.parse($('importText').value);}catch(e){ $('importStatus').textContent='⚠️ Not valid JSON: '+e.message; return; }
@@ -356,9 +802,8 @@
       $('settingsStatus').textContent='✅ Saved.'+(res.warning?' ⚠️ '+res.warning:''); if($('createEditorChannel')) $('createEditorChannel').checked=false;
     }
 
-    renderList();
     const params=new URLSearchParams(location.search);
-    if(params.get('edit')) editGuide(params.get('edit')); else newGuide();
+    if(params.get('edit')==='index') editIndex(); else if(params.get('edit')) editGuide(params.get('edit')); else newGuide(true);
   </script>
 </body>
 </html>

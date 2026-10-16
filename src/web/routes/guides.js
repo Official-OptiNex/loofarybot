@@ -33,6 +33,12 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
     .map((r) => ({ id: r.id, name: r.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const forumTags = forum ? (forum.availableTags || []).map((t) => t.name) : [];
+  // For the visual editor: server emojis as images, channel/role names for mention pills.
+  const editorData = {
+    emojis: guild.emojis.cache.map((e) => ({ id: e.id, name: e.name, animated: !!e.animated, url: e.imageURL({ size: 48 }) })),
+    channels: guild.channels.cache.filter((c) => c.isTextBased?.() && !c.isThread?.()).map((c) => ({ id: c.id, name: c.name })),
+    roles
+  };
   const list = await guides.listGuides(guild.id);
 
   res.render('guides', {
@@ -43,14 +49,15 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
     textChannels,
     roles,
     forumTags,
-    guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
+    editorData,
+    guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
   });
 });
 
 // Fresh guide list (JSON) for refreshes after a save/delete/import.
 router.get('/:guildId/guides/data', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
   const list = await guides.listGuides(req.guild.id);
-  res.json({ ok: true, guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], threadId: g.threadId, body: g.body || { content: '', embeds: [] } })) });
+  res.json({ ok: true, guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } })) });
 });
 
 // Create or edit a guide (editors).
@@ -61,16 +68,17 @@ router.post('/:guildId/guides/save', requireAuth, requireGuildAccess, requirePag
     const title = String(req.body.title || '').trim();
     if (!title) return res.status(400).json({ ok: false, error: 'A title is required.' });
     const tags = Array.isArray(req.body.tags) ? req.body.tags.map(String).filter(Boolean).slice(0, 5) : [];
+    const inIndex = !!req.body.inIndex;
     const body = req.body.body ?? { content: '', embeds: [] };
     const userId = req.session.user.id;
 
     const existing = req.body.slug ? await GuideModel.exists({ guildId: req.guild.id, slug: String(req.body.slug) }) : null;
     const result = existing
-      ? await guides.editGuide(req.guild, String(req.body.slug), { title, tags, body }, userId, s)
-      : await guides.createGuide(req.guild, { title, tags, body, authorId: userId, createdBy: userId }, s);
+      ? await guides.editGuide(req.guild, String(req.body.slug), { title, tags, body, inIndex }, userId, s)
+      : await guides.createGuide(req.guild, { title, tags, body, inIndex, authorId: userId, createdBy: userId }, s);
     if (result.error) return res.status(400).json({ ok: false, error: result.error });
     res.locals.audit = { section: 'Guides', action: existing ? 'Edited a guide' : 'Created a guide', detail: title };
-    res.json({ ok: true, guide: { slug: result.guide.slug, title: result.guide.title, tags: result.guide.tags || [], threadId: result.guide.threadId } });
+    res.json({ ok: true, guide: { slug: result.guide.slug, title: result.guide.title, tags: result.guide.tags || [], inIndex: !!result.guide.inIndex, threadId: result.guide.threadId } });
   } catch (err) {
     console.error('Guide save failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to save the guide.' });
@@ -114,6 +122,20 @@ router.post('/:guildId/guides/import', requireAuth, requireGuildAccess, requireP
   } catch (err) {
     console.error('Guide import failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to import guides.' });
+  }
+});
+
+// The pinned index post's look (editors): post name, title, colour, intro text, footer.
+router.post('/:guildId/guides/index', requireAuth, requireGuildAccess, requirePage('guides'), auditTrail, async (req, res) => {
+  try {
+    const s = await settingsOf(req.guild);
+    if (!s.forumChannelId) return res.status(400).json({ ok: false, error: 'An admin needs to pick a forum channel first (Settings below).' });
+    const { index } = await guides.saveIndex(req.guild, req.body || {}, s);
+    res.locals.audit = { section: 'Guides', action: 'Edited the index post', detail: index.name || index.title || '' };
+    res.json({ ok: true, index });
+  } catch (err) {
+    console.error('Guide index save failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to save the index post.' });
   }
 });
 

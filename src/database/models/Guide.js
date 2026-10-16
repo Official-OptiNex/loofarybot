@@ -11,6 +11,8 @@ const GuideSchema = new mongoose.Schema(
     title: { type: String, required: true },
     // Forum tag names this guide is filed under (also mapped to the forum's tag ids when published).
     tags: { type: [String], default: [] },
+    // Shown at the top of the pinned index post instead of as a forum post of its own.
+    inIndex: { type: Boolean, default: false },
     // The guide body in Discord message JSON ({ content, embeds: [...] }).
     body: { type: mongoose.Schema.Types.Mixed, default: null },
 
