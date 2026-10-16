@@ -114,7 +114,7 @@
         <% if (isAdmin) { %>
         <div class="card">
           <h3 style="margin-top:0;">📥 Import (admin)</h3>
-          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string.</p>
+          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Tag a guide <code>Start Here</code> to show it at the top of the pinned index post instead of as its own post.</p>
           <textarea id="importText" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre;"></textarea>
           <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
             <button class="btn" type="button" onclick="importGuides()">Import</button>

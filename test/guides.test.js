@@ -111,6 +111,28 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.equal(await G.getGuide('g','faq'),null,'record removed');
   console.log('✓ delete: post + record removed, legend refreshed');
 
+  // ---- Start Here: shown at the top of the pinned index post, never posted on its own
+  const idx=cache.get((await freshSettings()).legendThreadId);
+  const nThreads=threads.length;
+  let sh=await G.createGuide(guild,{title:'Welcome',tags:['Start Here'],body:'read me first'},s);
+  assert.ok(!sh.error,sh.error); assert.equal(threads.length,nThreads,'no separate post for the Start Here guide');
+  assert.equal(sh.guide.threadId,idx.id,'Start Here links to the index post');
+  const ip=JSON.stringify(idx.starter.payload);
+  assert.ok(ip.indexOf('read me first')>=0 && ip.indexOf('read me first')<ip.indexOf('Guides Index'),'intro sits above the index');
+  assert.ok(!/Welcome\]\(/.test(ip),'Start Here is not listed as a guide in the index');
+  assert.match(idx.name,/Start Here/,'index post renamed to Start Here');
+  await G.deleteGuide(guild,'welcome',s);
+  assert.equal(idx.deleted,false,'deleting Start Here keeps the index post');
+  assert.doesNotMatch(JSON.stringify(idx.starter.payload),/read me first/,'intro removed from the index');
+  assert.equal(idx.name,'📖 Guides Index','index name restored');
+  // an existing guide re-tagged as Start Here gives up its own post
+  const tg=await G.getGuide('g','targets'); const tgThread=cache.get(tg.threadId);
+  await G.editGuide(guild,'targets',{tags:['Start Here']},'u1',s);
+  assert.equal(tgThread.deleted,true,'its own post is removed'); assert.equal((await G.getGuide('g','targets')).threadId,idx.id,'now points at the index');
+  await G.editGuide(guild,'targets',{tags:['Guides']},'u1',s);
+  const back=await G.getGuide('g','targets'); assert.notEqual(back.threadId,idx.id,'untagged → gets its own post again'); assert.ok(cache.get(back.threadId),'new post exists');
+  console.log('✓ start here: merged into the pinned index post');
+
   // ---- private editor channel: created, @everyone denied view, editor role allowed
   const ec=await G.ensureEditorChannel(guild,s,{});
   assert.ok(!ec.error,ec.error); assert.equal(ec.channel.name,'guide-editors');

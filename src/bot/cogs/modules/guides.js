@@ -9,6 +9,11 @@ const Guide = require('../../../database/models/Guide');
 const EmbedJson = require('../../../web/static/js/embed-json');
 
 const LEGEND_TITLE = '📖 Guides Index';
+const START_TITLE = '📖 Start Here — Guides Index';
+// A guide tagged "Start Here" isn't posted on its own: its body is shown at the top of the pinned
+// index post instead, so the forum has one pinned "start here" post rather than several.
+const START_TAG = 'start here';
+const isStartHere = (guide) => (guide?.tags || []).some((t) => String(t).trim().toLowerCase() === START_TAG);
 
 function guidesSettings(config) {
   const g = (config && config.guides) || {};
@@ -98,10 +103,20 @@ async function fetchThread(forum, id) {
 async function publishGuide(guild, guide, settings) {
   const forum = getForum(guild, settings);
   if (!forum) return { error: 'Set a **forum channel** for guides first (`/guide setup`).' };
+  if (isStartHere(guide)) {
+    // Lives inside the index post: drop any post of its own (e.g. it was just tagged Start Here).
+    const { legendThreadId } = guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
+    if (guide.threadId && guide.threadId !== legendThreadId) {
+      const own = await fetchThread(forum, guide.threadId);
+      if (own) await own.delete('Guide moved into the index post').catch(() => null);
+    }
+    return { threadId: legendThreadId, messageId: legendThreadId };
+  }
   const payload = buildPayload(guide);
   const appliedTags = mapTags(forum, guide.tags);
 
   let thread = await fetchThread(forum, guide.threadId);
+  if (thread && thread.id === guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean()).legendThreadId) thread = null; // was Start Here; needs its own post again
   if (thread) {
     if (thread.name !== guide.title) await thread.setName(guide.title.slice(0, 100)).catch(() => null);
     if (thread.setAppliedTags) await thread.setAppliedTags(appliedTags).catch(() => null);
@@ -152,7 +167,8 @@ async function deleteGuide(guild, slug, settings) {
   const guide = await Guide.findOne({ guildId: guild.id, slug }).lean();
   if (!guide) return { error: 'No guide by that name.' };
   const forum = getForum(guild, settings);
-  if (forum && guide.threadId) {
+  const { legendThreadId } = guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
+  if (forum && guide.threadId && guide.threadId !== legendThreadId) {
     const thread = await fetchThread(forum, guide.threadId);
     if (thread) await thread.delete('Guide deleted').catch(() => null);
   }
@@ -192,11 +208,13 @@ async function searchGuides(guildId, text, limit = 25) {
     .slice(0, limit);
 }
 
-/** Rebuilds the pinned "📖 Guides Index" post: every guide grouped by tag, with jump links. */
+/** Rebuilds the pinned "📖 Guides Index" post: the Start Here guide (if any), then every guide grouped by tag, with jump links. */
 async function rebuildLegend(guild, settings) {
   const forum = getForum(guild, settings);
   if (!forum) return;
-  const guides = await Guide.find({ guildId: guild.id }).sort({ order: 1, title: 1 }).lean();
+  const all = await Guide.find({ guildId: guild.id }).sort({ order: 1, title: 1 }).lean();
+  const start = all.find(isStartHere) || null;
+  const guides = all.filter((g) => !isStartHere(g));
   const byTag = {};
   for (const g of guides) {
     const tags = (g.tags || []).length ? g.tags : ['Other'];
@@ -208,21 +226,32 @@ async function rebuildLegend(guild, settings) {
     parts.push(`\n**${tag}**`);
     for (const g of byTag[tag]) parts.push(`• [${g.title}](${link(g)})`);
   }
-  const description = (parts.join('\n').trim() || '_No guides yet._').slice(0, 4096);
+  const intro = start ? buildPayload(start) : { content: null, embeds: [] };
+  const introEmbeds = (intro.embeds || []).slice(0, 9);
+  // Discord caps a message's embeds at 6000 characters in total, so the index gets what the intro leaves.
+  const room = 6000 - introEmbeds.reduce((n, e) => n + EmbedJson.embedLength(e), 0) - LEGEND_TITLE.length - 20;
+  const description = (parts.join('\n').trim() || '_No guides yet._').slice(0, Math.max(0, Math.min(4096, room)));
   const embed = { title: LEGEND_TITLE, description, color: 0x5865f2, footer: { text: `${guides.length} guide${guides.length === 1 ? '' : 's'}` } };
-  const payload = { embeds: [embed] };
+  const payload = { content: intro.content || null, embeds: [...introEmbeds, embed] };
+  const name = start ? START_TITLE : LEGEND_TITLE;
 
   const fresh = guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
+  const linkStart = async (id) => {
+    if (start && start.threadId !== id) await Guide.updateOne({ guildId: guild.id, slug: start.slug }, { $set: { threadId: id, messageId: id } });
+  };
   let thread = await fetchThread(forum, fresh.legendThreadId);
   if (thread) {
     const starter = await thread.fetchStarterMessage().catch(() => null);
     if (starter) {
+      if (thread.name !== name) await thread.setName(name).catch(() => null);
       await starter.edit(payload).catch(() => null);
+      await linkStart(thread.id);
       return;
     }
   }
-  thread = await forum.threads.create({ name: LEGEND_TITLE, message: payload }).catch(() => null);
+  thread = await forum.threads.create({ name, message: payload }).catch(() => null);
   if (thread) {
+    await linkStart(thread.id);
     await thread.pin?.().catch(() => null);
     await thread.setAppliedTags?.([]).catch(() => null);
     await GuildConfig.updateOne({ guildId: guild.id }, { $set: { 'guides.legendThreadId': thread.id, 'guides.legendMessageId': thread.id } }, { upsert: true });
@@ -355,5 +384,6 @@ module.exports = {
   syncEditorChannel,
   cleanSettings,
   saveSettings,
-  LEGEND_TITLE
+  LEGEND_TITLE,
+  isStartHere
 };
