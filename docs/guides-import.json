@@ -384,5 +384,59 @@
         }
       ]
     }
+  },
+  {
+    "title": "Z+ Pet Spending",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "color": 15844367,
+          "description": "This is as luck based as it can get, don’t be discouraged if you don’t get what’s optimal. At 450K spent and perfect luck only netted 10 Stages, this can easily be achieved with more efficient Rebirthing.\n\nKeep in mind all the Stage boosts are temporary, as everyone gets the best combination the Stages will have levelled out again and the only determining factor will be Rebirth efficiency.\n\n**1.** It’s still recommended to Merge in your inventory to achieve your Top 3 pets. DO NOT use your extra 3x pets for excess wings as fuel to upgrade your Top 3 pets otherwise you’ll end up with worse Trip rewards overall.\n\n**2.** Always :Settings: Save before merging pets, if you get a bad combination just Load and save more until you can afford to skip the bad Pet outcome.\n\n**3.** First 2x Z Pets should be Buff and AoE to capitalise on the separate multiplicative effects. A 2nd AoE will only double damage so that can wait.\n\n**4.** Your ZZ Pet should be Buff, if you come across another Z AoE it’s worth it to save it and save another 102800 :Diamond: to replace it as you never know how many tries it’ll take to get another one once you get a ZZZ Buff.\n\n**4A.** If merging into your Z Buff doesn’t give a ZZ Buff you should reload, and now you have to save an EXTRA 204800 Gems to get a 2nd ZZ Pet.\n\n**4B.** If your 2nd ZZ Pet isn’t a buff, you can try merge both ZZ Pets into a ZZZ Pet praying it’s a Buff. If not, then you have to repeat the whole process again.\n\n**5.** After getting a ZZZ Buff you should now have 2x Z AoE. This set up is very convenient with AFKing as they all share the same cooldown timer. This greatly reduces wasted time when abilities don’t align, if you Auto the skills (Buff on the left) you won’t need to actively control.\n\n**6.** Upgrading from 2x Z AoE to 2x ZZx AoE gives ~3.25x more damage, costing at best 204800, this will also throw out your cooldown sync with ZZZ buff making Auto Active stage pushing take longer. I would not advise this for 1-2 Stages gain. Next we will look at skipping ZZ AoE and going straight to ZZZ AoE.\n\n**7.** Upgrading from 2x Z AoE to 2x ZZZ AoE gives ~11.85x more damage, costing at best 614,400, this will STILL throw out your cooldown sync, making Auto Active pushing longer. A 11.85x damage boost is approximately 3-4 Stages.",
+          "title": ":Pet: Z+ Pet Spending",
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Best ZZZ Gun w/ Z Pet Update",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "color": 15548997,
+          "description": ":Blast: Blast is still recommended as the 1st ZZZ Gun for new players.\n\nWith the new pet update scaling with total gun damage. Pierce now provides 2.14x more damage (~1 Stage) over Blast.\n\nThe difference is negligible compared to Rebirth efficiency.\n\n**For new players** you will achieve ZZZ Gun first, followed by ZZZ Fish and then you will focus on Z+ Pets. So Pet skills won’t be a factor for a while, meaning you need Blast to push your Main Stage for more rebirth Gems.\n\n**For established players**, you’ll probably already have a ZZZ Blast, spending 400K :Diamond: Diamonds to get a ZZZ Pierce is an inefficient use of Gems. You’re either better saving for the next update or focusing on Pets.",
+          "title": ":Gun: Best ZZZ Gun w/ Z Pet Update",
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "3x Z Pets vs 1x ZZZ Gun",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "color": 15844367,
+          "description": "- **150K** :Diamond: Gems for upgrading 3x XXX pets to 3x Z Pets (7-8 Stages if you get Buff/AoE/AoE)\n- **200K** :Diamond: Gems for upgrading ZZ gun to ZZZ Gun for 25x DMG (4-5 Stages)\n- Upgrading Pets provide 96 More :Star: gems every Triple 16hr trips over XXX pets.",
+          "title": ":Pet: 3x Z Pets vs 1x ZZZ Gun",
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
   }
 ]
