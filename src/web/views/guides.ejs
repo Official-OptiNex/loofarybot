@@ -75,6 +75,8 @@
             </div>
           </div>
 
+          <label class="field" style="flex-direction:row; align-items:center; gap:0.5rem;"><input type="checkbox" id="inIndex" style="width:auto;"> <span>📌 Include in index <span class="muted" style="font-weight:400;">(shown at the top of the pinned index post instead of as its own post)</span></span></label>
+
           <details id="contentWrap"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Message text above the embeds (optional)</summary>
             <textarea id="content" maxlength="2000" rows="2" placeholder="Shown above the embeds. Mentions here actually ping." oninput="syncPreview()" style="width:100%; margin-top:0.4rem;"></textarea>
           </details>
@@ -114,7 +116,7 @@
         <% if (isAdmin) { %>
         <div class="card">
           <h3 style="margin-top:0;">📥 Import (admin)</h3>
-          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Tag a guide <code>Start Here</code> to show it at the top of the pinned index post instead of as its own post.</p>
+          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Add <code>"inIndex": true</code> to show a guide at the top of the pinned index post instead of as its own post.</p>
           <textarea id="importText" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre;"></textarea>
           <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
             <button class="btn" type="button" onclick="importGuides()">Import</button>
@@ -299,7 +301,7 @@
           </div>
           <div style="flex:1; min-width:0; cursor:pointer;" onclick="editGuide('${esc(g.slug)}')">
             <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(g.title)}</div>
-            <div class="muted" style="font-size:0.74rem;">${(g.tags||[]).map(esc).join(', ')||'—'}</div>
+            <div class="muted" style="font-size:0.74rem;">${g.inIndex?'📌 In index · ':''}${(g.tags||[]).map(esc).join(', ')||'—'}</div>
           </div>
           ${g.threadId?`<a class="btn small secondary" href="https://discord.com/channels/${GUILD}/${g.threadId}" target="_blank" rel="noopener" title="Open post">↗</a>`:''}
           <button class="btn small danger" onclick="deleteGuide('${esc(g.slug)}','${esc(g.title).replace(/'/g,"\\'")}')">✕</button>
@@ -314,14 +316,14 @@
 
     function newGuide(){
       $('slug').value=''; $('title').value=''; state={content:'',embeds:[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}],tags:[]};
-      $('content').value=''; $('editorTitle').textContent='New guide'; $('deleteBtn').style.display='none'; $('editorStatus').textContent='';
+      $('content').value=''; $('inIndex').checked=false; $('editorTitle').textContent='New guide'; $('deleteBtn').style.display='none'; $('editorStatus').textContent='';
       renderTagChips(); renderEmbeds(); syncPreview(); window.scrollTo({top:0,behavior:'smooth'});
     }
     function editGuide(slug){
       const g = GUIDES.find((x)=>x.slug===slug); if(!g) return;
       $('slug').value=g.slug; $('title').value=g.title; state.tags=[...(g.tags||[])];
       bodyToState(g.body||{content:'',embeds:[]}); if(!state.embeds.length) state.embeds=[{title:'',description:'',color:'#5865f2',image:'',thumbnail:'',fields:[]}];
-      $('content').value=state.content; $('editorTitle').textContent='Editing: '+g.title; $('deleteBtn').style.display=''; $('editorStatus').textContent='';
+      $('content').value=state.content; $('inIndex').checked=!!g.inIndex; $('editorTitle').textContent='Editing: '+g.title; $('deleteBtn').style.display=''; $('editorStatus').textContent='';
       renderTagChips(); renderEmbeds(); syncPreview(); window.scrollTo({top:0,behavior:'smooth'});
     }
 
@@ -329,7 +331,7 @@
       const title=$('title').value.trim(); if(!title){ $('editorStatus').textContent='⚠️ Title required.'; return; }
       state.content=$('content').value;
       $('editorStatus').textContent='Saving…';
-      const res = await post('save', { slug: $('slug').value||undefined, title, tags: state.tags, body: stateToBody() });
+      const res = await post('save', { slug: $('slug').value||undefined, title, tags: state.tags, inIndex: $('inIndex').checked, body: stateToBody() });
       if(!res.ok){ $('editorStatus').textContent='❌ '+(res.error||'Failed.'); return; }
       $('editorStatus').textContent='✅ Saved.'; $('slug').value=res.guide.slug; $('editorTitle').textContent='Editing: '+res.guide.title; $('deleteBtn').style.display='';
       await refresh();

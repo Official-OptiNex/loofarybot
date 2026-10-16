@@ -10,10 +10,10 @@ const EmbedJson = require('../../../web/static/js/embed-json');
 
 const LEGEND_TITLE = '📖 Guides Index';
 const START_TITLE = '📖 Start Here — Guides Index';
-// A guide tagged "Start Here" isn't posted on its own: its body is shown at the top of the pinned
-// index post instead, so the forum has one pinned "start here" post rather than several.
+// A guide marked "include in index" (or tagged "Start Here") isn't posted on its own: its body is
+// shown at the top of the pinned index post instead, so the forum has one pinned "start here" post.
 const START_TAG = 'start here';
-const isStartHere = (guide) => (guide?.tags || []).some((t) => String(t).trim().toLowerCase() === START_TAG);
+const isInIndex = (guide) => !!guide?.inIndex || (guide?.tags || []).some((t) => String(t).trim().toLowerCase() === START_TAG);
 
 function guidesSettings(config) {
   const g = (config && config.guides) || {};
@@ -103,7 +103,7 @@ async function fetchThread(forum, id) {
 async function publishGuide(guild, guide, settings) {
   const forum = getForum(guild, settings);
   if (!forum) return { error: 'Set a **forum channel** for guides first (`/guide setup`).' };
-  if (isStartHere(guide)) {
+  if (isInIndex(guide)) {
     // Lives inside the index post: drop any post of its own (e.g. it was just tagged Start Here).
     const { legendThreadId } = guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
     if (guide.threadId && guide.threadId !== legendThreadId) {
@@ -129,11 +129,11 @@ async function publishGuide(guild, guide, settings) {
   return { threadId: thread.id, messageId: thread.id };
 }
 
-async function createGuide(guild, { title, tags = [], body = null, authorId = null, createdBy = null }, settings, { rebuild = true } = {}) {
+async function createGuide(guild, { title, tags = [], body = null, inIndex = false, authorId = null, createdBy = null }, settings, { rebuild = true } = {}) {
   const cleanTitle = String(title || '').trim().slice(0, 100);
   if (!cleanTitle) return { error: 'A guide needs a title.' };
   const slug = await uniqueSlug(guild.id, cleanTitle);
-  const guide = { guildId: guild.id, slug, title: cleanTitle, tags: (tags || []).map(String).slice(0, 5), body: normalizeBody(body), authorId, createdBy };
+  const guide = { guildId: guild.id, slug, title: cleanTitle, tags: (tags || []).map(String).slice(0, 5), body: normalizeBody(body), inIndex: !!inIndex, authorId, createdBy };
   const pub = await publishGuide(guild, guide, settings);
   if (pub.error) return { error: pub.error };
   guide.threadId = pub.threadId;
@@ -148,6 +148,7 @@ async function editGuide(guild, slug, patch, byId, settings, { rebuild = true } 
   if (!guide) return { error: 'No guide by that name.' };
   if (patch.title !== undefined) guide.title = String(patch.title).trim().slice(0, 100) || guide.title;
   if (patch.tags !== undefined) guide.tags = (patch.tags || []).map(String).slice(0, 5);
+  if (patch.inIndex !== undefined) guide.inIndex = !!patch.inIndex;
   if (patch.body !== undefined) {
     guide.body = normalizeBody(patch.body);
     guide.markModified('body');
@@ -208,13 +209,13 @@ async function searchGuides(guildId, text, limit = 25) {
     .slice(0, limit);
 }
 
-/** Rebuilds the pinned "📖 Guides Index" post: the Start Here guide (if any), then every guide grouped by tag, with jump links. */
+/** Rebuilds the pinned "📖 Guides Index" post: guides included in the index first, then every other guide grouped by tag, with jump links. */
 async function rebuildLegend(guild, settings) {
   const forum = getForum(guild, settings);
   if (!forum) return;
   const all = await Guide.find({ guildId: guild.id }).sort({ order: 1, title: 1 }).lean();
-  const start = all.find(isStartHere) || null;
-  const guides = all.filter((g) => !isStartHere(g));
+  const included = all.filter(isInIndex);
+  const guides = all.filter((g) => !isInIndex(g));
   const byTag = {};
   for (const g of guides) {
     const tags = (g.tags || []).length ? g.tags : ['Other'];
@@ -226,18 +227,20 @@ async function rebuildLegend(guild, settings) {
     parts.push(`\n**${tag}**`);
     for (const g of byTag[tag]) parts.push(`• [${g.title}](${link(g)})`);
   }
-  const intro = start ? buildPayload(start) : { content: null, embeds: [] };
-  const introEmbeds = (intro.embeds || []).slice(0, 9);
+  const intros = included.map(buildPayload);
+  const introContent = intros.map((p) => p.content).filter(Boolean).join('\n\n').slice(0, 2000);
+  const introEmbeds = intros.flatMap((p) => p.embeds || []).slice(0, 9);
   // Discord caps a message's embeds at 6000 characters in total, so the index gets what the intro leaves.
   const room = 6000 - introEmbeds.reduce((n, e) => n + EmbedJson.embedLength(e), 0) - LEGEND_TITLE.length - 20;
   const description = (parts.join('\n').trim() || '_No guides yet._').slice(0, Math.max(0, Math.min(4096, room)));
   const embed = { title: LEGEND_TITLE, description, color: 0x5865f2, footer: { text: `${guides.length} guide${guides.length === 1 ? '' : 's'}` } };
-  const payload = { content: intro.content || null, embeds: [...introEmbeds, embed] };
-  const name = start ? START_TITLE : LEGEND_TITLE;
+  const payload = { content: introContent || null, embeds: [...introEmbeds, embed] };
+  const name = included.length ? START_TITLE : LEGEND_TITLE;
 
   const fresh = guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
   const linkStart = async (id) => {
-    if (start && start.threadId !== id) await Guide.updateOne({ guildId: guild.id, slug: start.slug }, { $set: { threadId: id, messageId: id } });
+    const stale = included.filter((g) => g.threadId !== id).map((g) => g.slug);
+    if (stale.length) await Guide.updateMany({ guildId: guild.id, slug: { $in: stale } }, { $set: { threadId: id, messageId: id } });
   };
   let thread = await fetchThread(forum, fresh.legendThreadId);
   if (thread) {
@@ -298,7 +301,7 @@ async function importGuides(guild, items, byId, settings) {
         base.embeds.push({ image: { url: u } });
       }
     }
-    const res = await createGuide(guild, { title, tags: raw.tags || raw.category ? [].concat(raw.tags || raw.category) : [], body: base, authorId: byId, createdBy: byId }, settings, { rebuild: false });
+    const res = await createGuide(guild, { title, tags: raw.tags || raw.category ? [].concat(raw.tags || raw.category) : [], body: base, inIndex: !!(raw.inIndex ?? raw.includeInIndex), authorId: byId, createdBy: byId }, settings, { rebuild: false });
     if (res.error) skipped.push(title);
     else imported.push(title);
   }
@@ -385,5 +388,5 @@ module.exports = {
   cleanSettings,
   saveSettings,
   LEGEND_TITLE,
-  isStartHere
+  isInIndex
 };

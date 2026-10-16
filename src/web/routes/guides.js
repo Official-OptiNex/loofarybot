@@ -43,14 +43,14 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
     textChannels,
     roles,
     forumTags,
-    guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
+    guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
   });
 });
 
 // Fresh guide list (JSON) for refreshes after a save/delete/import.
 router.get('/:guildId/guides/data', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
   const list = await guides.listGuides(req.guild.id);
-  res.json({ ok: true, guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], threadId: g.threadId, body: g.body || { content: '', embeds: [] } })) });
+  res.json({ ok: true, guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } })) });
 });
 
 // Create or edit a guide (editors).
@@ -61,16 +61,17 @@ router.post('/:guildId/guides/save', requireAuth, requireGuildAccess, requirePag
     const title = String(req.body.title || '').trim();
     if (!title) return res.status(400).json({ ok: false, error: 'A title is required.' });
     const tags = Array.isArray(req.body.tags) ? req.body.tags.map(String).filter(Boolean).slice(0, 5) : [];
+    const inIndex = !!req.body.inIndex;
     const body = req.body.body ?? { content: '', embeds: [] };
     const userId = req.session.user.id;
 
     const existing = req.body.slug ? await GuideModel.exists({ guildId: req.guild.id, slug: String(req.body.slug) }) : null;
     const result = existing
-      ? await guides.editGuide(req.guild, String(req.body.slug), { title, tags, body }, userId, s)
-      : await guides.createGuide(req.guild, { title, tags, body, authorId: userId, createdBy: userId }, s);
+      ? await guides.editGuide(req.guild, String(req.body.slug), { title, tags, body, inIndex }, userId, s)
+      : await guides.createGuide(req.guild, { title, tags, body, inIndex, authorId: userId, createdBy: userId }, s);
     if (result.error) return res.status(400).json({ ok: false, error: result.error });
     res.locals.audit = { section: 'Guides', action: existing ? 'Edited a guide' : 'Created a guide', detail: title };
-    res.json({ ok: true, guide: { slug: result.guide.slug, title: result.guide.title, tags: result.guide.tags || [], threadId: result.guide.threadId } });
+    res.json({ ok: true, guide: { slug: result.guide.slug, title: result.guide.title, tags: result.guide.tags || [], inIndex: !!result.guide.inIndex, threadId: result.guide.threadId } });
   } catch (err) {
     console.error('Guide save failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to save the guide.' });

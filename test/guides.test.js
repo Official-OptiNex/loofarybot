@@ -133,6 +133,23 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   const back=await G.getGuide('g','targets'); assert.notEqual(back.threadId,idx.id,'untagged → gets its own post again'); assert.ok(cache.get(back.threadId),'new post exists');
   console.log('✓ start here: merged into the pinned index post');
 
+  // ---- "include in index" option: same as Start Here, works on import, several guides stack in order
+  const nT=threads.length;
+  const imp2=await G.importGuides(guild,[{title:'Mega Guide',inIndex:true,body:'mega intro'},{title:'Legend Box',tags:['Guides'],body:'legend text'}],'u1',s);
+  assert.equal(imp2.imported.length,2);
+  assert.equal(threads.length,nT+1,'only the normal guide got its own post');
+  const mg=await G.getGuide('g','mega guide'); assert.equal(mg.inIndex,true); assert.equal(mg.threadId,idx.id,'in-index guide links to the index post');
+  await G.editGuide(guild,'legend-box',{inIndex:true},'u1',s);
+  const p2=JSON.stringify(idx.starter.payload);
+  assert.ok(p2.indexOf('mega intro')>=0 && p2.indexOf('legend text')>=0 && p2.indexOf('legend text')<p2.indexOf('Guides Index'),'both included guides sit above the list');
+  assert.match(idx.name,/Start Here/);
+  await G.editGuide(guild,'mega-guide',{inIndex:false},'u1',s);
+  const mg2=await G.getGuide('g','mega guide'); assert.notEqual(mg2.threadId,idx.id,'unticked → own post again');
+  assert.doesNotMatch(JSON.stringify(idx.starter.payload),/mega intro/,'removed from the index');
+  await G.deleteGuide(guild,'mega-guide',s); await G.deleteGuide(guild,'legend-box',s);
+  assert.equal(idx.deleted,false,'index post survives'); assert.equal(idx.name,'📖 Guides Index');
+  console.log('✓ include in index: flag, import, multiple, untick');
+
   // ---- private editor channel: created, @everyone denied view, editor role allowed
   const ec=await G.ensureEditorChannel(guild,s,{});
   assert.ok(!ec.error,ec.error); assert.equal(ec.channel.name,'guide-editors');

@@ -1,9 +1,8 @@
 [
   {
     "title": "A Mega Guide",
-    "tags": [
-      "Start Here"
-    ],
+    "tags": [],
+    "inIndex": true,
     "body": {
       "embeds": [
         {
