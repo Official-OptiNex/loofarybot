@@ -17,46 +17,53 @@ async function settingsOf(guild) {
 
 // The Guides dashboard page (admins + guide-editor roles; editors see only this page).
 router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
-  const guild = req.guild;
-  const s = await settingsOf(guild);
-  const forum = s.forumChannelId && guild.channels.cache.get(s.forumChannelId);
-  const forums = guild.channels.cache
-    .filter((c) => c.type === ChannelType.GuildForum)
-    .map((c) => ({ id: c.id, name: c.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const textChannels = guild.channels.cache
-    .filter((c) => c.type === ChannelType.GuildText)
-    .map((c) => ({ id: c.id, name: c.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const roles = guild.roles.cache
-    .filter((r) => r.id !== guild.id && !r.managed)
-    .map((r) => ({ id: r.id, name: r.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const forumTags = forum ? (forum.availableTags || []).map((t) => t.name) : [];
-  // For the visual editor: server emojis as images, channel/role names for mention pills.
-  const editorData = {
-    emojis: guild.emojis.cache.map((e) => ({ id: e.id, name: e.name, animated: !!e.animated, url: e.imageURL({ size: 48 }) })),
-    channels: guild.channels.cache.filter((c) => c.isTextBased?.() && !c.isThread?.()).map((c) => ({ id: c.id, name: c.name })),
-    roles
-  };
-  const list = await guides.listGuides(guild.id);
+  try {
+    const guild = req.guild;
+    const s = await settingsOf(guild);
+    const forum = s.forumChannelId && guild.channels.cache.get(s.forumChannelId);
+    const forums = guild.channels.cache
+      .filter((c) => c.type === ChannelType.GuildForum)
+      .map((c) => ({ id: c.id, name: c.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const textChannels = guild.channels.cache
+      .filter((c) => c.type === ChannelType.GuildText)
+      .map((c) => ({ id: c.id, name: c.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const roles = guild.roles.cache
+      .filter((r) => r.id !== guild.id && !r.managed)
+      .map((r) => ({ id: r.id, name: r.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const forumTags = forum ? (forum.availableTags || []).map((t) => t.name) : [];
+    // For the visual editor: server emojis as images, channel/role names for mention pills.
+    const editorData = {
+      emojis: guild.emojis.cache.map((e) => ({ id: e.id, name: e.name, animated: !!e.animated, url: `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? 'gif' : 'png'}?size=48` })),
+      channels: guild.channels.cache.filter((c) => c.name && c.type !== ChannelType.GuildCategory && !c.isThread?.()).map((c) => ({ id: c.id, name: c.name })),
+      roles
+    };
+    const list = await guides.listGuides(guild.id);
 
-  res.render('guides', {
-    guild,
-    isAdmin: isAdmin(req),
-    settings: s,
-    forums,
-    textChannels,
-    roles,
-    forumTags,
-    editorData,
-    guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
-  });
+    res.render('guides', {
+      guild,
+      isAdmin: isAdmin(req),
+      settings: s,
+      forums,
+      textChannels,
+      roles,
+      forumTags,
+      editorData,
+      guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
+    });
+  } catch (err) {
+    // Without this an error here leaves the browser loading forever.
+    console.error('Guides page failed:', err);
+    res.status(500).send('The Guides page failed to load — please try again. (The error is in the bot logs.)');
+  }
 });
 
 // Fresh guide list (JSON) for refreshes after a save/delete/import.
 router.get('/:guildId/guides/data', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
-  const list = await guides.listGuides(req.guild.id);
+  const list = await guides.listGuides(req.guild.id).catch((err) => (console.error('Guide list failed:', err), null));
+  if (!list) return res.status(500).json({ ok: false, error: 'Failed to load guides.' });
   res.json({ ok: true, guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } })) });
 });
 

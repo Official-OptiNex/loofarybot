@@ -294,6 +294,13 @@
   <script id="forumTagsData" type="application/json"><%- JSON.stringify(forumTags).replace(/</g, '\\u003c') %></script>
   <script id="editorData" type="application/json"><%- JSON.stringify(editorData).replace(/</g, '\\u003c') %></script>
   <script id="indexData" type="application/json"><%- JSON.stringify(settings.index || {}).replace(/</g, '\\u003c') %></script>
+  <script>
+    // Shows a script failure on the page instead of leaving a half-working editor.
+    window.addEventListener('error', (e) => {
+      const box = document.getElementById('editorStatus');
+      if (box) box.textContent = '⚠️ The editor hit an error: ' + (e.message || 'unknown') + ' — try a hard refresh (Ctrl+Shift+R).';
+    });
+  </script>
   <script src="/js/embed-json.js"></script>
   <script src="/js/visual-md.js"></script>
   <script>
