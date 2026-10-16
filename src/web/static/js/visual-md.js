@@ -58,7 +58,7 @@ window.VisualMD = (function () {
       if ((m = rest.match(/^<#(\d+)>/))) { flush(); const c = data.channels.find((x) => x.id === m[1]); out += atom(m[0], `#${esc(c ? c.name : 'channel')}`, 'v-atom mention-pill'); i += m[0].length; continue; }
       if ((m = rest.match(/^<(t:\d+(?::[tTdDfFR])?|\/[\w -]+:\d+)>/))) { flush(); out += atom(m[0], esc(m[0]), 'v-atom mention-pill'); i += m[0].length; continue; }
       if ((m = rest.match(/^:(\w{2,32}):/)) && findEmoji(m[1])) { flush(); const e = findEmoji(m[1]); out += emojiAtom(emojiTag(e), e.name, e.id); i += m[0].length; continue; }
-      if ((m = rest.match(/^\[((?:[^\[\]\\]|\\.)+)\]\((<?https?:\/\/[^\s)>]+>?)\)/))) {
+      if ((m = rest.match(/^\[((?:[^\[\]\\]|\\.)+)\]\((<?(?:https?:\/\/|guide:)[^\s)>]+>?)\)/))) {
         flush(); out += `<a href="${esc(m[2].replace(/^<|>$/g, ''))}" data-href="${esc(m[2])}">${inlineToHtml(m[1])}</a>`; i += m[0].length; continue;
       }
       if ((m = rest.match(/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/))) { flush(); out += `<code data-m="${m[1]}">${esc(m[2])}</code>`; i += m[0].length; continue; }

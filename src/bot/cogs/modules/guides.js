@@ -95,9 +95,32 @@ function normalizeBody(body) {
   return EmbedJson.normalizeMessage(body || {});
 }
 
+// Links between guides are stored as [text](guide:slug) — guide:index is the pinned index post — and
+// become real post links when published, so they survive posts being recreated.
+const GUIDE_LINK = /\[((?:[^\[\]\\]|\\.)+)\]\(<?guide:([\w-]+)>?\)/g;
+const hasGuideLinks = (body) => /\(<?guide:[\w-]+>?\)/.test(JSON.stringify(body || {}));
+
+/** slug → post url for every guide (plus 'index'); guides shown inside the index link to it. */
+async function guideLinks(guild) {
+  const [all, cfg] = await Promise.all([Guide.find({ guildId: guild.id }, { slug: 1, threadId: 1 }).lean(), GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean()]);
+  const url = (id) => (id ? `https://discord.com/channels/${guild.id}/${id}` : null);
+  const map = { index: url(guidesSettings(cfg).legendThreadId) };
+  for (const g of all) map[g.slug] = url(g.threadId);
+  return map;
+}
+
+/** Swaps guide:slug links for post urls (an unknown or unposted guide leaves just the link text). */
+function resolveGuideLinks(value, links) {
+  if (!links) return value;
+  if (typeof value === 'string') return value.replace(GUIDE_LINK, (m, text, slug) => (links[slug] ? `[${text}](${links[slug]})` : text));
+  if (Array.isArray(value)) return value.map((v) => resolveGuideLinks(v, links));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveGuideLinks(v, links)]));
+  return value;
+}
+
 /** The message payload for a guide's forum post. Never empty (Discord rejects an empty post). */
-function buildPayload(guide) {
-  const body = guide.body || {};
+function buildPayload(guide, links = null) {
+  const body = resolveGuideLinks(guide.body || {}, links);
   const content = (body.content || '').slice(0, 2000);
   const embeds = Array.isArray(body.embeds) ? body.embeds : [];
   if (!content.trim() && !embeds.length) return { content: `**${(guide.title || 'Guide').slice(0, 240)}**\n*(No content yet — edit this guide to add some.)*` };
@@ -138,7 +161,7 @@ async function publishGuide(guild, guide, settings) {
     }
     return { threadId: legendThreadId, messageId: legendThreadId };
   }
-  const payload = buildPayload(guide);
+  const payload = buildPayload(guide, await guideLinks(guild));
   const appliedTags = mapTags(forum, guide.tags);
 
   let thread = await fetchThread(forum, guide.threadId);
@@ -165,7 +188,10 @@ async function createGuide(guild, { title, tags = [], body = null, inIndex = fal
   guide.threadId = pub.threadId;
   guide.messageId = pub.messageId;
   const doc = await Guide.create(guide);
-  if (rebuild) await rebuildLegend(guild, settings);
+  if (rebuild) {
+    await rebuildLegend(guild, settings);
+    await refreshLinkingGuides(guild, settings, [slug]);
+  }
   return { guide: doc.toObject ? doc.toObject() : doc };
 }
 
@@ -201,6 +227,7 @@ async function deleteGuide(guild, slug, settings) {
   }
   await Guide.deleteOne({ guildId: guild.id, slug });
   await rebuildLegend(guild, settings);
+  await refreshLinkingGuides(guild, settings, [slug]);
   return { ok: true, title: guide.title };
 }
 
@@ -255,7 +282,8 @@ async function rebuildLegend(guild, settings) {
     parts.push(`\n**${tag}**`);
     for (const g of byTag[tag]) parts.push(`• [${g.title}](${link(g)})`);
   }
-  const intros = included.map(buildPayload);
+  const links = await guideLinks(guild);
+  const intros = included.map((g) => buildPayload(g, links));
   const introContent = intros.map((p) => p.content).filter(Boolean).join('\n\n').slice(0, 2000);
   const introEmbeds = intros.flatMap((p) => p.embeds || []).slice(0, 9);
   // Discord caps a message's embeds at 6000 characters in total, so the index gets what the intro leaves.
@@ -310,11 +338,28 @@ function resolveEmojis(guild, value) {
   return walk(value);
 }
 
-/** Bulk import (dashboard, admins): [{ title, tags, body, images }]. Publishes each + one legend rebuild. */
+/** Re-publishes guides whose guide:links point at `slugs` (all linking guides when omitted), e.g. after a post is created. */
+async function refreshLinkingGuides(guild, settings, slugs = null) {
+  const all = await Guide.find({ guildId: guild.id }).lean();
+  const wanted = slugs && new Set(slugs);
+  for (const g of all) {
+    if (!hasGuideLinks(g.body) || isInIndex(g)) continue;
+    if (wanted && ![...JSON.stringify(g.body).matchAll(/guide:([\w-]+)/g)].some((m) => wanted.has(m[1]))) continue;
+    await publishGuide(guild, g, settings);
+  }
+}
+
+/**
+ * Bulk import (dashboard, admins): [{ title, tags, body, images, inIndex }]. A guide whose title matches
+ * an existing one updates it in place (same post); new guides are added after the rest in file order.
+ */
 async function importGuides(guild, items, byId, settings) {
   const list = Array.isArray(items) ? items.slice(0, 200) : [];
   const imported = [];
+  const updated = [];
   const skipped = [];
+  const existing = await Guide.find({ guildId: guild.id }, { slug: 1, title: 1, order: 1 }).lean();
+  let nextOrder = existing.reduce((n, g) => Math.max(n, (g.order || 0) + 1), 0);
   for (const raw of list) {
     const title = String(raw?.title || '').trim();
     if (!title) {
@@ -332,12 +377,24 @@ async function importGuides(guild, items, byId, settings) {
         base.embeds.push({ image: { url: u } });
       }
     }
-    const res = await createGuide(guild, { title, tags: raw.tags || raw.category ? [].concat(raw.tags || raw.category) : [], body: base, inIndex: !!(raw.inIndex ?? raw.includeInIndex), authorId: byId, createdBy: byId }, settings, { rebuild: false });
+    const fields = { title, tags: raw.tags || raw.category ? [].concat(raw.tags || raw.category) : [], body: base, inIndex: !!(raw.inIndex ?? raw.includeInIndex) };
+    const same = existing.find((g) => g.title.trim().toLowerCase() === title.toLowerCase());
+    if (same) {
+      const res = await editGuide(guild, same.slug, fields, byId, settings, { rebuild: false });
+      (res.error ? skipped : updated).push(title);
+      continue;
+    }
+    const res = await createGuide(guild, { ...fields, authorId: byId, createdBy: byId }, settings, { rebuild: false });
     if (res.error) skipped.push(title);
-    else imported.push(title);
+    else {
+      imported.push(title);
+      await Guide.updateOne({ guildId: guild.id, slug: res.guide.slug }, { $set: { order: nextOrder++ } });
+    }
   }
   await rebuildLegend(guild, settings);
-  return { imported, skipped };
+  // Links to guides created later in the file couldn't resolve when the earlier ones were posted.
+  await refreshLinkingGuides(guild, settings);
+  return { imported, updated, skipped };
 }
 
 /** Creates (or locks an existing) private channel only guide editors + admins can see. */
@@ -402,6 +459,7 @@ module.exports = {
   isEditor,
   normalizeBody,
   buildPayload,
+  resolveGuideLinks,
   mapTags,
   publishGuide,
   createGuide,

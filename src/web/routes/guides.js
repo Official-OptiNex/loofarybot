@@ -123,9 +123,9 @@ router.post('/:guildId/guides/import', requireAuth, requireGuildAccess, requireP
       }
     }
     if (!Array.isArray(items)) return res.status(400).json({ ok: false, error: 'Import expects a JSON array of guides.' });
-    const { imported, skipped } = await guides.importGuides(req.guild, items, req.session.user.id, s);
-    res.locals.audit = { section: 'Guides', action: `Imported ${imported.length} guide(s)`, detail: imported.slice(0, 5).join(', ') };
-    res.json({ ok: true, imported, skipped });
+    const { imported, updated, skipped } = await guides.importGuides(req.guild, items, req.session.user.id, s);
+    res.locals.audit = { section: 'Guides', action: `Imported ${imported.length} guide(s), updated ${updated.length}`, detail: [...imported, ...updated].slice(0, 5).join(', ') };
+    res.json({ ok: true, imported, updated, skipped });
   } catch (err) {
     console.error('Guide import failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to import guides.' });
