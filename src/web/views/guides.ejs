@@ -249,7 +249,7 @@
         <% if (isAdmin) { %>
         <div class="card">
           <h3 style="margin-top:0;">📥 Import (admin)</h3>
-          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Add <code>"inIndex": true</code> to show a guide at the top of the pinned index post instead of as its own post.</p>
+          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Add <code>"inIndex": true</code> to show a guide at the top of the pinned index post instead of as its own post. A guide with the same title as an existing one is <strong>updated</strong> in place. Link to another guide with <code>[text](guide:its-slug)</code> (or <code>guide:index</code>).</p>
           <textarea id="importText" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre;"></textarea>
           <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
             <button class="btn" type="button" onclick="importGuides()">Import</button>
@@ -664,7 +664,9 @@
           if (url !== null) { e.url = /^https?:\/\/\S+$/.test(url.trim()) ? url.trim() : ''; dirty(); renderVisual(); flash(e.url ? '🔗 Title is now a link.' : 'Title link removed.'); }
           return;
         }
-        const url = prompt('Link to (https://…)', 'https://'); if (url && /^https?:\/\/\S+$/.test(url.trim())) runTool('link', null, url.trim()); return;
+        const slugs = GUIDES.map((g) => g.slug).join(', ');
+        const url = prompt(`Link to a web address (https://…) or another guide (guide:slug).\nGuides: guide:index, ${slugs}`, 'https://');
+        if (url && /^(https?:\/\/\S+|guide:[\w-]+)$/.test(url.trim())) runTool('link', null, url.trim()); return;
       }
       runTool(b.dataset.cmd);
     });
@@ -799,7 +801,7 @@
       let items; try{ items=JSON.parse($('importText').value);}catch(e){ $('importStatus').textContent='⚠️ Not valid JSON: '+e.message; return; }
       $('importStatus').textContent='Importing…';
       const res=await post('import',{guides:items}); if(!res.ok){ $('importStatus').textContent='❌ '+(res.error||'Failed.'); return; }
-      $('importStatus').textContent=`✅ Imported ${res.imported.length}${res.skipped.length?` · ${res.skipped.length} skipped`:''}.`; $('importText').value=''; await refresh();
+      $('importStatus').textContent=`✅ Added ${res.imported.length}${res.updated?.length?` · updated ${res.updated.length}`:''}${res.skipped.length?` · ${res.skipped.length} skipped`:''}.`; $('importText').value=''; await refresh();
     }
     async function saveSettings(){
       const editorRoleIds=[...document.querySelectorAll('#editorRoles input[type=checkbox]:checked')].map((c)=>c.value);

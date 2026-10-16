@@ -163,6 +163,33 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.equal(idx.name,'📖 Guides Index','cleared → defaults again');
   console.log('✓ index post: name, title, colour, intro, footer');
 
+  // ---- guide:slug links resolve to post links (and fix themselves once a later guide is posted)
+  const nPosts=threads.length;
+  const lk=await G.importGuides(guild,[
+    {title:'Link A',tags:['Guides'],body:'see [B](guide:link-b), [home](guide:index) and [gone](guide:nope)'},
+    {title:'Link B',tags:['FAQs'],body:'back to [A](<guide:link-a>)'}
+  ],'u1',await freshSettings());
+  assert.deepEqual(lk.imported,['Link A','Link B']); assert.equal(threads.length,nPosts+2);
+  const la=await G.getGuide('g','link a'), lb=await G.getGuide('g','link b');
+  const aPost=JSON.stringify(cache.get(la.threadId).starter.payload), bPost=JSON.stringify(cache.get(lb.threadId).starter.payload);
+  assert.ok(aPost.includes(`[B](https://discord.com/channels/g/${lb.threadId})`),'forward link resolved after the later guide was posted');
+  assert.ok(aPost.includes(`[home](https://discord.com/channels/g/${idx.id})`),'guide:index → the pinned post');
+  assert.ok(aPost.includes(' and gone'),'unknown guide → plain text');
+  assert.ok(bPost.includes(`[A](https://discord.com/channels/g/${la.threadId})`),'<guide:slug> form works too');
+  assert.match(JSON.stringify(la.body),/guide:link-b/,'stored body keeps the guide: link');
+  // re-import with the same title updates in place (same post), new ones go after in file order
+  const re=await G.importGuides(guild,[{title:'link a',tags:['Guides'],body:'updated A'},{title:'Link C',body:'c'}],'u1',await freshSettings());
+  assert.deepEqual(re.updated,['link a']); assert.deepEqual(re.imported,['Link C']);
+  assert.equal(threads.length,nPosts+3,'only Link C got a new post');
+  assert.match(JSON.stringify(cache.get(la.threadId).starter.payload),/updated A/,'same post edited');
+  const ord=(await G.listGuides('g')).map((x)=>x.slug); assert.ok(ord.indexOf('link-c')>ord.indexOf('link-b'),'new guide added after the rest');
+  // deleting a linked guide turns links to it back into plain text
+  await G.importGuides(guild,[{title:'Link A',tags:['Guides'],body:'see [C](guide:link-c)'}],'u1',await freshSettings());
+  await G.deleteGuide(guild,'link-c',await freshSettings());
+  assert.match(JSON.stringify(cache.get(la.threadId).starter.payload),/see C/,'link to a deleted guide → plain text');
+  for (const sl of ['link-a','link-b']) await G.deleteGuide(guild,sl,await freshSettings());
+  console.log('✓ guide links + import updates in place');
+
   // ---- private editor channel: created, @everyone denied view, editor role allowed
   const ec=await G.ensureEditorChannel(guild,s,{});
   assert.ok(!ec.error,ec.error); assert.equal(ec.channel.name,'guide-editors');
