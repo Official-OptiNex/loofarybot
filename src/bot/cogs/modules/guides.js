@@ -229,6 +229,24 @@ async function rebuildLegend(guild, settings) {
   }
 }
 
+/** Swaps :Name: shortcodes for the server's custom emojis (<:Name:id>), exact name first, then any case. */
+function resolveEmojis(guild, value) {
+  const emojis = guild.emojis?.cache;
+  if (!emojis?.size) return value;
+  const find = (name) => emojis.find((e) => e.name === name) || emojis.find((e) => e.name?.toLowerCase() === name.toLowerCase());
+  const swap = (text) => text.replace(/(?<!<a?):(\w{2,32}):(?!\d)/g, (m, name) => {
+    const e = find(name);
+    return e ? `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>` : m;
+  });
+  const walk = (v) => {
+    if (typeof v === 'string') return swap(v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === 'url' ? x : walk(x)]));
+    return v;
+  };
+  return walk(value);
+}
+
 /** Bulk import (dashboard, admins): [{ title, tags, body, images }]. Publishes each + one legend rebuild. */
 async function importGuides(guild, items, byId, settings) {
   const list = Array.isArray(items) ? items.slice(0, 200) : [];
@@ -241,7 +259,7 @@ async function importGuides(guild, items, byId, settings) {
       continue;
     }
     // Merge any image URLs into the body as extra embeds, after normalising the body.
-    const base = normalizeBody(raw.body);
+    const base = normalizeBody(resolveEmojis(guild, raw.body));
     const images = (Array.isArray(raw.images) ? raw.images : []).filter((u) => /^https?:\/\/\S+$/i.test(String(u)));
     if (images.length) {
       base.embeds = base.embeds || [];
@@ -332,6 +350,7 @@ module.exports = {
   searchGuides,
   rebuildLegend,
   importGuides,
+  resolveEmojis,
   ensureEditorChannel,
   syncEditorChannel,
   cleanSettings,
