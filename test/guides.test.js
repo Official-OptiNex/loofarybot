@@ -87,6 +87,14 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.match(JSON.stringify(faq.body),/a\.png/,'image URL merged into the FAQ body');
   console.log('✓ import: bulk create, images merged, bad rows skipped');
 
+  // ---- import: :Name: shortcodes become the server's custom emojis (exact case wins, unknown left alone)
+  guild.emojis={cache:new Collection([['e1',{id:'e1',name:'RaidGem',animated:false}],['e2',{id:'e2',name:'raidgem',animated:false}],['e3',{id:'e3',name:'Diamond',animated:false}]])};
+  const em=G.resolveEmojis(guild,{embeds:[{description:':raidgem: :RaidGem: :diamond: :nope: <:Diamond:e3> 6:21:30',thumbnail:{url:'https://e.com/:Diamond:.png'}}]});
+  assert.equal(em.embeds[0].description,'<:raidgem:e2> <:RaidGem:e1> <:Diamond:e3> :nope: <:Diamond:e3> 6:21:30','shortcodes resolved, existing emoji tags untouched');
+  assert.equal(em.embeds[0].thumbnail.url,'https://e.com/:Diamond:.png','URLs are never rewritten');
+  delete guild.emojis;
+  console.log('✓ import: emoji shortcodes resolved');
+
   // ---- reorder: manual order drives listGuides + the legend
   const slugsBefore=(await G.listGuides('g')).map((x)=>x.slug);
   const reversed=[...slugsBefore].reverse();
