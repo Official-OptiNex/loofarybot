@@ -150,6 +150,19 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.equal(idx.deleted,false,'index post survives'); assert.equal(idx.name,'📖 Guides Index');
   console.log('✓ include in index: flag, import, multiple, untick');
 
+  // ---- index post look: name, title, colour, intro above the list, footer with {count}
+  assert.deepEqual(G.cleanIndex({color:'#ff0000',name:'x'.repeat(150),intro:'  hi  '}),{name:'x'.repeat(100),title:'',color:0xff0000,intro:'hi',footer:''},'cleaned + capped');
+  await G.saveIndex(guild,{name:'📖 Start Here',title:'Welcome!',color:'#00ff00',intro:'New? read this',footer:'{count} total'},await freshSettings());
+  const look=JSON.stringify(idx.starter.payload);
+  assert.equal(idx.name,'📖 Start Here','custom post name');
+  assert.match(look,/Welcome!/); assert.match(look,/"color":65280/);
+  assert.ok(look.indexOf('New? read this')<look.indexOf('Targets'),'intro sits above the guide list');
+  assert.match(look,/\d+ guides? total/,'footer {count} filled in');
+  assert.equal((await freshSettings()).index.title,'Welcome!','stored');
+  await G.saveIndex(guild,{},await freshSettings());
+  assert.equal(idx.name,'📖 Guides Index','cleared → defaults again');
+  console.log('✓ index post: name, title, colour, intro, footer');
+
   // ---- private editor channel: created, @everyone denied view, editor role allowed
   const ec=await G.ensureEditorChannel(guild,s,{});
   assert.ok(!ec.error,ec.error); assert.equal(ec.channel.name,'guide-editors');

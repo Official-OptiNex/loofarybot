@@ -33,6 +33,12 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
     .map((r) => ({ id: r.id, name: r.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const forumTags = forum ? (forum.availableTags || []).map((t) => t.name) : [];
+  // For the visual editor: server emojis as images, channel/role names for mention pills.
+  const editorData = {
+    emojis: guild.emojis.cache.map((e) => ({ id: e.id, name: e.name, animated: !!e.animated, url: e.imageURL({ size: 48 }) })),
+    channels: guild.channels.cache.filter((c) => c.isTextBased?.() && !c.isThread?.()).map((c) => ({ id: c.id, name: c.name })),
+    roles
+  };
   const list = await guides.listGuides(guild.id);
 
   res.render('guides', {
@@ -43,6 +49,7 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
     textChannels,
     roles,
     forumTags,
+    editorData,
     guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
   });
 });
@@ -115,6 +122,20 @@ router.post('/:guildId/guides/import', requireAuth, requireGuildAccess, requireP
   } catch (err) {
     console.error('Guide import failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to import guides.' });
+  }
+});
+
+// The pinned index post's look (editors): post name, title, colour, intro text, footer.
+router.post('/:guildId/guides/index', requireAuth, requireGuildAccess, requirePage('guides'), auditTrail, async (req, res) => {
+  try {
+    const s = await settingsOf(req.guild);
+    if (!s.forumChannelId) return res.status(400).json({ ok: false, error: 'An admin needs to pick a forum channel first (Settings below).' });
+    const { index } = await guides.saveIndex(req.guild, req.body || {}, s);
+    res.locals.audit = { section: 'Guides', action: 'Edited the index post', detail: index.name || index.title || '' };
+    res.json({ ok: true, index });
+  } catch (err) {
+    console.error('Guide index save failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to save the index post.' });
   }
 });
 
