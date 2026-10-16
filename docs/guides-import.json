@@ -1,0 +1,953 @@
+[
+  {
+    "title": "Start Here — Game Guide",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":loofary: Welcome to the Game Guide",
+          "description": "This guide set is a **work in progress**. It covers every game mode and system, plus *why* certain decisions are made — so you can learn the reasoning and make your own calls for your specific situation.\n\n**What's covered**\n:Settings: Legend: icons, currencies & stats\n:Power: Main Stage • :Play: Play Stage • :Money: Money Upgrades\n:Gun: Guns • :Skin: Skins • :Mission: Missions\n:Rebirth: Rebirth (Stage 3) • :Diamond: Mine (Stage 4) • :Fish: Fish (Stage 6)\n:Boss: Boss (Stage 10) • :Hunt: Hunt (Stage 12) • :Pet: Pets (Stage 12)\n:Trip: Trips (Stage 35) • :Raid: Raid (Stage 40)\n:Diamond: Earning Diamonds • Diamond Spending Guide\n:Money: Real Money Purchases • Whale Spending Guide\n\nUse the **📖 Guides Index** post or `/guide` to jump to any section.\nGot questions? Check the [📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012451073589349).",
+          "color": 5793266,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Legend",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Settings: Legend",
+          "description": "A quick reference for every icon, currency and stat used in these guides.",
+          "fields": [
+            {
+              "name": ":Diamond: Diamond",
+              "value": "Useful currency for buying Guns, Fish and Skins.\n**Source:** Mine, Boss & Play Stages, Daily Login, Season rewards",
+              "inline": true
+            },
+            {
+              "name": ":Money: Money",
+              "value": "Used to buy Money Upgrades.\n**Source:** Destroying trees in the Main Stage",
+              "inline": true
+            },
+            {
+              "name": ":Power: Power",
+              "value": "The amount of damage you do; increasing it directly increases your damage.",
+              "inline": true
+            },
+            {
+              "name": ":Speed: ATK Speed",
+              "value": "How fast your cats attack. There is a **hard cap** on how fast it can go.",
+              "inline": true
+            },
+            {
+              "name": ":CritDamage: Crit Damage",
+              "value": "Extra damage dealt when a critical hit occurs.",
+              "inline": true
+            },
+            {
+              "name": ":CritRate: Crit Rate",
+              "value": "Chance to land a critical hit, maxes out at **100%**.\n**Source:** Fish",
+              "inline": true
+            },
+            {
+              "name": ":Movement: Movement Speed",
+              "value": "How fast your cats move.\n**Source:** Pets, Trip Abilities",
+              "inline": true
+            }
+          ],
+          "color": 5793266
+        },
+        {
+          "title": "Gems & Items",
+          "fields": [
+            {
+              "name": ":Hunt: Hunt Gems",
+              "value": "Used to summon Pets.\n**Source:** Hunt",
+              "inline": true
+            },
+            {
+              "name": ":Trip: Trip Wings",
+              "value": "Used to send Pets on Trips. Max **20**, regenerates 1 every **4 hours**.",
+              "inline": true
+            },
+            {
+              "name": ":Green: Forest Gem",
+              "value": "Upgrades Forest Abilities: Power, Rebirth, Skip.\n**Source:** Forest Trips",
+              "inline": true
+            },
+            {
+              "name": ":Orange: Desert Gem",
+              "value": "Upgrades Desert Abilities: Money, Idle Time, Skip.\n**Source:** Desert Trips",
+              "inline": true
+            },
+            {
+              "name": ":Blue: Glacier Gem",
+              "value": "Upgrades Glacier Abilities: Crit Damage, Movement Speed, Skip.\n**Source:** Glacier Trips",
+              "inline": true
+            },
+            {
+              "name": ":Star: Star Gem",
+              "value": "Upgrades all Trip Abilities.\n**Source:** Season rewards, VIP Pass",
+              "inline": true
+            },
+            {
+              "name": ":RaidGem: Raid Gem",
+              "value": "Upgrades Enhance (Gun) Slots.\n**Source:** Raid",
+              "inline": true
+            }
+          ],
+          "color": 5793266
+        },
+        {
+          "title": "Menus (top left corner)",
+          "description": ":Settings: **Settings:** Save and load files, contact support and adjust sound/vibrations.\n:Daily: **Daily Login:** A bonus every day you log in; resets after 7 days.\n:Trophy: **Leaderboard:** See how your max Main Stage compares with everyone else. Try to reach the **Top 30**!",
+          "color": 5793266,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Main Stage",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Power: Main Stage",
+          "description": "Defeat the trees within **3 minutes** and climb Stages to unlock content and top the leaderboard.\n\n**How Stages work**\nEach Stage has **5 Substages**: `1-1 → 1-2 → 1-3 → 1-4 → 1-5 → 2-1`. Every few Stages the tree design changes — this is purely cosmetic.\n\n**Tree types**\nThere are 3 types of trees: **A**, **B** and **C**. B and C trees have roughly **2x** and **3x** more health. Higher Substages have more trees in total and more B & C trees, so you'll usually fail somewhere between Substage 3 and 5. Tree health does **not** change between Substages.\n\n**Golden Tree**\nAt the end of Substage 5 there's a Golden Tree with far more health than regular trees. Defeat it in time to move on to the next Stage, where tree health increases.",
+          "fields": [
+            {
+              "name": "💡 When to push vs. Rebirth",
+              "value": "Push your highest Stage before Rebirthing — it increases your :Rebirth: Rebirth Gems, which snowballs your growth. A quick check: if the progress bar is past **50%** before the timer hits halfway, you can clear it.\n\n**Active play:** It may be more efficient to Rebirth once a Substage takes ~50% of the timer. If it takes 1 hour to get back to Max Stage and 15 minutes of slow clearing only gives +5% Rebirth Gems, Rebirth earlier and more often.\n\n**Mostly idle:** Definitely push your max Stage so you claim bigger rewards when you come back.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012482845450354)",
+              "inline": false
+            }
+          ],
+          "color": 5763719,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Play Stage",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Play: Play Stage",
+          "description": "You have **1 minute** to clear the trees. Beating the 1st stage unlocks :Gun: **Guns** and reveals the rest of the unlockable content.\n\n:Money: **Upgrades DO carry over** into this mode, so do these Stages while you're at your Max Stage with your highest Upgrades.\n\nYou should be able to clear the same Play Stage as your Max Stage.\n\n**Reward:** 120 :Diamond: per Stage (with ads).\n\n[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012499446763603)",
+          "color": 5763719,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Money Upgrades",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Money: Money Upgrades",
+          "description": "You earn :Money: Money by destroying trees in the Main Stage. It's spent on 3 upgrades: :Power: **Power**, :Speed: **ATK SPD** and :Money: **Money**.\n\n⚠️ These upgrades **RESET** when you Rebirth.\n\n**Priority:** :Power: Power → :Money: Money → :Speed: ATK SPD",
+          "fields": [
+            {
+              "name": "💡 Quick-upgrade trick",
+              "value": "Instead of holding your finger down, **Save** the game (:Settings: top left), force-quit the app and come back in 1–2 minutes. Your Money Upgrades will automatically max out to the highest level you can afford.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012502118273045)",
+              "inline": false
+            }
+          ],
+          "color": 16705372,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Guns",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Gun: Guns",
+          "description": "Summon and merge Guns with :Diamond:. There are **5 types** of gun, each behaving differently.\n\nYou can equip **3 guns**: you control the cat in slot 1, and the other 2 create cats that follow you around.",
+          "fields": [
+            {
+              "name": ":Blast: Which gun is best?",
+              "value": "**Blast** is currently the best for Main Stages (both climbing back up and pushing max stage), and **Pierce** for Bosses.\n\nHowever, **always merge when you can** — the power gain far outweighs any small boost between gun types of the same tier.",
+              "inline": false
+            },
+            {
+              "name": ":Diamond: Mine exception",
+              "value": "Blast is the best weapon in the Mine. It can be worth keeping **3x of your lowest-ranked Blasts** to maximise Mine rewards.",
+              "inline": false
+            },
+            {
+              "name": "🔒 Lock",
+              "value": "Lock a Gun to prevent accidentally merging it.",
+              "inline": true
+            },
+            {
+              "name": "🗄️ Vault",
+              "value": "Store extra weapons here to make merging in your inventory easier. Extra slots can be bought with :Diamond:.",
+              "inline": true
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012504458690602)",
+              "inline": false
+            }
+          ],
+          "color": 15548997,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Skins",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Skin: Skins",
+          "description": "Cosmetic Skins for your cats that also give a buff!\n\nYou **don't** need to wear a Skin to get its bonus. Once purchased, it always provides its :Power: Power, :Speed: ATK SPD and :Money: Money boost.\n\n[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012506878808135)",
+          "color": 15418782,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Missions",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Mission: Missions",
+          "description": "Complete Daily Missions to earn points toward **Season rewards**.\n\n• F2P players can earn **200 points/day** — enough to finish a Season in **13 days** (averaging ~12 days long-term).\n• Each Season has a **30-day** time limit.\n• Once you finish a Season you can **start a new one**, so completing all your daily missions earns rewards faster.",
+          "fields": [
+            {
+              "name": "💡 Best VIP Pack to buy",
+              "value": "The **first** Season gives :Gun: Guns as bonuses between :Diamond: rewards. Between updates these change from Guns to :Star: Stars — so if you're a spender, the VIP Pack for the 1st Season (with guns) is the most valuable VIP Pack you'll buy.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012509882191887)",
+              "inline": false
+            }
+          ],
+          "color": 10181046,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Rebirth (Stage 3)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Rebirth: Rebirth — Unlocks at Stage 3",
+          "description": "Once you reach Stage **3-1** you can Rebirth. This resets your Upgrades and sends you back to Stage 1-1, but gives you :Rebirth: **Rebirth Gems** to buy **PERMANENT** upgrades. The higher your Max Stage, the more Rebirth Gems you get.",
+          "fields": [
+            {
+              "name": "📊 Power : Money cost ratio",
+              "value": "• Highest Upgrades at Max Stage **below Lv5000** → **5 : 1**\n• Highest Upgrades at Max Stage **above Lv5000** → **8 : 1**\n\nExample: if your :Money: Money upgrade costs **20a**, your :Power: Power upgrade should cost about **100a**. This gives roughly equal power gains from both.\n\n:Speed: Upgrade Speed evenly with Money *(to be tested)* until **Lv600–Lv1000**, then stop.",
+              "inline": false
+            },
+            {
+              "name": "⚠️ Early-game caveat",
+              "value": "When you don't yet have high-level Guns/Skins/Fish, leaning into :Power: Power can be better for :Boss: Boss fights — more :Diamond: for a fast boost in Guns/Skins/Fish. This benefit shrinks as you collect more of them; where it stops being worth it varies a lot. If you've bought **2x Boss Rewards**, focusing Power matters more.",
+              "inline": false
+            },
+            {
+              "name": ":Speed: ATK SPD hard cap",
+              "value": "Gun ATK SPD has a **hard cap** — past it, extra upgrades do nothing. The author hit it around **Lv1000** (exact point unknown); another player hit it at **Lv300** with a Z Gun.\n\n**How to test:** Fight the Boss until you lose and note its health; repeat twice for an average. Rebirth, put all points into ATK SPD and fight again. If your damage doesn't change, you've hit the cap — put all future Rebirth Gems into Power and Money.",
+              "inline": false
+            },
+            {
+              "name": "🎬 3x Rebirth",
+              "value": "• **Ad 3x Rebirth:** once a day, refreshes at midnight.\n• **Paid 3x Rebirth:** unlocks at Main Stage 100 after using the Ad 3x Rebirth; also refreshes at midnight.",
+              "inline": false
+            },
+            {
+              "name": "📉 Lv15000 slowdown",
+              "value": "At Rebirth **Lv15000**, the cost of each upgrade jumps **100–200x**, so progress slows dramatically.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[🧮 Full ratio calculations](https://discord.com/channels/1541040609534410762/1547433258399305769/1551194333560963083) • [📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012511937134593)",
+              "inline": false
+            }
+          ],
+          "color": 11032055,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Mine (Stage 4)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Diamond: Mine — Unlocks at Stage 4",
+          "description": "Destroy all the stones in **60 seconds** to earn :Diamond:, but your weapon only does **1 damage**.\n\n• **2 free entries per day** — up to **6** with the Mine Pack purchase.\n• Max **190 gems** per run: blue stones give **1**, grey stones give **0.1**.\n• Upgrades DO carry over, but this only matters if you haven't hit the :Speed: ATK SPD cap from Rebirth Upgrades.\n• Damage is always 1, so **weapon type matters more than damage** — :Blast: **Blast** is currently best.",
+          "fields": [
+            {
+              "name": "🌀 Strategy",
+              "value": "You won't clear every gem at first. Going in a **spiral from the inside out** is the most efficient route.\n\n• **Never go back** for a couple of missed stones — you lose more time than they're worth.\n• Gravitate toward **blue stones** as you spiral.\n• Keep your whole screen filled with stones as often as possible.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012513883422771)",
+              "inline": false
+            }
+          ],
+          "color": 3447003,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Fish (Stage 6)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Fish: Fish — Unlocks at Stage 6",
+          "description": "Summon and merge Fish for :Power: Power, :CritRate: Crit Chance and :CritDamage: Crit Damage boosts. You get **5 free summons a day**.\n\nFish are the **only source of Crit Chance**. Once you get an **SS Fish** you'll be landing crits almost 100% of the time — a massive damage boost.\n\nTap a fish to see its grade; you can also view fish you haven't unlocked yet.\n\n💰 A **C Rank Fish** costs **125 :Diamond:** on average (from the 200-gem summon odds).\n\n[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012515716341883)",
+          "color": 1752220,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Boss (Stage 10)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Boss: Boss — Unlocks at Stage 10",
+          "description": "Defeat the moving boss in **60 seconds**.\n\n:Money: Upgrades **DO NOT** carry over, so play whenever suits you. This is a very good source of :Diamond: (**450/Stage**), so push these stages as often as possible.\n\n**Early on:** Anticipate the boss's movements and follow it manually. Once you have enough :Movement: Movement Speed from Pets and Trip Abilities, you can use **autoplay** and focus on damage.",
+          "fields": [
+            {
+              "name": "💡 When to stop",
+              "value": "Boss health increases **5x each level**. If you beat a boss with **less than 48 seconds** left, don't bother attempting the next one — you won't have enough damage.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012518153097330)",
+              "inline": false
+            }
+          ],
+          "color": 15105570,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Hunt (Stage 12)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Hunt: Hunt — Unlocks at Stage 12",
+          "description": "Defeat the slimes before they reach the circle. Advance through the Substages and climb the Stages to rank on the leaderboards.\n\n:Money: Money Upgrades **DO NOT** carry over, so play whenever suits you. Every Substage cleared rewards :Hunt: **Hunt Gems** for Pet Summons.\n\n⏱️ Stages take a while (~**2.5 minutes per Stage**), but each level **auto-plays** — leave your phone and come back when you fail to collect all the rewards.\n\n[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012520690913321)",
+          "color": 12745742,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Pets (Stage 12)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Pet: Pets — Unlocks at Stage 12",
+          "description": "Summon and merge Pets with :Hunt: Hunt Gems or :Diamond:. Pets give a :Money: Money and :Movement: Movement Speed boost.",
+          "fields": [
+            {
+              "name": "🎯 Goal: 3x XXX Pets",
+              "value": "Work toward **3x XXX Pets** and level them up **evenly**. Merge a 4th pet in your inventory, then merge that into your main pets.",
+              "inline": false
+            },
+            {
+              "name": "⚠️ Don't merge your main 3 together",
+              "value": "Pet level affects your **offline idle clear rate** and :Trip: **Trip Gem rewards**, and both increase **linearly** per level. Going from D → C gives the same *extra* gems/offline speed as XX → XXX.\n\nIf you merge two main pets, your 3rd pet starts again at D — you'd actually **lose** Trip Gem rewards and offline speed.",
+              "inline": false
+            },
+            {
+              "name": "➡️ After 3x XXX",
+              "value": "Level up **another 3x XXX** evenly for Trips — you'll have spare :Trip: Wings from only doing 16-hour Trips.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012522892791849)",
+              "inline": false
+            }
+          ],
+          "color": 15844367,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Trips (Stage 35)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Trip: Trips — Unlocks at Stage 35",
+          "description": "Send your pets on Trips to earn Ability Gems and upgrade **Abilities** for unique bonuses.\n\n**Locations:** :Green: Forest, :Orange: Desert and :Blue: Glacier. Only **one** is open each day — except **Sunday**, when all three are.\n\nStart by sending 1 pet on a 1-hour Trip for EXP and that location's gems. Pets on a Trip **can't be merged**. As your Trip level rises you unlock longer Trips and can send up to **3 pets** at once.",
+          "fields": [
+            {
+              "name": ":Trip: Wings",
+              "value": "Sending 1 pet costs **1 :Trip: Wing, regardless of Trip length** — so your longest available Trip is always the most efficient.\n\nCapacity is **20**, regenerating **1 every 4 hours**. Waiting is the only way to get more.",
+              "inline": false
+            },
+            {
+              "name": "📋 Trip plan",
+              "value": "1. Only do the **longest Trip** until you unlock the next longest; repeat until you can do **16-hour Trips with 3 pets**.\n2. With Wings regenerating every 4h, you'll have ~**1 spare Wing per 16h Trip**. Save these for :Green: **Forest** days and run **8-hour Trips**.\n3. **End goal:** always have a 16h Trip running, and on Forest days *also* run 8h Trips until your spare Wings are used — keep enough for your next 16h Trip.",
+              "inline": false
+            },
+            {
+              "name": ":Green: Why Forest?",
+              "value": "Forest adds :Power: **Power AND :Rebirth: Rebirth** bonuses (which boost power further). The other locations add Idle Time and Movement Speed, which don't directly increase power.",
+              "inline": false
+            },
+            {
+              "name": ":Star: Trip Abilities",
+              "value": "Summon Trip Abilities with your Trip Gems — you get a random ability of that colour. Lv1 needs **2 copies** to upgrade; this rises by 2 each level and caps at **50 copies at Lv25**. Max level is **51**. Bonuses scale linearly, so higher levels get less efficient.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012525832872088)",
+              "inline": false
+            }
+          ],
+          "color": 9807270,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Raid (Stage 40)",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Raid: Raid — Unlocks at Stage 40",
+          "description": "Deal as much damage as you can to a huge stationary slime in **60 seconds**. Each time you deplete a health bar, a new one with **2.5x** more health appears.\n\n:Rebirth: Rebirth and :Money: Money upgrades **DO NOT** apply, making :Gun: Guns, :Skin: Skins, :Fish: Fish and :Star: Trip Abilities more important.",
+          "fields": [
+            {
+              "name": "📅 Weekly & daily",
+              "value": "• Each week a different gun type deals **10x damage** (order follows the Gun Codex).\n• Weekly missions give extra :RaidGem: Raid Gems.\n• **2 free attempts/day**, +1 with ads, +1 paid.",
+              "inline": false
+            },
+            {
+              "name": ":RaidGem: Raid Gems & Gun Slots",
+              "value": "The more damage you do, the more Raid Gems you get. Use them to upgrade each of your **3 Gun Slots** up to **Lv20**, each level boosting damage.\n\n💡 Most efficient: **focus one slot until it's Lv20.**",
+              "inline": false
+            },
+            {
+              "name": "🎲 Upgrade odds",
+              "value": "Success chance drops and cost rises with each successful upgrade.\n• **Lv1:** 50 Raid Gems — 100% chance\n• **Lv20:** 1000 Raid Gems — 1% chance",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012530895392853)",
+              "inline": false
+            }
+          ],
+          "color": 10038562,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Earning Diamonds",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Diamond: Earning Diamonds",
+          "description": "The main ways to earn :Diamond: (assuming you watch ads for the bonus where available):",
+          "fields": [
+            {
+              "name": ":Boss: Boss Stage",
+              "value": "450 / Stage",
+              "inline": true
+            },
+            {
+              "name": ":Play: Play Stage",
+              "value": "120 / Stage",
+              "inline": true
+            },
+            {
+              "name": ":Diamond: Mine Entry",
+              "value": "760 / full clear",
+              "inline": true
+            },
+            {
+              "name": ":Daily: Daily Login",
+              "value": "650 / avg day",
+              "inline": true
+            },
+            {
+              "name": ":Mission: Season Rewards",
+              "value": "1180 / avg day (13-day season)",
+              "inline": true
+            },
+            {
+              "name": "🐷 Piggy Bank",
+              "value": "1440–2880 / day",
+              "inline": true
+            },
+            {
+              "name": "📈 Expected daily Diamonds (excl. Boss & Play)",
+              "value": "Costs in AUD.\n**3,356** — F2P\n**4,796** — No Ads ($14.99)\n**7,836** — No Ads + Mine ($24.98)\n**9,276** — No Ads + Mine + No Forced Ads ($29.97)\n**14,904** — …+ VIP ($29.97 + $1.30/day)\n**20,453** — …+ VVIP ($29.97 + $3.28/day)\n**22,733** — …+ VVIP + 1.5x Mine ($29.97 + $5.14/day)\n\n[🧮 Calculations](https://discord.com/channels/1541040609534410762/1547433258399305769/1552940925712339027) • [📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012534716530709)",
+              "inline": false
+            }
+          ],
+          "color": 45300,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Diamond Spending Guide",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Diamond: Diamond Spending Guide",
+          "description": "Shortened guide below. Full explanation with calculations is [here](https://discord.com/channels/1541040609534410762/1547433258399305769/1552650944187990047) — @Cyrdarymacie has all the numbers in the Data Entry Guide if you want to crunch your own.\n\n⚠️ **DO NOT** spend :Diamond: on :Pet: Pets until you have **1x ZZZ Gun** and **1x ZZZ Fish** — you'll eventually get enough :Hunt: Hunt Gems for 5x XXX Pets just from Hunt Stages.\n\n• Bought skins out of order? Add up all your skin numbers for your **Skin Total** and match it below.\n• Fish cost is averaged at **125 gems per C Fish**.\n\nFind the milestone closest to your Gun / Skin / Fish, then work down the list **in order**.",
+          "fields": [
+            {
+              "name": "#1 — D/D/D Guns • Skin Total 1 • C Fish",
+              "value": "1. B Fish (125)\n2. A Fish (250)\n3. S Fish (500)\n4. SS Fish (1,000)\n5. C Gun (100)\n6. B Gun (200)\n7. A Gun (400)\n8. Skin 2–3 (300)\n9. S Gun (800)",
+              "inline": false
+            },
+            {
+              "name": "#2 — S/D/D Guns • Skin Total 6 • SS Fish",
+              "value": "1. Skin 4–6 (1,200)\n2. SSS Fish (2,000)\n3. Skin 7–8 (1,300)\n4. SS Gun (1,600)\n5. SSS Gun (3,200)\n6. Replace D Guns with B :Blast: Blasts (400)",
+              "inline": false
+            },
+            {
+              "name": "#3 — SSS/B/B Guns • Skin Total 36 • SSS Fish",
+              "value": "1. Skin 9–10 (1,700)\n2. X Fish (4,000)\n3. Skin 11–14 (4,600)\n4. X Gun (6,400)",
+              "inline": false
+            },
+            {
+              "name": "#4 — X/B/B Guns • Skin Total 105 • X Fish",
+              "value": "1. Skin 15–16 (2,900)\n2. XX Fish (8,000)\n3. Skin 17–25 (18,000)\n4. XXX Fish (16,000)\n5. XX Gun (12,800)\n6. Replace B Guns with S :Blast: Blasts (2,400)",
+              "inline": false
+            },
+            {
+              "name": "#5 — XX/S/S Guns • ALL Skins • XXX Fish",
+              "value": "🎉 *You unlocked all skins!*\n1. Z Fish (32,000)\n2. XXX Gun (25,600)",
+              "inline": false
+            },
+            {
+              "name": "#6 — XXX/S/S Guns • Z Fish",
+              "value": "1. Z Gun (51,200)\n2. ZZ Gun (102,400)\n3. ZZ Fish (64,000)",
+              "inline": false
+            },
+            {
+              "name": "#7 — ZZ/S/S Guns • ZZ Fish",
+              "value": "1. ZZZ :Blast: Blast (204,800)\n2. ZZZ Fish (128,000)\n3. Replace S Guns with X :Blast: Blasts (19,200)",
+              "inline": false
+            }
+          ],
+          "color": 45300
+        },
+        {
+          "title": "Late game",
+          "fields": [
+            {
+              "name": "#8 — ZZZ/X/X Guns • ZZZ Fish",
+              "value": "🎉 *Congrats on your first :ZZZFish: and ZZZ Gun!*",
+              "inline": false
+            },
+            {
+              "name": ":Pet: Z Pet Roulette",
+              "value": "❗ [READ FIRST](https://discord.com/channels/1541040609534410762/1547433258399305769/1560737074229944422) ❗\n1. Z Buff & Z AoE (102,800)\n2. ZZ Buff & Z AoE (102,800)\n3. ZZZ Buff & Z AoE (205,600)\n4. ZZZ Buff & 2x Z AoE (51,200)",
+              "inline": false
+            },
+            {
+              "name": "#8.5 — Pet ZZZ Buff / Z AoE / Z AoE",
+              "value": "*From here it's recommended to save for the next update.*\n1. 2nd ZZZ Fish (256,000)\n2. 2nd ZZZ Gun (409,600)\n3. 3rd ZZZ Fish (256,000)\n4. 4th ZZZ Fish (256,000)\n5. 3rd ZZZ Gun (409,600)",
+              "inline": false
+            },
+            {
+              "name": "#9 — ZZZ/ZZZ/ZZZ Guns • 4x ZZZ Fish",
+              "value": "🎉 *Congrats on getting all ZZZ Guns!*\nThe final grind is here — go get **11x :ZZZFish:**!",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012534716530709)",
+              "inline": false
+            }
+          ],
+          "color": 45300,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Real Money Purchases Guide",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Money: Real Money Purchases Guide",
+          "description": "This game has microtransactions — expected for a free mobile game. Some purchases are decent value; some are very expensive and not worth it. If you plan to play long term, **No Reward Ads is almost a requirement** unless FOMO doesn't affect you at all.\n\nRatings are out of 10 with prices in **AUD**.",
+          "fields": [
+            {
+              "name": "⭐ 10/10 — No Reward Ads ($14.99)",
+              "value": "Should be your **1st purchase**; if it's your only one, you've unlocked most of the content without the hassle. Also gives a 🐷 piggy bank earning **1 :Diamond:/min** (cap 500).",
+              "inline": false
+            },
+            {
+              "name": "⭐ 9/10 — 4+ Extra Mine Entries ($9.99)",
+              "value": "Next best. Each Mine with ads gives **760 :Diamond:** — that's **3,040 extra gems/day, forever**.",
+              "inline": false
+            },
+            {
+              "name": "6/10 — Bonus Reward Package 7 Days ($12.99)",
+              "value": "Double Hunt & Boss rewards and 1.5x Mine rewards. Great head start for :Diamond: and :Hunt: Hunt Gems; gets less efficient as your Fish and Guns improve. Value drops fast after 1–2 buys.",
+              "inline": false
+            },
+            {
+              "name": "6/10 — No Forced Ads ($4.99)",
+              "value": "Mainly for the extra **1 gem/min** that stacks with No Reward Ads. In theory 1,440/day, but with the 500 cap you'll lose some while sleeping — about **950/day** extra, and you'll need to check every **4 hours** instead of 8.",
+              "inline": false
+            },
+            {
+              "name": "5/10 — VIP Pass ($12.99)",
+              "value": "Great value but must be bought **every Season**. Cuts Seasons from 12 to **9 days**. Over **40K :Diamond:** and **10K :Star: Star Gems** (or 35K worth of guns). Next best buy if you have the budget.",
+              "inline": false
+            },
+            {
+              "name": "5/10 — Autoupgrade ($12.99)",
+              "value": "Useful if your phone is always on. At higher levels your online clear rate is ~**2.5x** your offline rate — it's a choice between idle and active play.",
+              "inline": false
+            },
+            {
+              "name": "3/10 — VVIP Pass ($22.99)",
+              "value": "Finish the Season in **5 days**, but same rewards as VIP.",
+              "inline": false
+            },
+            {
+              "name": "3/10 — Convenience Package 7 Days ($9.99)",
+              "value": "Skip Hunt & Play Stages, skip Trip wait times, Auto Merge. Quality of life; best paired with the Bonus Reward Package.",
+              "inline": false
+            },
+            {
+              "name": "3/10 — 3x Rebirth ($2.99)",
+              "value": "Triples Rebirth Gems an extra time per day. Only worth it at high stages when reaching Max Stage takes hours. Gets expensive daily.",
+              "inline": false
+            }
+          ],
+          "color": 3066993
+        },
+        {
+          "title": "Skip these",
+          "fields": [
+            {
+              "name": "1/10 — Buff Pack ($12.99)",
+              "value": "With No Reward Ads you can just tap the boost button for x3 Power, Speed and Money. Only use: paired with Autoupgrade to AFK-push — maybe 1–2 extra Stages.",
+              "inline": false
+            },
+            {
+              "name": "1/10 — Diamond Purchases ($2.99–$79.99)",
+              "value": "A dismal amount of gems compared to VIP. Instant, but this game is long-term — invest elsewhere.",
+              "inline": false
+            },
+            {
+              "name": "1/10 — Step Purchases & Weekly Shop Guns",
+              "value": "Objectively horrible value. If you want to spend a lot, permanent VVIP Passes are far better value.",
+              "inline": false
+            },
+            {
+              "name": "1/10 — Trip Daily/Weekly Deals ($5.99–$39.99)",
+              "value": "For the cost of a VIP Pass you get 1,750 :Star: Star Gems — **less** than one 16h Trip with 3x XXX Pets, and barely a level once abilities pass Lv15.",
+              "inline": false
+            },
+            {
+              "name": "1/10 — Time Package 7 Days ($7.99)",
+              "value": "Roughly doubles Power for Boss & Play Stages, but 2x Power is easy to get elsewhere, and it slows Main Stage progress.",
+              "inline": false
+            },
+            {
+              "name": "1/10 — Raid Mission Pass ($7.99) • Enhance Stone Bank ($1.99+) • Raid Ticket ($1.99)",
+              "value": "F2P can hit a Lv20 Enhance in **4–7 days**; these only save a couple of days. (Stone Bank: 5/week. Ticket: 1/day.)",
+              "inline": false
+            },
+            {
+              "name": "1/10 — Helper Package ($5.99)",
+              "value": "Useless: the Helper's Enhance level matches your **lowest** slot, so a Lv20 Helper needs 3x Lv20 slots already. +33% power = 1 extra stage at best.",
+              "inline": false
+            },
+            {
+              "name": "​",
+              "value": "[📖 FAQs](https://discord.com/channels/1541040609534410762/1553012405217398864/1553012538193608825)",
+              "inline": false
+            }
+          ],
+          "color": 3066993,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "title": "Whale Spending Guide",
+    "tags": [
+      "Guides"
+    ],
+    "body": {
+      "embeds": [
+        {
+          "title": ":Money: Whale Spending Guide",
+          "description": "For players with **no spending limit** — this changes how you approach the game vs. F2P or low spenders. There are still bad purchases, so costs are shown as **$ per 1 Day's Progress** to help you judge whether saving time is worth it. Prices in AUD.",
+          "fields": [
+            {
+              "name": "⭐ 10/10 — No Reward Ads ($14.99)",
+              "value": "Still the best purchase: 2x–3x rewards.",
+              "inline": false
+            },
+            {
+              "name": "⭐ 10/10 — 3x Rebirth ($2.99)",
+              "value": "The only way to pass top players who don't buy it. Buying this **on top of** efficient play beats anyone who isn't. Expensive to maintain.",
+              "inline": false
+            },
+            {
+              "name": "⭐ 10/10 — Bonus Reward Package 7 Days ($12.99)",
+              "value": "Huge for catching up. Loses value after 2 buys — you'll have ZZZ Gun and ZZZ Fish by the end of week 2.",
+              "inline": false
+            },
+            {
+              "name": "⭐ 10/10 — Convenience Package 7 Days ($9.99)",
+              "value": "Huge for catching up and doing pets efficiently. Loses value after 2 buys — you should have 3x XXX Pets by then.",
+              "inline": false
+            },
+            {
+              "name": "9/10 — 4+ Extra Mine Entries ($9.99)",
+              "value": "Permanent daily :Diamond: boost. 💡 On the last day of a Season use only **2** Mine tickets, so the extras complete a whole new day of the next Season.",
+              "inline": false
+            },
+            {
+              "name": "9/10 — Autoupgrade ($12.99)",
+              "value": "Makes active pushing far easier — and you'll do a lot of it to catch up.",
+              "inline": false
+            },
+            {
+              "name": "9/10 — VVIP Pass ($22.99)",
+              "value": "5-day Seasons plus extra bonuses. Keep it running until ZZZ Gun and Fish, then drop it or downgrade to VIP.",
+              "inline": false
+            },
+            {
+              "name": "9/10 — Trip Daily/Weekly Deals ($5.99–$39.99)",
+              "value": "Only useful very early, before you have much Skip %. The **6000** pack gets everything to Lv5 (30% total Skip). A XXX Pet on a 16h Trip gives 608 gems; x6/day ≈ 3,608/day.\n• 750 = $29 / day\n• 1750 = $27 / day\n• 6000 = $24 / day",
+              "inline": false
+            },
+            {
+              "name": "8/10 — VIP Pass ($12.99)",
+              "value": "9-day Seasons plus bonuses; next best if VVIP is too expensive.",
+              "inline": false
+            },
+            {
+              "name": "6/10 — No Forced Ads ($4.99)",
+              "value": "Small permanent boost to daily gems.",
+              "inline": false
+            },
+            {
+              "name": "5/10 — Raid Mission Pass • Enhance Stone Bank • Raid Ticket",
+              "value": "Cuts a Lv20 Enhance Slot from 4–7 days down to ~1. Cheap, so useful if pushing hard.\n• $18 / 3 days — Pass + Ticket + Stone Bank Lv1 x2 + Lv2 x1\n• $10 / 2 days — Pass + Ticket\n• $8 / 1 day — Pass",
+              "inline": false
+            }
+          ],
+          "color": 3066993
+        },
+        {
+          "title": "Skip these",
+          "description": "With all the premium purchases you earn **~22K :Diamond:/day** (excluding Boss & Play Stages, which can bring it to **75K** — making these up to 3x worse).",
+          "fields": [
+            {
+              "name": "1/10 — Buff Pack ($12.99)",
+              "value": "Free with No Reward Ads, and you'll mostly play actively anyway.",
+              "inline": true
+            },
+            {
+              "name": "1/10 — Time Package ($7.99)",
+              "value": "2x Power is easy elsewhere; slows Main Stage.",
+              "inline": true
+            },
+            {
+              "name": "0/10 — Helper Package ($5.99)",
+              "value": "Matches your lowest slot; won't even give an extra stage.",
+              "inline": true
+            },
+            {
+              "name": "0/10 — Step Purchases ($1.99–$59.99)",
+              "value": "S Gun $27 • SS $55 • SSS $52 • X $52 • XX $52 per day's progress",
+              "inline": false
+            },
+            {
+              "name": "0/10 — Weekly Shop Guns ($7.99–$59.99)",
+              "value": "S Gun $110 • SSS $103 • X $103 per day's progress",
+              "inline": false
+            },
+            {
+              "name": "-1/10 — Diamond Purchases ($2.99–$79.99)",
+              "value": "240 = $272 • 600 = $294 • 1500 = $221 • 3500 = $189 • 8000 = $220 per day's progress. (1st purchase is double gems — still not worth it.)",
+              "inline": false
+            }
+          ],
+          "color": 3066993
+        },
+        {
+          "title": "🎮 Whale gameplay changes",
+          "fields": [
+            {
+              "name": "1. Rebirth ratio",
+              "value": "With 2x Rewards and Instant Clear you can drop the 5:1 Power:Money cost ratio and lean harder into :Power: Power to clear more Boss and Hunt Stages. Around Z Gun and Z Fish, move back toward **5:1**, as the next tier costs far more.",
+              "inline": false
+            },
+            {
+              "name": "2. Pet merging",
+              "value": "Instant Trips mean Wings won't overflow, so rush a **single** pet to XXX for max Trip rewards, then level the other 2 evenly (merging via inventory) for Movement Speed.",
+              "inline": false
+            },
+            {
+              "name": "3. Trips",
+              "value": "Use only **1 pet** on the longest Trips until 16h unlocks. Get **Lv15 Skip Stage** in all locations (90% Skip) — Star Packs speed this up. Then focus purely on :Green: Forest for the last 10% Skip, and aim for **Lv51 Rebirth**.",
+              "inline": false
+            },
+            {
+              "name": "🏁 Goals",
+              "value": "**1. 100% Skip Stage** — maximises your active clear rate so you can catch up on the biggest time-gated mechanic: Rebirthing.\n**2. ZZZ Gun & ZZZ Fish** — after this :Diamond: lose most of their value; consider dropping 2x Rewards and VVIP → VIP or nothing. A 400K ZZZ Gun only gives 2x power; the 3rd is 1.5x. Same for Fish.\n**3. Rebirth efficiently & frequently** — money isn't a free pass to the Top 30. Use 3x :Blast: Blasts, paid Super Rebirths and the 5:1 → 8:1 ratio to climb.",
+              "inline": false
+            }
+          ],
+          "color": 3066993,
+          "footer": {
+            "text": "Guide by PureMiracle • Loofary Guides"
+          }
+        }
+      ]
+    }
+  }
+]
