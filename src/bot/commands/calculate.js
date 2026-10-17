@@ -1,4 +1,5 @@
-// /calculate — upgrade calculator for pets, guns and fish, all in one private message:
+// /calculate — upgrade calculator for pets, guns and fish (names, costs and odds set per server on the
+// dashboard), all in one private message:
 //   1. pick 🐾 Pets, 🔫 Guns or 🐟 Fish;
 //   2. 📦 inventory panel: a button per rarity (D → ZZZ) opens a box to type how many you own;
 //   3. 🎯 goal panel: the same 13 buttons for how many you want;
@@ -19,6 +20,13 @@ async function load(userId, kind) {
   const p = await CalcProfile.findOne({ userId, kind }).lean().catch(() => null);
   return { have: counts(p?.haveCounts), want: counts(p?.wantCounts) };
 }
+// This server's calculators (names, costs, odds and which are on — dashboard Engagement → Calculator).
+async function kindsOf(interaction) {
+  if (!interaction.guildId) return calc.KINDS;
+  const config = await require('../../database/models/GuildConfig').findOne({ guildId: interaction.guildId }, { calculator: 1 }).lean().catch(() => null);
+  return calc.kindsFor(config);
+}
+
 const save = (userId, kind, s) => CalcProfile.updateOne({ userId, kind }, { $set: { haveCounts: s.have, wantCounts: s.want } }, { upsert: true }).catch(() => null);
 
 // ---------------------------------------------------------------- views
@@ -29,21 +37,31 @@ const button = (id, label, style = ButtonStyle.Secondary, emoji = null) => {
   return b;
 };
 
-function menuView(note = null) {
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const MENU_STYLE = { pets: ButtonStyle.Primary, guns: ButtonStyle.Danger, fish: ButtonStyle.Success };
+
+function menuView(note = null, kinds = calc.KINDS) {
+  const on = calc.KIND_KEYS.filter((key) => kinds[key].enabled !== false);
+  const line = (key) => {
+    const k = kinds[key];
+    return k.draws
+      ? `${k.emoji} **${cap(k.plural)}** — epic draws (${k.draws.epic.currency || 'Diamonds'})${k.draws.free.perDay ? ' or days of free draws' : ''} to reach your ${k.plural}`
+      : `${k.emoji} **${cap(k.plural)}** — ${k.currencies.join(' / ')} to reach your ${k.plural}`;
+  };
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('🧮 Calculator')
-    .setDescription('What do you want to calculate?\n\n🐾 **Pets** — Pet Gems / Diamonds to reach your pets\n🔫 **Guns** — Diamonds to reach your guns\n🐟 **Fish** — epic draws (Diamonds) or days of free draws to reach your fish');
+    .setDescription(on.length ? `What do you want to calculate?\n\n${on.map(line).join('\n')}` : 'No calculators are switched on in this server.');
   return {
     content: note,
     embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(button('calc:pets:have', 'Pets', ButtonStyle.Primary, '🐾'), button('calc:guns:have', 'Guns', ButtonStyle.Danger, '🔫'), button('calc:fish:have', 'Fish', ButtonStyle.Success, '🐟'))]
+    components: on.length ? [new ActionRowBuilder().addComponents(on.map((key) => button(`calc:${key}:have`, cap(kinds[key].plural), MENU_STYLE[key], kinds[key].emoji)))] : []
   };
 }
 
 /** The inventory ('have') or goal ('want') panel: the two lists + a button per rarity. */
-function panelView(kind, view, s, note = null) {
-  const k = calc.KINDS[kind];
+function panelView(kind, view, s, note = null, kinds = calc.KINDS) {
+  const k = kinds[kind];
   const editing = view === 'have';
   const embed = new EmbedBuilder()
     .setColor(k.color)
@@ -92,26 +110,28 @@ function resultView(kind, s, embed, note) {
 // ---------------------------------------------------------------- handlers
 
 async function execute(interaction) {
-  return interaction.reply({ ...menuView(), ephemeral: true });
+  return interaction.reply({ ...menuView(null, await kindsOf(interaction)), ephemeral: true });
 }
 
 /** All calculator buttons (customId calc:…). */
 async function handleCalcButton(interaction) {
   const [, kind, action, view, tier] = interaction.customId.split(':');
-  if (kind === 'menu') return interaction.update(menuView());
-  if (!calc.KINDS[kind]) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
+  const kinds = await kindsOf(interaction);
+  if (kind === 'menu') return interaction.update(menuView(null, kinds));
+  if (!calc.KIND_KEYS.includes(kind)) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
+  if (kinds[kind].enabled === false) return interaction.update(menuView(`🚫 The ${kinds[kind].name} calculator is switched off.`, kinds));
   const s = await load(interaction.user.id, kind);
 
-  if (action === 'have' || action === 'want') return interaction.update(panelView(kind, action, s));
+  if (action === 'have' || action === 'want') return interaction.update(panelView(kind, action, s, null, kinds));
   if (action === 'reset') {
     s[view === 'want' ? 'want' : 'have'] = counts([]);
     await save(interaction.user.id, kind, s);
-    return interaction.update(panelView(kind, view === 'want' ? 'want' : 'have', s, view === 'want' ? '🗑️ Goal cleared.' : '🗑️ Inventory cleared.'));
+    return interaction.update(panelView(kind, view === 'want' ? 'want' : 'have', s, view === 'want' ? '🗑️ Goal cleared.' : '🗑️ Inventory cleared.', kinds));
   }
   if (action === 'set') {
     const t = Number(tier);
     const list = view === 'want' ? s.want : s.have;
-    const k = calc.KINDS[kind];
+    const k = kinds[kind];
     const input = new TextInputBuilder().setCustomId('n').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(4).setPlaceholder('0');
     if (list[t]) input.setValue(String(list[t]));
     return interaction.showModal(
@@ -122,8 +142,8 @@ async function handleCalcButton(interaction) {
     );
   }
   if (action === 'calc') {
-    if (!s.want.some(Boolean)) return interaction.update(panelView(kind, 'want', s, '🎯 Set your goal first — press a rarity and type how many you want.'));
-    const embed = calc.resultEmbed(kind, s.have, s.want, calc.plan(s.have, s.want), interaction.user);
+    if (!s.want.some(Boolean)) return interaction.update(panelView(kind, 'want', s, '🎯 Set your goal first — press a rarity and type how many you want.', kinds));
+    const embed = calc.resultEmbed(kind, s.have, s.want, calc.plan(s.have, s.want), interaction.user, kinds);
     const dm = await interaction.user.send({ embeds: [embed] }).then(() => true, () => false);
     return interaction.update(resultView(kind, s, embed, dm ? '📬 I also sent this to your DMs.' : "📭 Couldn't DM you a copy — your DMs are closed."));
   }
@@ -133,7 +153,7 @@ async function handleCalcButton(interaction) {
 /** A rarity's number box was submitted: save it and refresh the panel. */
 async function handleCalcModal(interaction) {
   const [, kind, view, tier] = interaction.customId.split(':');
-  if (!calc.KINDS[kind] || !['have', 'want'].includes(view)) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
+  if (!calc.KIND_KEYS.includes(kind) || !['have', 'want'].includes(view)) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
   const t = Number(tier);
   const raw = (interaction.fields.getTextInputValue('n') || '').trim().replace(/[x,\s]/gi, '');
   const s = await load(interaction.user.id, kind);
@@ -145,7 +165,7 @@ async function handleCalcModal(interaction) {
     await save(interaction.user.id, kind, s);
     note = `✅ ${calc.label(t)}: **${n}**${Number(raw) > MAX ? ` (max ${MAX})` : ''}`;
   }
-  const view2 = panelView(kind, view, s, note);
+  const view2 = panelView(kind, view, s, note, await kindsOf(interaction));
   return interaction.isFromMessage?.() ? interaction.update(view2) : interaction.reply({ ...view2, ephemeral: true });
 }
 

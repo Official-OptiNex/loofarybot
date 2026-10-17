@@ -1663,6 +1663,7 @@ const enState = { loaded: false, data: null };
 function fillEngagementForms(d) {
   const v = (id, val) => (document.getElementById(id).value = val ?? '');
   const c = (id, val) => (document.getElementById(id).checked = !!val);
+  if (d.calculator) fillCalculator(d.calculator.settings);
   const b = d.birthdays.settings;
   c('bdEnabled', b.enabled);
   v('bdChannel', b.channelId || '');
@@ -1784,6 +1785,70 @@ async function saveEngagement(section) {
     loadEngagement();
   }
 }
+
+// ---- /calculate settings (Engagement → Calculator). Odds are fractions in the API, % in the form.
+const CALC_TIERS = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS', 'X', 'XX', 'XXX', 'Z', 'ZZ', 'ZZZ'];
+const pctOf = (p) => +(p * 100).toFixed(4);
+function fillCalculator(k) {
+  if (!document.getElementById('calc-pets-enabled')) return;
+  const set = (id, val) => (document.getElementById(id).value = val ?? '');
+  for (const key of ['pets', 'guns', 'fish']) {
+    document.getElementById(`calc-${key}-enabled`).checked = k[key].enabled !== false;
+    for (const f of ['emoji', 'name', 'plural']) set(`calc-${key}-${f}`, k[key][f]);
+  }
+  for (const key of ['pets', 'guns']) {
+    set(`calc-${key}-cost`, k[key].costPerD);
+    set(`calc-${key}-currencies`, k[key].currencies.join(', '));
+  }
+  const fd = k.fish.draws;
+  set('calc-fish-freePerDay', fd.free.perDay);
+  set('calc-fish-epicCost', fd.epic.cost);
+  set('calc-fish-epicCurrency', fd.epic.currency || 'Diamonds');
+  document.querySelectorAll('.calc-odds').forEach((el) => {
+    el.value = pctOf(Number(fd[el.dataset.draw].odds[Number(el.dataset.t)]) || 0) || '';
+  });
+  renderCalcOdds();
+}
+function readCalcOdds(draw) {
+  return CALC_TIERS.map((_, t) => Number(document.querySelector(`.calc-odds[data-draw="${draw}"][data-t="${t}"]`).value) || 0);
+}
+function renderCalcOdds() {
+  const avg = {};
+  for (const draw of ['free', 'epic']) {
+    const odds = readCalcOdds(draw);
+    const sum = odds.reduce((a, b) => a + b, 0);
+    const el = document.getElementById(`calc-${draw}-total`);
+    el.textContent = `${+sum.toFixed(2)}%`;
+    el.style.color = Math.abs(sum - 100) > 0.01 ? 'var(--accent-red)' : 'var(--accent-green)';
+    avg[draw] = odds.reduce((a, p, t) => a + (p / 100) * 2 ** t, 0); // average worth of one draw, in D
+  }
+  const cost = Number(document.getElementById('calc-fish-epicCost').value) || 0;
+  const cur = document.getElementById('calc-fish-epicCurrency').value.trim() || 'Diamonds';
+  const perDay = Number(document.getElementById('calc-fish-freePerDay').value) || 0;
+  document.getElementById('calc-fish-summary').textContent =
+    `An epic draw is worth ~${+avg.epic.toFixed(2)} D on average${avg.epic ? ` (≈ ${fmt(Math.round(cost / avg.epic))} ${cur} per D)` : ''}` +
+    (perDay ? ` · a day of free draws ≈ ${+(avg.free * perDay).toFixed(2)} D.` : '.');
+}
+function readCalculator() {
+  const v = (id) => document.getElementById(id).value;
+  const base = (key) => ({ enabled: document.getElementById(`calc-${key}-enabled`).checked, emoji: v(`calc-${key}-emoji`), name: v(`calc-${key}-name`), plural: v(`calc-${key}-plural`) });
+  const summon = (key) => ({ ...base(key), costPerD: v(`calc-${key}-cost`), currencies: v(`calc-${key}-currencies`).split(',') });
+  return {
+    pets: summon('pets'),
+    guns: summon('guns'),
+    fish: { ...base('fish'), freePerDay: v('calc-fish-freePerDay'), epicCost: v('calc-fish-epicCost'), epicCurrency: v('calc-fish-epicCurrency'), freeOdds: readCalcOdds('free'), epicOdds: readCalcOdds('epic') }
+  };
+}
+async function saveCalculator() {
+  const data = await withButton(document.getElementById('calcSave'), () => manageApi('POST', 'engagement/calculator', readCalculator()), '🧮 Calculator saved — /calculate uses it now.');
+  if (data) fillCalculator(data.settings);
+}
+async function resetCalculator() {
+  if (!confirm('Put every calculator back to the default names, costs and odds?')) return;
+  const data = await withButton(document.getElementById('calcSave'), () => manageApi('POST', 'engagement/calculator', { reset: true }), '↺ Calculator reset to the defaults.');
+  if (data) fillCalculator(data.settings);
+}
+document.querySelectorAll('.calc-odds, #calc-fish-epicCost, #calc-fish-epicCurrency, #calc-fish-freePerDay').forEach((el) => el.addEventListener('input', renderCalcOdds));
 
 async function setCount() {
   const input = document.getElementById('ctSetTo');

@@ -4,7 +4,7 @@
         <div class="hero-icon">✨</div>
         <div>
           <h1>Engagement</h1>
-          <p>Birthdays, a counting game and a starboard. Once set up they run on their own. Same as <code>/birthday</code>, <code>/counting</code> and <code>/starboard</code>.</p>
+          <p>Birthdays, a counting game, a starboard and the <code>/calculate</code> upgrade calculator. Once set up they run on their own. Same as <code>/birthday</code>, <code>/counting</code> and <code>/starboard</code>.</p>
           <div class="hero-status" id="enStatus"></div>
         </div>
       </div>
@@ -13,6 +13,7 @@
         <button class="active" data-sub="en-birthdays">🎂 Birthdays</button>
         <button data-sub="en-counting">🔢 Counting</button>
         <button data-sub="en-starboard">⭐ Starboard</button>
+        <button data-sub="en-calculator">🧮 Calculator</button>
       </div>
 
       <!-- Birthdays -->
@@ -170,6 +171,81 @@
               <div id="sbTop"><p class="muted">Loading…</p></div>
             </div>
           </div>
+        </div>
+      </div>
+      <!-- Calculator (/calculate) -->
+      <div class="subpage hidden" data-page="en-calculator">
+        <div class="card">
+          <p class="muted" style="margin:0; font-size:0.86rem;">Everything <code>/calculate</code> uses: which calculators members see, their names and emoji, what one D costs, and the fish draw odds. Rarities go D → C → B → … → ZZZ, and 2 of a rarity merge into 1 of the next (a rarity is worth 2× the one below).</p>
+        </div>
+        <% [['pets', '🐾 Pets'], ['guns', '🔫 Guns']].forEach(([key, title]) => { %>
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title"><%= title %> calculator</div><div class="setting-help">Shown in the <code>/calculate</code> menu.</div></div>
+            <div class="setting-control"><label class="switch"><input type="checkbox" id="calc-<%= key %>-enabled"><span class="track"></span></label></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Name</div><div class="setting-help">Emoji, singular and plural (e.g. 🐾 Pet / pets).</div></div>
+            <div class="setting-control">
+              <input id="calc-<%= key %>-emoji" maxlength="64" style="flex:0 0 64px; min-width:64px;">
+              <input id="calc-<%= key %>-name" maxlength="32" placeholder="Singular">
+              <input id="calc-<%= key %>-plural" maxlength="32" placeholder="Plural">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Cost of one D</div><div class="setting-help">What one D (lowest rarity) summon costs.</div></div>
+            <div class="setting-control"><input type="number" id="calc-<%= key %>-cost" min="0" step="any"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Currencies</div><div class="setting-help">What it can be paid with, comma separated (shown as “X or Y”). Up to 5.</div></div>
+            <div class="setting-control"><input id="calc-<%= key %>-currencies" maxlength="170" placeholder="Pet Gems, Diamonds"></div>
+          </div>
+        </div>
+        <% }) %>
+        <div class="card settings-card">
+          <div class="setting-row">
+            <div><div class="setting-title">🐟 Fish calculator</div><div class="setting-help">Fish come from random draws instead of summons, so results show best / average / worst luck.</div></div>
+            <div class="setting-control"><label class="switch"><input type="checkbox" id="calc-fish-enabled"><span class="track"></span></label></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Name</div></div>
+            <div class="setting-control">
+              <input id="calc-fish-emoji" maxlength="64" style="flex:0 0 64px; min-width:64px;">
+              <input id="calc-fish-name" maxlength="32" placeholder="Singular">
+              <input id="calc-fish-plural" maxlength="32" placeholder="Plural">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Free draws per day</div><div class="setting-help">0 hides the “free draws only” estimate.</div></div>
+            <div class="setting-control"><input type="number" id="calc-fish-freePerDay" min="0" max="1000"></div>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title">Epic draw cost</div><div class="setting-help">Price of one epic draw, and its currency.</div></div>
+            <div class="setting-control">
+              <input type="number" id="calc-fish-epicCost" min="1" step="any">
+              <input id="calc-fish-epicCurrency" maxlength="32" placeholder="Diamonds">
+            </div>
+          </div>
+          <div class="setting-row stack">
+            <div><div class="setting-title">Draw odds (%)</div><div class="setting-help">Chance of each rarity per draw. Each row must add up to 100%.</div></div>
+            <div style="overflow-x:auto;">
+              <table class="calc-odds-table" style="border-collapse:collapse; font-size:0.82rem;">
+                <tr><th></th><% ['D','C','B','A','S','SS','SSS','X','XX','XXX','Z','ZZ','ZZZ'].forEach((t) => { %><th style="padding:0.2rem 0.3rem;"><%= t %></th><% }) %><th style="padding:0.2rem 0.5rem;">Total</th></tr>
+                <% [['free', '🎣 Free'], ['epic', '💎 Epic']].forEach(([draw, label]) => { %>
+                <tr>
+                  <th style="text-align:left; padding-right:0.5rem; white-space:nowrap;"><%= label %></th>
+                  <% for (let t = 0; t < 13; t++) { %><td style="padding:0.15rem;"><input type="number" class="calc-odds" data-draw="<%= draw %>" data-t="<%= t %>" min="0" max="100" step="any" style="width:58px; min-width:58px; padding:0.3rem;"></td><% } %>
+                  <td style="padding:0.2rem 0.5rem; font-weight:600;" id="calc-<%= draw %>-total"></td>
+                </tr>
+                <% }) %>
+              </table>
+            </div>
+            <div class="muted" style="font-size:0.8rem;" id="calc-fish-summary"></div>
+          </div>
+        </div>
+        <div class="savebar" style="position:static;">
+          <button class="btn secondary" type="button" onclick="resetCalculator()">↺ Defaults</button>
+          <button class="btn" id="calcSave" type="button" onclick="saveCalculator()">Save calculator</button>
         </div>
       </div>
     </div>

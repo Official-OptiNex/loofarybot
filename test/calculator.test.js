@@ -4,6 +4,7 @@ process.env.TOKEN='x';process.env.CLIENT_ID='123';process.env.MONGODB_URI='mongo
 const root=require('path').join(__dirname,'..')+'/'; const assert=require('assert');
 const { store } = require('./helpers/memstore');
 const CalcProfile=require(root+'src/database/models/CalcProfile'); store(CalcProfile);
+const GuildConfig=require(root+'src/database/models/GuildConfig'); store(GuildConfig);
 const C=require(root+'src/bot/cogs/modules/calculator');
 const cmd=require(root+'src/bot/commands/calculate');
 
@@ -103,5 +104,31 @@ const labels=(view)=>view.components.flatMap((row)=>row.toJSON().components.map(
   i=btn('calc:fish:calc',u); await cmd.handleCalcButton(i); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/Average: \*\*1,280\*\* draws ≈ \*\*256,000\*\* Diamonds/,'fish calculator works through the panel');
   i=btn('calc:menu',u); await cmd.handleCalcButton(i); assert.deepEqual(ids(i.out),['calc:pets:have','calc:guns:have','calc:fish:have'],'back to the start');
   console.log('✓ /calculate panel: pick, 13 rarity buttons for inventory + goal, calculate + DM, saved');
+
+  // ---- per-server settings (dashboard Engagement → Calculator)
+  const pct=(arr)=>{ const o=new Array(13).fill(0); arr.forEach((p,t)=>o[t]=p); return o; };
+  const good={pets:{enabled:true,emoji:'🐶',name:'Pal',plural:'pals',costPerD:50,currencies:'Gold, Gems'},guns:{enabled:false,costPerD:100},
+    fish:{enabled:true,freePerDay:0,epicCost:300,epicCurrency:'Pearls',freeOdds:pct([100]),epicOdds:pct([0,50,50])}};
+  assert.match(C.cleanSettings({fish:{...good.fish,epicOdds:pct([0,50,40])}}).error,/add up to 90% — they need to total 100%/);
+  assert.match(C.cleanSettings({pets:{costPerD:-1}}).error,/cost per D must be a number/);
+  assert.match(C.cleanSettings({pets:{enabled:false,costPerD:1},guns:{enabled:false,costPerD:1},fish:{...good.fish,enabled:false}}).error,/at least one/);
+  const guild={id:'g1'};
+  let saved=await C.saveSettings(guild,good); assert.ok(!saved.error,saved.error);
+  assert.deepEqual(saved.settings.pets.currencies,['Gold','Gems']); assert.equal(saved.settings.pets.costPerD,50); assert.equal(saved.settings.guns.enabled,false);
+  assert.equal(saved.settings.fish.draws.epic.odds[2],0.5,'odds stored as fractions');
+  // /calculate in that server uses them
+  const gu=Object.assign(mkUser(),{id:'u9'}); const inG=(r)=>Object.assign(r,{guildId:'g1'});
+  r=inG({user:gu,reply:async(o)=>{r.out=o;}}); await cmd.execute(r);
+  assert.deepEqual(ids(r.out),['calc:pets:have','calc:fish:have'],'switched-off guns are hidden'); assert.ok(labels(r.out).includes('Pals'));
+  i=inG(btn('calc:guns:have',gu)); await cmd.handleCalcButton(i); assert.match(i.out.content,/switched off/);
+  await cmd.handleCalcModal(inG(sub('calcm:pets:want:1',gu,'1')));
+  i=inG(btn('calc:pets:calc',gu)); await cmd.handleCalcButton(i);
+  let e=JSON.stringify(i.out.embeds[0].toJSON()); assert.match(e,/🐶 Pal Calculator/); assert.match(e,/\*\*100\*\* Gold/,'a C = 2 D × 50'); assert.match(e,/\*\*100\*\* Gems/);
+  await cmd.handleCalcModal(inG(sub('calcm:fish:want:2',gu,'1')));
+  i=inG(btn('calc:fish:calc',gu)); await cmd.handleCalcButton(i); e=JSON.stringify(i.out.embeds[0].toJSON());
+  assert.match(e,/Average: \*\*2\*\* draws ≈ \*\*600\*\* Pearls/,'a B (4 D) at 3 D per draw → 2 draws'); assert.doesNotMatch(e,/Free daily draws/,'no free draws → no free estimate');
+  assert.match(e,/C 50% · B 50%/,'footer shows the server\'s odds');
+  saved=await C.saveSettings(guild,{reset:true}); assert.equal(saved.settings.pets.costPerD,100,'reset → defaults');
+  console.log('✓ per-server calculator settings: validation, saved, used by /calculate, reset');
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});

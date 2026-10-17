@@ -32,6 +32,7 @@ const counting = require('../../bot/cogs/modules/counting');
 const serverStats = require('../../bot/cogs/modules/serverStats');
 const music = require('../../bot/cogs/modules/music');
 const starboard = require('../../bot/cogs/modules/starboard');
+const calculator = require('../../bot/cogs/modules/calculator');
 const { adjustXp, getOrCreateConfig } = require('../../bot/cogs/modules/leveling');
 const idleGame = require('../../bot/cogs/modules/idleGame');
 const { parseDuration } = require('../../bot/utils/duration');
@@ -910,7 +911,7 @@ router.post('/guilds/:guildId/tickets/:ticketId/close', ...guard('tickets'), asy
   res.json({ ok: true, ticket: serializeTicket(result.ticket, req.guild), dmSent: !!result.dmSent });
 });
 
-// ---------------------------------------------------------------- Engagement (birthdays, counting, starboard)
+// ---------------------------------------------------------------- Engagement (birthdays, counting, starboard, calculator)
 
 router.get('/guilds/:guildId/engagement', ...guard('engagement'), async (req, res) => {
   const guild = req.guild;
@@ -926,6 +927,7 @@ router.get('/guilds/:guildId/engagement', ...guard('engagement'), async (req, re
   const st = starboard.starboardSettings(config);
   res.json({
     levelingEnabled: config.levelingEnabled !== false,
+    calculator: { settings: calculator.kindsFor(config), defaults: calculator.KINDS, tiers: calculator.TIERS },
     birthdays: {
       settings: { ...b, lastRunDay: undefined },
       saved: savedCount,
@@ -953,9 +955,10 @@ router.get('/guilds/:guildId/engagement', ...guard('engagement'), async (req, re
 const PICK = {
   birthdays: ['enabled', 'channelId', 'roleId', 'xpGift', 'announceHour', 'message'],
   counting: ['enabled', 'channelId', 'allowSameUser', 'mathAllowed', 'numbersOnly', 'slowmodeSeconds', 'current'],
-  starboard: ['enabled', 'channelId', 'emoji', 'threshold', 'selfStar', 'ignoredChannelIds']
+  starboard: ['enabled', 'channelId', 'emoji', 'threshold', 'selfStar', 'ignoredChannelIds'],
+  calculator: ['pets', 'guns', 'fish', 'reset']
 };
-const MODULES = { birthdays, counting, starboard };
+const MODULES = { birthdays, counting, starboard, calculator };
 
 router.post('/guilds/:guildId/engagement/:module', ...guard('engagement'), async (req, res) => {
   const mod = MODULES[req.params.module];

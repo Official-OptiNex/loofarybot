@@ -190,7 +190,8 @@ module.exports = [
     id: 'calculator',
     group: 'Calculator',
     icon: '🧮',
-    blurb: 'Upgrade calculators for pets, guns and fish — what you own, what you want, and what it costs.',
+    blurb: 'Upgrade calculators for pets, guns and fish — what you own, what you want, and what it costs. Names, costs, currencies and fish odds are set per server on the dashboard.',
+    tab: 'engagement',
     commands: [
       { usage: '/calculate', perm: null, description: 'Pick 🐾 Pets, 🔫 Guns or 🐟 Fish, then press a rarity (D → ZZZ) and type how many you own, switch to 🎯 Goal for how many you want, and press 🧮 Calculate. Counts what you own (2 of a rarity merge into 1 of the next) and shows the D summons and Pet Gems / Diamonds needed (fish: epic draws ≈ Diamonds, or days of free draws, from the draw odds) — also DMed to you. Your numbers are saved.' }
     ]
