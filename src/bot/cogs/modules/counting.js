@@ -78,10 +78,15 @@ function nPr(n, k) {
 // the first character it doesn't recognise, leaving the rest as trailing chat.
 const NUM_RE = /^(?:\d+(?:\.\d+)?|\.\d+)/;
 const NAME_RE = /^[A-Za-z_]\w*/;
+// Long enough for any Discord message (4000 characters with Nitro). Maths that hits a limit counts as
+// not maths at all, rather than counting whatever part of it fit.
+const MAX_EXPR_CHARS = 4000;
+const MAX_TOKENS = 2500;
 function tokenize(str) {
   const tokens = [];
   let s = str;
-  while (s.length && tokens.length < 400) {
+  while (s.length) {
+    if (tokens.length >= MAX_TOKENS) throw new Error('too long');
     if (s[0] === ' ' || s[0] === '\t') { s = s.slice(1); continue; }
     let m = s.match(NUM_RE);
     if (m) { tokens.push({ t: 'num', v: Number(m[0]) }); s = s.slice(m[0].length); continue; }
@@ -233,7 +238,9 @@ function evalCall(node, env) {
 // Evaluates a maths expression. Returns a finite number, or null for anything that isn't valid maths.
 function evaluate(expr) {
   try {
-    const tokens = tokenize(String(expr).slice(0, 240));
+    const str = String(expr);
+    if (str.length > MAX_EXPR_CHARS) return null;
+    const tokens = tokenize(str);
     if (!tokens.length) return null;
     const ast = parseExpr(tokens);
     const v = evalNode(ast, { vars: new Map(), budget: ITER_BUDGET });

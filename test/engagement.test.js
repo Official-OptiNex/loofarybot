@@ -99,6 +99,10 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
     assert.equal(C.parseCount(inp),null,`not a usable count: ${inp}`);
   assert.equal(C.parseCount('99999!'),99999,'an over-170 factorial just falls back to the number typed');
   assert.equal(C.parseCount('5!',false),5,'maths off: "5!" is just the plain 5');
+  // Long maths is read in full, never cut off partway (a 1,800-character "14+983-983+…" once counted as 705).
+  const longSum='14'+'+983-983+742-742+615-615'.repeat(70); assert.equal(C.parseCount(longSum),14,'long sums are read to the end');
+  assert.equal(C.parseCount('1'+'+1-1'.repeat(1100)),null,'over the length limit: not counted at all, rather than partly');
+  assert.equal(C.parseCount('('.repeat(3000)+'5'+')'.repeat(3000)),null,'absurd nesting is rejected safely');
   const t0=Date.now(); for (let k=0;k<500;k++) C.parseCount('sum(i,1,1000,prod(j,1,1000,j))'); assert.ok(Date.now()-t0<1000,'hostile maths stays cheap');
   console.log('✓ counting maths: PEMDAS, factorials, roots, nCr/nPr, functions, ∑/∏/∫; junk ignored; capped against abuse');
 
