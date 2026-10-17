@@ -1,5 +1,5 @@
-// /calculate — upgrade calculator for pets and guns, all in one private message:
-//   1. pick 🐾 Pets or 🔫 Guns;
+// /calculate — upgrade calculator for pets, guns and fish, all in one private message:
+//   1. pick 🐾 Pets, 🔫 Guns or 🐟 Fish;
 //   2. 📦 inventory panel: a button per rarity (D → ZZZ) opens a box to type how many you own;
 //   3. 🎯 goal panel: the same 13 buttons for how many you want;
 //   4. 🧮 Calculate: the D summons and gems / diamonds needed (counting what you own), also DMed to you.
@@ -10,7 +10,7 @@ const CalcProfile = require('../../database/models/CalcProfile');
 
 const N = calc.TIERS.length;
 const MAX = 1000;
-const data = new SlashCommandBuilder().setName('calculate').setDescription('Pet & gun upgrade calculator — what you need to reach your goal');
+const data = new SlashCommandBuilder().setName('calculate').setDescription('Pet, gun & fish upgrade calculator — what you need to reach your goal');
 
 // ---------------------------------------------------------------- saved numbers
 
@@ -33,11 +33,11 @@ function menuView(note = null) {
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('🧮 Calculator')
-    .setDescription('What do you want to calculate?\n\n🐾 **Pets** — Pet Gems / Diamonds to reach your pets\n🔫 **Guns** — Diamonds to reach your guns');
+    .setDescription('What do you want to calculate?\n\n🐾 **Pets** — Pet Gems / Diamonds to reach your pets\n🔫 **Guns** — Diamonds to reach your guns\n🐟 **Fish** — epic draws (Diamonds) or days of free draws to reach your fish');
   return {
     content: note,
     embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(button('calc:pets:have', 'Pets', ButtonStyle.Primary, '🐾'), button('calc:guns:have', 'Guns', ButtonStyle.Danger, '🔫'))]
+    components: [new ActionRowBuilder().addComponents(button('calc:pets:have', 'Pets', ButtonStyle.Primary, '🐾'), button('calc:guns:have', 'Guns', ButtonStyle.Danger, '🔫'), button('calc:fish:have', 'Fish', ButtonStyle.Success, '🐟'))]
   };
 }
 
@@ -83,7 +83,7 @@ function resultView(kind, s, embed, note) {
       new ActionRowBuilder().addComponents(
         button(`calc:${kind}:have`, 'Edit inventory', ButtonStyle.Secondary, '📦'),
         button(`calc:${kind}:want`, 'Edit goal', ButtonStyle.Secondary, '🎯'),
-        button('calc:menu', kind === 'pets' ? 'Guns instead' : 'Pets instead', ButtonStyle.Secondary, '🔁')
+        button('calc:menu', 'Another calculator', ButtonStyle.Secondary, '🔁')
       )
     ]
   };
