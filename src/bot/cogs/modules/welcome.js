@@ -62,8 +62,11 @@ async function sendWelcome(member, { force = false, config = null } = {}) {
     return `LoofaryBot needs View Channel, Send Messages and Embed Links in #${channel.name}.`;
   }
 
-  const payload = buildWelcomePayload(config, member);
+  let payload = buildWelcomePayload(config, member);
   if (!payload) return 'The welcome message is empty.';
+  // The "New here?" button (the dashboard's test sends only the welcome form, so read the saved setup).
+  const nmDoc = config.newMember ? config : await WelcomeConfig.findOne({ guildId: member.guild.id }, { newMember: 1 }).lean().catch(() => null);
+  payload = require('./newMember').withWelcomeButton(payload, nmDoc);
   await channel.send(payload);
   return null;
 }

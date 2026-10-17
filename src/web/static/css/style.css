@@ -75,6 +75,7 @@ nav .nav-right { display: flex; align-items: center; gap: 1rem; }
 .btn.secondary { background: var(--bg-elevated); border-color: var(--border-card); color: var(--text-main); box-shadow: none; }
 .btn.secondary:hover { border-color: var(--border-strong); background: var(--bg-card-hover); }
 .btn.danger { background: var(--accent-red); box-shadow: none; }
+.btn.success { background: #248046; box-shadow: none; }
 .btn.small { padding: 0.4rem 0.8rem; font-size: 0.82rem; }
 
 .card {

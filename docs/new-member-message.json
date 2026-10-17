@@ -1,0 +1,40 @@
+{
+  "content": "",
+  "embeds": [
+    {
+      "title": "👋 Welcome to {server}, {username}!",
+      "description": "Here's everything you need to get going. Only you can see this — press the button again any time to bring it back.",
+      "color": 5793266,
+      "thumbnail": {
+        "url": "{avatar}"
+      }
+    },
+    {
+      "title": "🤖 Commands you’ll use",
+      "color": 15844367,
+      "fields": [
+        {
+          "name": "📈 Leveling & XP",
+          "value": "`/daily` — claim daily XP; claiming on consecutive days builds a streak with bigger rewards.\n`/levels rank` — your level, XP and server rank.\n`/levels leaderboard` — the server’s XP leaderboard.\n`/levels card` — change your rank card’s colour, background and tagline."
+        },
+        {
+          "name": "🧰 Game tools",
+          "value": "`/calculate` — what it costs to reach your pet, gun or fish goal.\n`/guide view · list · search` — open, list or search the guides."
+        },
+        {
+          "name": "🛍️ Spending XP",
+          "value": "`/shop view` · `/shop buy` — browse and buy items.\n`/shop inventory` — see what you own.\n`/gamble coinflip · dice · limbo · blackjack · mines · highlow` — the XP games.\n`/gamble info` — payouts, and how many plays and XP you have left today.\n`/pot view` — today’s Daily XP Pot.\n`/idle play` — the Bubble Factory idle game (no gambling)."
+        },
+        {
+          "name": "🧭 Everyday",
+          "value": "`/remind me` — DM yourself a reminder, e.g. in 2h.\n`/birthday set` — save your birthday.\n`/music play` — lofi radio in your voice channel.\n`/userinfo` · `/avatar` · `/serverinfo` — info about a member or the server.\n`/loof help` — every command."
+        }
+      ]
+    },
+    {
+      "title": "📍 Where to go",
+      "color": 5763719,
+      "description": "📖 **Visual guide forum** — <#1546183340003041281>\n🗂️ **Guide index** — <#1560832828231389278>\n🔢 **Counting** — <#1556408946007343235> · count up one number at a time (maths works too)\n🎉 **Giveaways** — [grab the Giveaways role](https://discord.com/channels/1541040609534410762/1546177719065120850/1556388072944570460) so you never miss one\n🎫 **Need help?** — open a ticket in <#1553672850605613166>\n\n🎁 **XP drops** — every so often an XP drop pops up in chat. Be the first to press **Claim** to win the XP!"
+    }
+  ]
+}

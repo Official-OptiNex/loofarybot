@@ -1,4 +1,5 @@
-// /welcome and /goodbye — the dashboard's Welcome tab from Discord. The full embed designer stays on
+// /welcome and /goodbye — the dashboard's Welcome tab from Discord (plus /welcome newmember for the
+// "New here?" button). The full embed designer stays on
 // the dashboard; these cover the channel, the text, on/off, a test and a summary.
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
@@ -8,7 +9,7 @@ const { dashboardUrl } = require('../cogs/modules/help');
 function build(kind) {
   const isWelcome = kind === 'welcome';
   const what = isWelcome ? 'welcome' : 'goodbye';
-  return new SlashCommandBuilder()
+  const cmd = new SlashCommandBuilder()
     .setName(kind)
     .setDescription(isWelcome ? 'Greet new members automatically' : 'Post a message when someone leaves')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
@@ -31,10 +32,75 @@ function build(kind) {
     )
     .addSubcommand((s) => s.setName('test').setDescription(`Post a test ${what} message using you as the member`))
     .addSubcommand((s) => s.setName('show').setDescription(`Show the current ${what} setup`));
+  if (!isWelcome) return cmd;
+  // The "New here?" button: new members press it for a private message (designed on the dashboard).
+  return cmd
+    .addSubcommand((s) =>
+      s
+        .setName('newmember')
+        .setDescription('The "New here?" button — new members press it for a private intro message')
+        .addBooleanOption((o) => o.setName('enabled').setDescription('On or off'))
+        .addBooleanOption((o) => o.setName('on_welcome').setDescription('Put the button on the welcome message'))
+        .addStringOption((o) => o.setName('button_label').setDescription('Button text (e.g. "New here? Click me")').setMaxLength(80))
+        .addStringOption((o) => o.setName('button_emoji').setDescription('Button emoji'))
+        .addStringOption((o) =>
+          o.setName('button_color').setDescription('Button color').addChoices(
+            { name: 'Blurple', value: 'Primary' }, { name: 'Grey', value: 'Secondary' }, { name: 'Green', value: 'Success' }, { name: 'Red', value: 'Danger' }
+          )
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName('newmember_panel')
+        .setDescription('Post (or update) a panel with the "New here?" button in a channel')
+        .addChannelOption((o) => o.setName('channel').setDescription('Where to post it').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true))
+    )
+    .addSubcommand((s) => s.setName('newmember_preview').setDescription('See the private "New here?" message as a new member would'));
+}
+
+async function runNewMember(interaction, sub) {
+  const nm = require('../cogs/modules/newMember');
+  const doc = await WelcomeConfig.findOne({ guildId: interaction.guildId }).lean();
+  let s = nm.settings(doc);
+  if (sub === 'newmember_preview') {
+    const payload = nm.privatePayload(s, interaction.member);
+    if (!payload) return interaction.reply({ content: '❌ The message is empty — design it on the dashboard.', ephemeral: true });
+    return interaction.reply({ ...payload, components: [], content: `${s.enabled ? '' : '*(off right now)*\n'}${payload.content || ''}`.trim() || undefined });
+  }
+  if (sub === 'newmember_panel') {
+    const channel = interaction.options.getChannel('channel');
+    await interaction.deferReply({ ephemeral: true });
+    const r = await nm.postPanel(interaction.guild, s, channel.id);
+    if (r.error) return interaction.editReply(`❌ ${r.error}`);
+    await WelcomeConfig.updateOne({ guildId: interaction.guildId }, { $set: { 'newMember.panelChannelId': channel.id, 'newMember.panelMessageId': r.messageId } }, { upsert: true });
+    return interaction.editReply(`✅ Panel ${r.edited ? 'updated' : 'posted'} in ${channel}.${s.enabled ? '' : ' ⚠️ The button is **off** — turn it on with `/welcome newmember enabled:true`.'}`);
+  }
+  const input = {};
+  const map = { enabled: 'enabled', on_welcome: 'onWelcome' };
+  for (const [opt, key] of Object.entries(map)) { const v = interaction.options.getBoolean(opt); if (v !== null) input[key] = v; }
+  const strs = { button_label: 'buttonLabel', button_emoji: 'buttonEmoji', button_color: 'buttonStyle' };
+  for (const [opt, key] of Object.entries(strs)) { const v = interaction.options.getString(opt); if (v !== null) input[key] = v; }
+  if (Object.keys(input).length) {
+    const r = await nm.saveSettings(interaction.guildId, input);
+    if (r.error) return interaction.reply({ content: `❌ ${r.error}`, ephemeral: true });
+    s = r.settings;
+  }
+  const welcomeOn = doc?.enabled && doc?.channelId;
+  return interaction.reply({
+    content:
+      `👋 **"New here?" button** — ${s.enabled ? '**on**' : 'off'}\n` +
+      `**On the welcome message:** ${s.onWelcome ? (welcomeOn ? 'yes' : 'yes (but welcome messages are off — `/welcome set`)') : 'no'}\n` +
+      `**Panel:** ${s.panelChannelId ? `<#${s.panelChannelId}>` : 'none — `/welcome newmember_panel`'}\n` +
+      `**Button:** ${s.buttonEmoji || ''} ${s.buttonLabel || ''} (${s.buttonStyle})\n` +
+      `**Message:** ${s.message.embeds?.length || 0} embed(s) — preview with \`/welcome newmember_preview\`, design it on the dashboard: ${dashboardUrl(interaction.guildId)}`,
+    ephemeral: true,
+    allowedMentions: { parse: [] }
+  });
 }
 
 async function run(interaction, kind) {
   const sub = interaction.options.getSubcommand();
+  if (sub.startsWith('newmember')) return runNewMember(interaction, sub);
   const guildId = interaction.guildId;
   const isWelcome = kind === 'welcome';
   const doc = (await WelcomeConfig.findOne({ guildId })) || new WelcomeConfig({ guildId });

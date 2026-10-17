@@ -6,6 +6,7 @@ const { setupHoneypotChannel, refreshCounterEmbed, isHttpUrl } = require('../../
 const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
 const { syncJoins, getJoinStats } = require('../../bot/cogs/modules/joinTracking');
 const { sendWelcome, sendGoodbye } = require('../../bot/cogs/modules/welcome');
+const NewMember = require('../../bot/cogs/modules/newMember');
 const WelcomeConfig = require('../../database/models/WelcomeConfig');
 const LogEntry = require('../../database/models/LogEntry');
 const levelColors = require('../../bot/cogs/modules/levelColors');
@@ -807,7 +808,8 @@ function cleanWelcomeInput(body, guild) {
 
 router.get('/guilds/:guildId/welcome', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
   const config = await WelcomeConfig.findOne({ guildId: req.guild.id }).lean();
-  res.json({ config: config || new WelcomeConfig({ guildId: req.guild.id }).toObject() });
+  // newMember: the "New here?" settings with the starter message / panel filled in.
+  res.json({ config: config || new WelcomeConfig({ guildId: req.guild.id }).toObject(), newMember: NewMember.settings(config) });
 });
 
 router.post('/guilds/:guildId/welcome', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
@@ -877,6 +879,55 @@ router.post('/guilds/:guildId/welcome/goodbye/test', requireAuth, requireGuildAc
   } catch (err) {
     console.error('Goodbye test failed:', err);
     res.status(500).json({ ok: false, error: 'Failed to send. Check that all URLs are valid.' });
+  }
+});
+
+// --- "New here?" button: a private message for new members (stored with the welcome settings) ---
+router.post('/guilds/:guildId/welcome/newmember', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  try {
+    const r = await NewMember.saveSettings(req.guild.id, req.body || {});
+    if (r.error) return res.status(400).json({ ok: false, error: r.error });
+    // Keep a posted panel in step with the new button / panel text.
+    let panel = null;
+    if (r.settings.panelChannelId && r.settings.panelMessageId) panel = await NewMember.postPanel(req.guild, r.settings, r.settings.panelChannelId).catch(() => null);
+    res.json({ ok: true, panelUpdated: !!(panel && panel.edited) });
+  } catch (err) {
+    console.error('Failed to save new member message:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Posts the panel (or moves it to another channel).
+router.post('/guilds/:guildId/welcome/newmember/panel', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  try {
+    const s = NewMember.settings(await WelcomeConfig.findOne({ guildId: req.guild.id }).lean());
+    const channelId = String(req.body.channelId || '');
+    const r = await NewMember.postPanel(req.guild, s, channelId);
+    if (r.error) return res.status(400).json({ ok: false, error: r.error });
+    await WelcomeConfig.updateOne({ guildId: req.guild.id }, { $set: { 'newMember.panelChannelId': channelId, 'newMember.panelMessageId': r.messageId } }, { upsert: true });
+    res.json({ ok: true, edited: !!r.edited });
+  } catch (err) {
+    console.error('Failed to post new member panel:', err);
+    res.status(500).json({ ok: false, error: 'Failed to post the panel. Check the bot can send messages there.' });
+  }
+});
+
+// DMs the logged-in admin the (unsaved) private message, to see it for real.
+router.post('/guilds/:guildId/welcome/newmember/test', requireAuth, requireGuildAccess, guardApi, auditTrail, async (req, res) => {
+  try {
+    const { errors, data } = NewMember.cleanInput({ message: req.body.message });
+    if (errors.length) return res.status(400).json({ ok: false, error: errors[0] });
+    const member = await req.guild.members.fetch(req.session.user.id).catch(() => null);
+    if (!member) return res.status(400).json({ ok: false, error: "Couldn't find you in this server." });
+    const payload = NewMember.privatePayload(NewMember.settings({ newMember: { message: data.message } }), member);
+    if (!payload) return res.status(400).json({ ok: false, error: 'The message is empty.' });
+    delete payload.ephemeral;
+    const ok = await member.send(payload).then(() => true, () => false);
+    if (!ok) return res.status(400).json({ ok: false, error: "Couldn't DM you — your DMs are closed for this server." });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('New member test failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to send.' });
   }
 });
 
