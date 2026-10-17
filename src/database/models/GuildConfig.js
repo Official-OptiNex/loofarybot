@@ -158,6 +158,22 @@ const GuildConfigSchema = new mongoose.Schema(
       slowmodeSeconds: { type: Number, default: 1200 }, // slowmode applied to the channel (grief protection; 20 min default)
       resets: { type: Number, default: 0 },
       lastResetBy: { type: String, default: null },
+      // Hidden goals: every `goals.every` numbers, everyone who has counted this run gets XP. Both lists
+      // reset when the count fails. Members aren't told where the goals are — it's a surprise.
+      participants: { type: [String], default: [] }, // who has counted this run
+      goalsHit: { type: Number, default: 0 }, // goals reached this run (each one pays stepXp more)
+      lastGoalAt: { type: Number, default: 0 }, // the number the last goal paid out on (no double payouts)
+      goals: {
+        enabled: { type: Boolean, default: false },
+        every: { type: Number, default: 15 },
+        baseXp: { type: Number, default: 100 }, // the first goal of a run
+        stepXp: { type: Number, default: 50 }, // added for each further goal in the same run
+        maxXp: { type: Number, default: 0 }, // cap on base + steps (0 = no cap); bonuses come on top
+        // Extra XP on top when the number is a multiple of `every` (e.g. every 100 → +250).
+        bonuses: { type: [{ _id: false, every: Number, xp: Number }], default: [{ every: 100, xp: 250 }, { every: 1000, xp: 2500 }] },
+        message: { type: String, default: null }, // null = the built-in announcement
+        ping: { type: Boolean, default: false } // @mention everyone who gets the reward
+      },
       // Counting bans (/counting ban): an auto-created role that's denied Send Messages in the
       // counting channel. `bans` tracks who's banned and when a temporary ban ends (null = forever).
       bannedRoleId: { type: String, default: null },

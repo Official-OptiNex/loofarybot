@@ -1,4 +1,4 @@
-// /counting — set up the counting game channel and check how it's going.
+// /counting — set up the counting game channel (and its secret XP goals) and check how it's going.
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
 const counting = require('../cogs/modules/counting');
 const { getOrCreateConfig } = require('../cogs/modules/leveling');
@@ -42,6 +42,17 @@ const data = new SlashCommandBuilder()
       .setDescription('Let a member type in the counting channel again')
       .addUserOption((o) => o.setName('user').setDescription('Who to unblock').setRequired(true))
   )
+  .addSubcommand((s) =>
+    s
+      .setName('goals')
+      .setDescription('Secret goals: every N numbers, everyone who counted this run gets XP (members aren’t told)')
+      .addBooleanOption((o) => o.setName('enabled').setDescription('On or off'))
+      .addIntegerOption((o) => o.setName('every').setDescription('A goal every this many numbers (default 15)').setMinValue(1).setMaxValue(100000))
+      .addIntegerOption((o) => o.setName('base_xp').setDescription('XP for the first goal of a run (default 100)').setMinValue(0).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('step_xp').setDescription('Extra XP for each later goal in the same run (default 50)').setMinValue(0).setMaxValue(1000000))
+      .addIntegerOption((o) => o.setName('max_xp').setDescription('Cap on base + steps, before bonuses (0 = no cap)').setMinValue(0).setMaxValue(10000000))
+      .addBooleanOption((o) => o.setName('ping').setDescription('@mention everyone rewarded'))
+  )
   .addSubcommand((s) => s.setName('status').setDescription('The current number, best run and settings'));
 
 async function autocomplete(interaction) {
@@ -49,6 +60,19 @@ async function autocomplete(interaction) {
 }
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
+
+/** Staff-only summary of the hidden goals, e.g. "every 15 · 100 XP, +50 per goal …". */
+function goalsText(s) {
+  const g = s.goals;
+  if (!g.enabled) return 'Off — turn on with `/counting goals enabled:true`.';
+  const nextAt = counting.nextGoal(g, s.current);
+  const next = counting.goalReward(g, nextAt, s.goalsHit);
+  return (
+    `On · every **${fmt(g.every)}** numbers · first goal **${fmt(g.baseXp)} XP**, then **+${fmt(g.stepXp)}** per goal${g.maxXp ? ` (cap ${fmt(g.maxXp)})` : ''}` +
+    `${g.bonuses.length ? ` · bonus goals: ${g.bonuses.map((b) => `every ${fmt(b.every)} +${fmt(b.xp)}`).join(', ')}` : ''}${g.ping ? ' · pings winners' : ''}\n` +
+    `This run: **${fmt(s.participants.length)}** counter${s.participants.length === 1 ? '' : 's'}, ${fmt(s.goalsHit)} goal${s.goalsHit === 1 ? '' : 's'} reached · next at **${fmt(nextAt)}** → **${fmt(next.xp)} XP** each`
+  );
+}
 
 async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
@@ -96,6 +120,20 @@ async function execute(interaction) {
     return interaction.reply({ content: `✅ Count set to **${fmt(s.current)}** — next is **${fmt(s.current + 1)}**.`, ephemeral: true });
   }
 
+  if (sub === 'goals') {
+    const goals = {};
+    if (o.getBoolean('enabled') !== null) goals.enabled = o.getBoolean('enabled');
+    for (const [opt, key] of [['every', 'every'], ['base_xp', 'baseXp'], ['step_xp', 'stepXp'], ['max_xp', 'maxXp']]) if (o.getInteger(opt) !== null) goals[key] = o.getInteger(opt);
+    if (o.getBoolean('ping') !== null) goals.ping = o.getBoolean('ping');
+    let s;
+    if (Object.keys(goals).length) {
+      const saved = await counting.saveSettings(guild, { goals });
+      if (saved.error) return interaction.reply({ content: `❌ ${saved.error}`, ephemeral: true });
+      s = saved.settings;
+    } else s = counting.countingSettings(await getOrCreateConfig(guild.id));
+    return interaction.reply({ content: `🎯 **Secret counting goals**\n${goalsText(s)}\n-# Bonuses and the announcement text are on the dashboard (Engagement → Counting).`, ephemeral: true });
+  }
+
   if (sub === 'ban') {
     const target = o.getUser('user');
     const durStr = o.getString('duration');
@@ -135,6 +173,7 @@ async function execute(interaction) {
         inline: true
       }
     );
+  embed.addFields({ name: '🎯 Secret goals (only staff see this)', value: goalsText(s), inline: false });
   if (s.bans.length) {
     const lines = s.bans
       .slice(0, 10)
