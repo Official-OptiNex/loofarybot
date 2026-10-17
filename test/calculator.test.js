@@ -55,7 +55,9 @@ assert.equal(C.drawValue(C.KINDS.fish.draws.free.odds),1.6,'free draw: D60/C30/B
 let dp=C.drawPlan(C.KINDS.fish,2); assert.equal(dp.perD*2,125,'a C fish ≈ 125 Diamonds (as the guide says)');
 dp=C.drawPlan(C.KINDS.fish,4096); assert.equal(dp.diamonds,256000,'ZZZ fish ≈ 256,000 Diamonds (as the guide says)'); assert.equal(dp.freeDays,512,'or ~512 days of free draws (the guide: 500+ days)');
 const fishE=JSON.stringify(C.resultEmbed('fish',at({ss:1}),at({zzz:1}),C.plan(at({ss:1}),at({zzz:1}))).toJSON());
-assert.match(fishE,/4,064\*\* D-worth of fish/); assert.match(fishE,/1,270\*\* epic draws ≈ \*\*254,000\*\* Diamonds/); assert.match(fishE,/508\*\* days of free daily draws/);
+assert.match(fishE,/4,064\*\* D-worth of fish/); assert.match(fishE,/Average: \*\*1,270\*\* draws ≈ \*\*254,000\*\* Diamonds/);
+assert.match(fishE,/Best luck: \*\*508\*\* draws = \*\*101,600\*\* Diamonds/,'every draw an A (8 D)'); assert.match(fishE,/Worst luck: \*\*2,032\*\* draws = \*\*406,400\*\* Diamonds/,'every draw a C (2 D)');
+assert.match(fishE,/best 204 · worst 813/,'free-draw days range'); assert.match(fishE,/~\*\*508\*\* days/);
 assert.match(fishE,/saves ~500 Diamonds/); assert.doesNotMatch(fishE,/Pet Gems/);
 console.log('✓ result embed (pets, guns, fish)');
 
@@ -98,7 +100,7 @@ const labels=(view)=>view.components.flatMap((row)=>row.toJSON().components.map(
   const shy=mkUser(false); await cmd.handleCalcModal(sub('calcm:guns:want:12',shy,'1'));
   i=btn('calc:guns:calc',shy); await cmd.handleCalcButton(i); assert.match(i.out.content,/Couldn't DM you/); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/409,600\*\* Diamonds/);
   await cmd.handleCalcModal(sub('calcm:fish:want:12',u,'1'));
-  i=btn('calc:fish:calc',u); await cmd.handleCalcButton(i); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/epic draws ≈ \*\*256,000\*\* Diamonds/,'fish calculator works through the panel');
+  i=btn('calc:fish:calc',u); await cmd.handleCalcButton(i); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/Average: \*\*1,280\*\* draws ≈ \*\*256,000\*\* Diamonds/,'fish calculator works through the panel');
   i=btn('calc:menu',u); await cmd.handleCalcButton(i); assert.deepEqual(ids(i.out),['calc:pets:have','calc:guns:have','calc:fish:have'],'back to the start');
   console.log('✓ /calculate panel: pick, 13 rarity buttons for inventory + goal, calculate + DM, saved');
   process.exit(0);

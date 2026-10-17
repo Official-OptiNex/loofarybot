@@ -24,13 +24,28 @@ const KINDS = {
 /** The average value of one draw, in D (a rarity-t fish is worth 2^t D). */
 const drawValue = (odds) => odds.reduce((sum, p, t) => sum + p * 2 ** t, 0);
 
-/** For draw-based kinds: how many epic draws / free days cover `needD` on average. */
+// The smallest / biggest a single draw can be worth, in D.
+const drawMin = (odds) => 2 ** odds.findIndex((p) => p > 0);
+const drawMax = (odds) => 2 ** (odds.length - 1 - [...odds].reverse().findIndex((p) => p > 0));
+
+/**
+ * For draw-based kinds: how many epic draws (and Diamonds) or days of free draws cover `needD` —
+ * on average, with the best luck (every draw the top rarity) and the worst (every draw the lowest).
+ */
 function drawPlan(kind, needD) {
   const { free, epic } = kind.draws;
   const epicD = drawValue(epic.odds); // 3.2 D per epic draw
   const dayD = drawValue(free.odds) * free.perDay; // 8 D per day of free draws
   const epicDraws = Math.ceil(needD / epicD);
-  return { epicD, dayD, epicDraws, diamonds: epicDraws * epic.cost, freeDays: Math.ceil(needD / dayD), perD: epic.cost / epicD };
+  const best = Math.ceil(needD / drawMax(epic.odds));
+  const worst = Math.ceil(needD / drawMin(epic.odds));
+  return {
+    epicD, dayD, epicDraws, diamonds: epicDraws * epic.cost, perD: epic.cost / epicD,
+    epicBest: best, diamondsBest: best * epic.cost, epicWorst: worst, diamondsWorst: worst * epic.cost,
+    freeDays: Math.ceil(needD / dayD),
+    freeDaysBest: Math.ceil(needD / (drawMax(free.odds) * free.perDay)),
+    freeDaysWorst: Math.ceil(needD / (drawMin(free.odds) * free.perDay))
+  };
 }
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
@@ -143,9 +158,12 @@ function resultEmbed(kindKey, have, want, result, user = null) {
   else if (k.draws) {
     const d = drawPlan(k, result.buyD);
     total =
-      `**${fmt(result.buyD)}** D-worth of ${k.plural} (on average):\n` +
-      `💎 **${fmt(d.epicDraws)}** epic draws ≈ **${fmt(d.diamonds)}** Diamonds\n` +
-      `**or** 🎣 **${fmt(d.freeDays)}** days of free daily draws\n` +
+      `**${fmt(result.buyD)}** D-worth of ${k.plural}.\n` +
+      `💎 **Epic draws:**\n` +
+      `🍀 Best luck: **${fmt(d.epicBest)}** draws = **${fmt(d.diamondsBest)}** Diamonds\n` +
+      `📊 Average: **${fmt(d.epicDraws)}** draws ≈ **${fmt(d.diamonds)}** Diamonds\n` +
+      `💀 Worst luck: **${fmt(d.epicWorst)}** draws = **${fmt(d.diamondsWorst)}** Diamonds\n` +
+      `**or** 🎣 **Free daily draws only:** ~**${fmt(d.freeDays)}** days (best ${fmt(d.freeDaysBest)} · worst ${fmt(d.freeDaysWorst)})\n` +
       `-# Every day of free draws saves ~${fmt(Math.round(d.dayD * d.perD))} Diamonds of epic draws.`;
   } else total = `Summon **${fmt(result.buyD)}** D ${k.plural}\n` + k.currencies.map((c) => `💎 **${fmt(cost)}** ${c}`).join('\n**or** ');
   embed.addFields({ name: '💰 You need', value: total, inline: false });
@@ -159,4 +177,4 @@ function resultEmbed(kindKey, have, want, result, user = null) {
   return embed;
 }
 
-module.exports = { TIERS, KINDS, parseCounts, plan, resultEmbed, countsText, label, drawValue, drawPlan };
+module.exports = { TIERS, KINDS, parseCounts, plan, resultEmbed, countsText, label, drawValue, drawMin, drawMax, drawPlan };
