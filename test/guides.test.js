@@ -14,7 +14,7 @@ const G=require(root+'src/bot/cogs/modules/guides');
 const threads=[]; let tid=100;
 function makeThread(id,name,payload,tags){ const t={id,name,appliedTags:tags||[],pinned:false,deleted:false,
   starter:{id,payload,edit:async(p)=>{t.starter.payload=p;return t.starter;}},
-  fetchStarterMessage:async()=>t.starter, setName:async(n)=>{t.name=n;}, setAppliedTags:async(a)=>{t.appliedTags=a;},
+  fetchStarterMessage:async()=>t.starter, setName:async(n)=>{t.name=n; t.renames=(t.renames||0)+1;}, setAppliedTags:async(a)=>{t.appliedTags=a;},
   pin:async()=>{t.pinned=true;}, delete:async()=>{t.deleted=true; cache.delete(id);},
   msgs:new Map(), send:async(payload)=>{ const m={id:'m'+(tid++),payload,deleted:false,edit:async(p)=>{m.payload=p;return m;},delete:async()=>{m.deleted=true;t.msgs.delete(m.id);}}; t.msgs.set(m.id,m); return m; }};
   t.messages={fetch:async(mid)=>t.msgs.get(mid)||Promise.reject(new Error('unknown message'))}; return t; }
@@ -122,7 +122,7 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   const ip=JSON.stringify(idx.starter.payload);
   assert.ok(ip.indexOf('read me first')>=0 && ip.indexOf('read me first')<ip.indexOf('Guides Index'),'intro sits above the index');
   assert.ok(!/Welcome\]\(/.test(ip),'Start Here is not listed as a guide in the index');
-  assert.match(idx.name,/Start Here/,'index post renamed to Start Here');
+  assert.equal(idx.name,'📖 Guides Index','index post keeps its name (renames leave undeletable lines in Discord)');
   await G.deleteGuide(guild,'welcome',s);
   assert.equal(idx.deleted,false,'deleting Start Here keeps the index post');
   assert.doesNotMatch(JSON.stringify(idx.starter.payload),/read me first/,'intro removed from the index');
@@ -144,7 +144,7 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   await G.editGuide(guild,'legend-box',{inIndex:true},'u1',s);
   const p2=JSON.stringify(idx.starter.payload);
   assert.ok(p2.indexOf('mega intro')>=0 && p2.indexOf('legend text')>=0 && p2.indexOf('legend text')<p2.indexOf('Guides Index'),'both included guides sit above the list');
-  assert.match(idx.name,/Start Here/);
+  assert.equal(idx.name,'📖 Guides Index');
   await G.editGuide(guild,'mega-guide',{inIndex:false},'u1',s);
   const mg2=await G.getGuide('g','mega guide'); assert.notEqual(mg2.threadId,idx.id,'unticked → own post again');
   assert.doesNotMatch(JSON.stringify(idx.starter.payload),/mega intro/,'removed from the index');
@@ -163,7 +163,17 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.equal((await freshSettings()).index.title,'Welcome!','stored');
   await G.saveIndex(guild,{},await freshSettings());
   assert.equal(idx.name,'📖 Guides Index','cleared → defaults again');
-  console.log('✓ index post: name, title, colour, intro, footer');
+  // repost: old post deleted, a fresh pinned one, links to guide:index follow it
+  const renamesBefore=idx.renames||0;
+  await G.importGuides(guild,[{title:'Home Link',tags:['Guides'],body:'[home](guide:index)'}],'u1',await freshSettings());
+  assert.equal(idx.renames||0,renamesBefore,'adding guides never renames the index post');
+  const rp=await G.repostIndex(guild,await freshSettings());
+  assert.ok(rp.threadId && rp.threadId!==idx.id,'a new index post'); assert.equal(idx.deleted,true,'old one deleted');
+  const idx2=cache.get(rp.threadId); assert.equal(idx2.pinned,true,'new one pinned'); assert.equal(idx2.name,'📖 Guides Index');
+  assert.equal((await freshSettings()).legendThreadId,rp.threadId,'stored');
+  assert.ok(JSON.stringify(cache.get((await G.getGuide('g','home link')).threadId).starter.payload).includes(`/g/${rp.threadId})`),'guide:index links point at the new post');
+  await G.deleteGuide(guild,'home-link',await freshSettings());
+  console.log('✓ index post: name, title, colour, intro, footer, repost');
 
   // ---- guide:slug links resolve to post links (and fix themselves once a later guide is posted)
   const nPosts=threads.length;
@@ -175,7 +185,7 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   const la=await G.getGuide('g','link a'), lb=await G.getGuide('g','link b');
   const aPost=JSON.stringify(cache.get(la.threadId).starter.payload), bPost=JSON.stringify(cache.get(lb.threadId).starter.payload);
   assert.ok(aPost.includes(`[B](https://discord.com/channels/g/${lb.threadId})`),'forward link resolved after the later guide was posted');
-  assert.ok(aPost.includes(`[home](https://discord.com/channels/g/${idx.id})`),'guide:index → the pinned post');
+  assert.ok(aPost.includes(`[home](https://discord.com/channels/g/${(await freshSettings()).legendThreadId})`),'guide:index → the pinned post');
   assert.ok(aPost.includes(' and gone'),'unknown guide → plain text');
   assert.ok(bPost.includes(`[A](https://discord.com/channels/g/${la.threadId})`),'<guide:slug> form works too');
   assert.match(JSON.stringify(la.body),/guide:link-b/,'stored body keeps the guide: link');
