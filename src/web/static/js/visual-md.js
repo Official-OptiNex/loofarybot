@@ -54,7 +54,7 @@ window.VisualMD = (function () {
       }
       if ((m = rest.match(/^<(a?):(\w{2,32}):(\d{5,25})>/))) { flush(); out += emojiAtom(m[0], m[2], m[3]); i += m[0].length; continue; }
       if ((m = rest.match(/^<@&(\d+)>/))) { flush(); const r = data.roles.find((x) => x.id === m[1]); out += atom(m[0], `@${esc(r ? r.name : 'role')}`, 'v-atom mention-pill'); i += m[0].length; continue; }
-      if ((m = rest.match(/^<@!?(\d+)>/))) { flush(); out += atom(m[0], '@user', 'v-atom mention-pill'); i += m[0].length; continue; }
+      if ((m = rest.match(/^<@!?(\d+)>/))) { flush(); const u = (data.users || []).find((x) => x.id === m[1]); out += atom(m[0], `@${esc(u ? u.name : 'user')}`, 'v-atom mention-pill'); i += m[0].length; continue; }
       if ((m = rest.match(/^<#(\d+)>/))) { flush(); const c = data.channels.find((x) => x.id === m[1]); out += atom(m[0], `#${esc(c ? c.name : 'channel')}`, 'v-atom mention-pill'); i += m[0].length; continue; }
       if ((m = rest.match(/^<(t:\d+(?::[tTdDfFR])?|\/[\w -]+:\d+)>/))) { flush(); out += atom(m[0], esc(m[0]), 'v-atom mention-pill'); i += m[0].length; continue; }
       if ((m = rest.match(/^:(\w{2,32}):/)) && findEmoji(m[1])) { flush(); const e = findEmoji(m[1]); out += emojiAtom(emojiTag(e), e.name, e.id); i += m[0].length; continue; }
