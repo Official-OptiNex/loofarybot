@@ -13,7 +13,8 @@ const GuideSchema = new mongoose.Schema(
     tags: { type: [String], default: [] },
     // Shown at the top of the pinned index post instead of as a forum post of its own.
     inIndex: { type: Boolean, default: false },
-    // Extra messages posted after the first one in the guide's post, in order: [{ key, body, messageId }].
+    // Extra messages posted after the first one in the guide's post, in order: [{ key, body, messageId, hash }]
+    // (hash = fingerprint of what that message shows, so saves only edit messages that changed).
     // Each can be linked to directly with guide:slug#key (a link to one message, not just the post).
     messages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // The guide body in Discord message JSON ({ content, embeds: [...] }).
@@ -21,6 +22,7 @@ const GuideSchema = new mongoose.Schema(
 
     threadId: { type: String, default: null }, // the forum post (thread) id
     messageId: { type: String, default: null }, // the thread's first message (the one we edit)
+    starterHash: { type: String, default: null }, // fingerprint of what the first message shows (saves skip it when unchanged)
 
     authorId: { type: String, default: null }, // credited author (shown on the guide)
     createdBy: { type: String, default: null }, // who created it in the tool

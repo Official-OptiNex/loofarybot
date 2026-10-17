@@ -3,6 +3,7 @@
 // is kept up to date automatically, and editors get a private channel to coordinate. Guide bodies use
 // Discord message JSON ({ content, embeds }) — the same format as the Embed Builder — so they import
 // and export cleanly (handy for porting an existing guide set in through the dashboard).
+const crypto = require('crypto');
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const GuildConfig = require('../../../database/models/GuildConfig');
 const Guide = require('../../../database/models/Guide');
@@ -190,7 +191,15 @@ async function fetchThread(forum, id) {
   return forum.guild.channels.cache.get(id) || (await forum.threads.fetch(id).then((t) => t, () => null));
 }
 
-/** Creates or updates the guide's forum post (name, tags, and the starter message body). */
+// A fingerprint of what was last posted to a message, so saves skip messages that didn't change.
+const payloadHash = (payload) => crypto.createHash('sha1').update(JSON.stringify(payload)).digest('hex');
+const sameTags = (a = [], b = []) => a.length === b.length && a.every((t) => b.includes(t));
+
+/**
+ * Creates or updates the guide's forum post (name, tags, and the starter message body).
+ * Only what changed is sent: Discord allows 2 post renames / tag changes per 10 minutes and a few
+ * message edits per second, so re-sending everything on each save made big guides hang on "Saving".
+ */
 async function publishGuide(guild, guide, settings) {
   const forum = getForum(guild, settings);
   if (!forum) return { error: 'Set a **forum channel** for guides first (`/guide setup`).' };
@@ -210,31 +219,43 @@ async function publishGuide(guild, guide, settings) {
   if (thread && thread.id === guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean()).legendThreadId) thread = null; // was Start Here; needs its own post again
   const starterPayload = (links) => buildPayload(guide, links);
   let starter = null;
+  let starterHash = null;
   if (thread) {
-    if (thread.name !== guide.title) await thread.setName(guide.title.slice(0, 100)).catch(() => null);
-    if (thread.setAppliedTags) await thread.setAppliedTags(appliedTags).catch(() => null);
-    starter = await thread.fetchStarterMessage().catch(() => null);
-    if (starter) await starter.edit(starterPayload(await guideLinks(guild, { ...guide, threadId: thread.id, messages }))).catch(() => null);
+    // Forum posts archive themselves after a while, and archived posts can't be edited.
+    if (thread.archived && thread.setArchived) await thread.setArchived(false, 'Guide updated').catch(() => null);
+    if (thread.name !== guide.title.slice(0, 100)) await thread.setName(guide.title.slice(0, 100)).catch(() => null);
+    if (thread.setAppliedTags && !sameTags(thread.appliedTags || [], appliedTags)) await thread.setAppliedTags(appliedTags).catch(() => null);
+    const payload = starterPayload(await guideLinks(guild, { ...guide, threadId: thread.id, messages }));
+    const hash = payloadHash(payload);
+    if (hash !== guide.starterHash) {
+      starter = await thread.fetchStarterMessage().catch(() => null);
+      if (starter && (await starter.edit(payload).then(() => true, () => false))) starterHash = hash;
+    } else starterHash = hash;
   } else {
     // A new post: its follow-up messages are new too.
-    messages.forEach((m) => delete m.messageId);
-    thread = await forum.threads.create({ name: guide.title.slice(0, 100), message: starterPayload(await guideLinks(guild, { ...guide, threadId: null, messages })), appliedTags }).catch((e) => ({ error: e.message }));
+    messages.forEach((m) => { delete m.messageId; delete m.hash; });
+    const payload = starterPayload(await guideLinks(guild, { ...guide, threadId: null, messages }));
+    thread = await forum.threads.create({ name: guide.title.slice(0, 100), message: payload, appliedTags }).catch((e) => ({ error: e.message }));
     if (!thread || thread.error) return { error: `Couldn't post the guide. (${thread?.error || 'unknown error'})` };
+    starterHash = payloadHash(payload);
   }
 
   // Follow-up messages, edited in place by position; extras are posted, leftovers deleted.
   let posted = false;
   const links = await guideLinks(guild, { ...guide, threadId: thread.id, messages });
-  for (const m of messages) {
-    const payload = buildPayload({ title: guide.title, body: m.body }, links);
+  const sync = async (m, payload) => {
+    const hash = payloadHash(payload);
+    if (m.messageId && m.hash === hash) return; // unchanged since it was last posted
     const old = m.messageId && (await thread.messages?.fetch(m.messageId).catch(() => null));
-    if (old) await old.edit(payload).catch(() => null);
+    if (old) m.hash = (await old.edit(payload).then(() => true, () => false)) ? hash : null;
     else {
       const sent = await thread.send?.(payload).catch(() => null);
       m.messageId = sent?.id || null;
+      m.hash = sent ? hash : null;
       posted = true;
     }
-  }
+  };
+  for (const m of messages) await sync(m, buildPayload({ title: guide.title, body: m.body }, links));
   for (const id of guide.removedMessageIds || []) {
     const old = await thread.messages?.fetch(id).catch(() => null);
     if (old) await old.delete().catch(() => null);
@@ -242,14 +263,14 @@ async function publishGuide(guild, guide, settings) {
   // Links to this guide's own new messages (e.g. a contents list) only resolve once they exist.
   if (posted && linkedSlugs(guide).has(guide.slug)) {
     const fresh = await guideLinks(guild, { ...guide, threadId: thread.id, messages });
-    if (!starter) starter = await thread.fetchStarterMessage?.().catch(() => null);
-    if (starter) await starter.edit(starterPayload(fresh)).catch(() => null);
-    for (const m of messages) {
-      const msg = m.messageId && (await thread.messages?.fetch(m.messageId).catch(() => null));
-      if (msg) await msg.edit(buildPayload({ title: guide.title, body: m.body }, fresh)).catch(() => null);
+    const payload = starterPayload(fresh);
+    if (payloadHash(payload) !== starterHash) {
+      if (!starter) starter = await thread.fetchStarterMessage?.().catch(() => null);
+      if (starter && (await starter.edit(payload).then(() => true, () => false))) starterHash = payloadHash(payload);
     }
+    for (const m of messages) await sync(m, buildPayload({ title: guide.title, body: m.body }, fresh));
   }
-  return { threadId: thread.id, messageId: thread.id, messages };
+  return { threadId: thread.id, messageId: thread.id, messages, starterHash };
 }
 
 async function createGuide(guild, { title, tags = [], body = null, messages = [], inIndex = false, authorId = null, createdBy = null }, settings, { rebuild = true } = {}) {
@@ -262,6 +283,7 @@ async function createGuide(guild, { title, tags = [], body = null, messages = []
   guide.threadId = pub.threadId;
   guide.messageId = pub.messageId;
   if (pub.messages) guide.messages = pub.messages;
+  guide.starterHash = pub.starterHash || null;
   const doc = await Guide.create(guide);
   if (rebuild) {
     await rebuildLegend(guild, settings);
@@ -287,7 +309,10 @@ async function editGuide(guild, slug, patch, byId, settings, { rebuild = true } 
     // The message at each position stays the same Discord message; only its content changes.
     const old = guide.messages || [];
     const next = normalizeMessages(guild, patch.messages);
-    next.forEach((m, i) => (m.messageId = old[i]?.messageId || null));
+    next.forEach((m, i) => {
+      m.messageId = old[i]?.messageId || null;
+      m.hash = old[i]?.hash || null; // what that Discord message currently shows
+    });
     removedMessageIds = old.slice(next.length).map((m) => m.messageId).filter(Boolean);
     guide.messages = next;
     guide.markModified('messages');
@@ -298,6 +323,7 @@ async function editGuide(guild, slug, patch, byId, settings, { rebuild = true } 
   guide.threadId = pub.threadId;
   guide.messageId = pub.messageId;
   if (pub.messages) { guide.messages = pub.messages; guide.markModified('messages'); }
+  guide.starterHash = pub.starterHash || null;
   await guide.save();
   if (rebuild) await rebuildLegend(guild, settings);
   // Message links into this guide moved (keys reordered, messages added/removed): update linking guides.
@@ -435,7 +461,8 @@ async function refreshLinkingGuides(guild, settings, slugs = null) {
   for (const g of all) {
     if (!hasGuideLinks(g) || isInIndex(g) || (wanted && wanted.has(g.slug) && wanted.size === 1)) continue;
     if (wanted && ![...linkedSlugs(g)].some((s) => wanted.has(s))) continue;
-    await publishGuide(guild, g, settings);
+    const pub = await publishGuide(guild, g, settings);
+    if (!pub.error && pub.messages) await Guide.updateOne({ _id: g._id }, { $set: { messages: pub.messages, starterHash: pub.starterHash || null } });
   }
 }
 

@@ -229,6 +229,15 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.equal(xm2.deleted,true,'a removed message is deleted from the post');
   await G.editGuide(guild,'faqs',{messages:[{key:'gun',body:'gun v3'},{key:'pets',body:'pets'}]},'u1',await freshSettings());
   xfaqG=await G.getGuide('g','faqs'); assert.match(JSON.stringify(xft.msgs.get(xfaqG.messages[1].messageId).payload),/pets/,'an added message is posted');
+  // Saving again with nothing changed sends nothing to Discord (no edits, no tag changes, no renames) —
+  // big guides used to hang on "Saving" behind Discord's rate limits.
+  let calls=0; const spy=(o,k)=>{ const f=o[k]; o[k]=async(...x)=>{ calls++; return f(...x); }; };
+  spy(xft,'setAppliedTags'); spy(xft,'setName'); spy(xft.starter,'edit'); for (const m of xft.msgs.values()) spy(m,'edit');
+  const same=await G.getGuide('g','faqs');
+  await G.editGuide(guild,'faqs',{title:same.title,tags:same.tags,body:same.body,messages:same.messages.map((m)=>({key:m.key,body:m.body}))},'u1',await freshSettings());
+  assert.equal(calls,0,'an unchanged save makes no Discord calls');
+  await G.editGuide(guild,'faqs',{messages:[{key:'gun',body:'gun v3'},{key:'pets',body:'pets v2'}]},'u1',await freshSettings());
+  assert.equal(calls,1,'one changed message → exactly one edit');
   const xmg2=JSON.stringify(cache.get((await G.getGuide('g','main guide')).threadId).starter.payload);
   assert.ok(xmg2.includes(' and ')&&xmg2.includes('see Main Stage FAQs'),'link to a removed message → plain text (linking guide refreshed)');
   for (const sl of ['faqs','main-guide']) await G.deleteGuide(guild,sl,await freshSettings());
