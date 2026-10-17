@@ -1,76 +1,152 @@
-// /calculate pets · guns — how many D summons (and gems / diamonds) it takes to reach the pets or guns
-// you want, counting what you already own. Opens a form (pre-filled with your last answers), replies
-// with the result and DMs you a copy.
-const { SlashCommandBuilder, LabelBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+// /calculate — upgrade calculator for pets and guns, all in one private message:
+//   1. pick 🐾 Pets or 🔫 Guns;
+//   2. 📦 inventory panel: a button per rarity (D → ZZZ) opens a box to type how many you own;
+//   3. 🎯 goal panel: the same 13 buttons for how many you want;
+//   4. 🧮 Calculate: the D summons and gems / diamonds needed (counting what you own), also DMed to you.
+// Numbers save as you go, so it reopens where you left off.
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, LabelBuilder, ModalBuilder, SlashCommandBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const calc = require('../cogs/modules/calculator');
 const CalcProfile = require('../../database/models/CalcProfile');
 
-const EXAMPLES = {
-  pets: { have: 'e.g. b 2, sss 2, xxx 1   (leave blank if you have none)', want: 'e.g. 3x zzz, 2x xxx' },
-  guns: { have: 'e.g. s 1, ss 2   (leave blank if you have none)', want: 'e.g. 1x zzz, 2x x' }
+const N = calc.TIERS.length;
+const MAX = 1000;
+const data = new SlashCommandBuilder().setName('calculate').setDescription('Pet & gun upgrade calculator — what you need to reach your goal');
+
+// ---------------------------------------------------------------- saved numbers
+
+const counts = (arr) => Array.from({ length: N }, (_, i) => Math.max(0, Math.min(MAX, Math.floor(Number(arr?.[i]) || 0))));
+async function load(userId, kind) {
+  const p = await CalcProfile.findOne({ userId, kind }).lean().catch(() => null);
+  return { have: counts(p?.haveCounts), want: counts(p?.wantCounts) };
+}
+const save = (userId, kind, s) => CalcProfile.updateOne({ userId, kind }, { $set: { haveCounts: s.have, wantCounts: s.want } }, { upsert: true }).catch(() => null);
+
+// ---------------------------------------------------------------- views
+
+const button = (id, label, style = ButtonStyle.Secondary, emoji = null) => {
+  const b = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+  if (emoji) b.setEmoji(emoji);
+  return b;
 };
 
-const data = new SlashCommandBuilder()
-  .setName('calculate')
-  .setDescription('Work out how many gems / diamonds you need to reach your goal')
-  .addSubcommand((s) =>
-    s.setName('pets').setDescription('Pet upgrade calculator')
-      .addStringOption((o) => o.setName('have').setDescription('Your pets, e.g. "b 2, sss 2" (skip to use the form)'))
-      .addStringOption((o) => o.setName('want').setDescription('What you want, e.g. "3x zzz, 2x xxx" (skip to use the form)'))
-  )
-  .addSubcommand((s) =>
-    s.setName('guns').setDescription('Gun upgrade calculator')
-      .addStringOption((o) => o.setName('have').setDescription('Your guns, e.g. "s 1, ss 2" (skip to use the form)'))
-      .addStringOption((o) => o.setName('want').setDescription('What you want, e.g. "1x zzz" (skip to use the form)'))
-  );
+function menuView(note = null) {
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle('🧮 Calculator')
+    .setDescription('What do you want to calculate?\n\n🐾 **Pets** — Pet Gems / Diamonds to reach your pets\n🔫 **Guns** — Diamonds to reach your guns');
+  return {
+    content: note,
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(button('calc:pets:have', 'Pets', ButtonStyle.Primary, '🐾'), button('calc:guns:have', 'Guns', ButtonStyle.Danger, '🔫'))]
+  };
+}
 
-function form(kind, saved) {
+/** The inventory ('have') or goal ('want') panel: the two lists + a button per rarity. */
+function panelView(kind, view, s, note = null) {
   const k = calc.KINDS[kind];
-  const have = new TextInputBuilder().setCustomId('have').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(400).setPlaceholder(EXAMPLES[kind].have);
-  const want = new TextInputBuilder().setCustomId('want').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(400).setPlaceholder(EXAMPLES[kind].want);
-  if (saved?.have) have.setValue(saved.have.slice(0, 400));
-  if (saved?.want) want.setValue(saved.want.slice(0, 400));
-  return new ModalBuilder()
-    .setCustomId(`calcm:${kind}`)
-    .setTitle(`${k.name} Calculator`)
-    .addLabelComponents(
-      new LabelBuilder().setLabel(`Your ${k.plural}`).setDescription('Rarity + how many (D C B A S SS SSS X XX XXX Z ZZ ZZZ). Left out = 0.').setTextInputComponent(have),
-      new LabelBuilder().setLabel(`${k.name}s you want`).setDescription('Rarity and how many, e.g. 3x ZZZ').setTextInputComponent(want)
+  const editing = view === 'have';
+  const embed = new EmbedBuilder()
+    .setColor(k.color)
+    .setTitle(`${k.emoji} ${k.name} Calculator — ${editing ? 'Step 1: your inventory' : 'Step 2: your goal'}`)
+    .setDescription(
+      (editing
+        ? `Press a rarity below to type **how many ${k.plural} you own** of it.\n`
+        : `Press a rarity below to type **how many ${k.plural} you want** of it.\n`) +
+        `📦 **Inventory** · 🎯 **Goal** switch lists · 🧮 **Calculate** works out the cost.\n*Saved automatically.*`
+    )
+    .addFields(
+      { name: `📦 Your ${k.plural}${editing ? ' ✏️' : ''}`, value: calc.countsText(s.have) || '*None — all 0*' },
+      { name: `🎯 You want${editing ? '' : ' ✏️'}`, value: calc.countsText(s.want) || '*Nothing yet*' }
     );
+  const list = editing ? s.have : s.want;
+  const tierButton = (t) => button(`calc:${kind}:set:${view}:${t}`, `${calc.label(t)} · ${list[t]}`, list[t] ? ButtonStyle.Primary : ButtonStyle.Secondary);
+  const rows = [
+    new ActionRowBuilder().addComponents([0, 1, 2, 3, 4].map(tierButton)),
+    new ActionRowBuilder().addComponents([5, 6, 7, 8, 9].map(tierButton)),
+    new ActionRowBuilder().addComponents([10, 11, 12].map(tierButton)),
+    new ActionRowBuilder().addComponents(
+      button(`calc:${kind}:have`, 'Inventory', editing ? ButtonStyle.Success : ButtonStyle.Secondary, '📦').setDisabled(editing),
+      button(`calc:${kind}:want`, 'Goal', editing ? ButtonStyle.Secondary : ButtonStyle.Success, '🎯').setDisabled(!editing),
+      button(`calc:${kind}:calc`, 'Calculate', ButtonStyle.Primary, '🧮'),
+      button(`calc:${kind}:reset:${view}`, `Reset ${editing ? 'inventory' : 'goal'}`, ButtonStyle.Danger, '🗑️'),
+      button('calc:menu', 'Back', ButtonStyle.Secondary, '↩️')
+    )
+  ];
+  return { content: note, embeds: [embed], components: rows };
 }
 
-/** Calculates, replies (only to them) and DMs a copy. Works from the command or the form. */
-async function respond(interaction, kind, haveText, wantText) {
-  const have = calc.parseCounts(haveText);
-  const want = calc.parseCounts(wantText);
-  const unknown = [...have.unknown, ...want.unknown];
-  if (!want.counts.some(Boolean)) {
-    return interaction.reply({ content: `❌ Tell me what you want, e.g. \`${EXAMPLES[kind].want.replace('e.g. ', '')}\`. Rarities: ${calc.TIERS.map((t) => t.toUpperCase()).join(', ')}.`, ephemeral: true });
-  }
-  CalcProfile.updateOne({ userId: interaction.user.id, kind }, { $set: { have: haveText || '', want: wantText || '' } }, { upsert: true }).catch(() => null);
-  const result = calc.plan(have.counts, want.counts);
-  const embed = calc.resultEmbed(kind, have.counts, want.counts, result, interaction.user);
-  const dm = await interaction.user.send({ embeds: [embed] }).then(() => true, () => false);
-  const notes = [];
-  if (unknown.length) notes.push(`⚠️ I skipped what I couldn't read: \`${unknown.join('`, `').slice(0, 300)}\``);
-  notes.push(dm ? '📬 I also sent this to your DMs.' : "📭 Couldn't DM you a copy — your DMs are closed.");
-  return interaction.reply({ content: notes.join('\n'), embeds: [embed], ephemeral: true });
+function resultView(kind, s, embed, note) {
+  return {
+    content: note,
+    embeds: [embed],
+    components: [
+      new ActionRowBuilder().addComponents(
+        button(`calc:${kind}:have`, 'Edit inventory', ButtonStyle.Secondary, '📦'),
+        button(`calc:${kind}:want`, 'Edit goal', ButtonStyle.Secondary, '🎯'),
+        button('calc:menu', kind === 'pets' ? 'Guns instead' : 'Pets instead', ButtonStyle.Secondary, '🔁')
+      )
+    ]
+  };
 }
+
+// ---------------------------------------------------------------- handlers
 
 async function execute(interaction) {
-  const kind = interaction.options.getSubcommand();
-  const have = interaction.options.getString('have');
-  const want = interaction.options.getString('want');
-  if (want) return respond(interaction, kind, have || '', want);
-  const saved = await CalcProfile.findOne({ userId: interaction.user.id, kind }).lean().catch(() => null);
-  return interaction.showModal(form(kind, saved || (have ? { have } : null)));
+  return interaction.reply({ ...menuView(), ephemeral: true });
 }
 
-/** The form's submit button. */
-async function handleCalcModal(interaction) {
-  const kind = interaction.customId.split(':')[1];
+/** All calculator buttons (customId calc:…). */
+async function handleCalcButton(interaction) {
+  const [, kind, action, view, tier] = interaction.customId.split(':');
+  if (kind === 'menu') return interaction.update(menuView());
   if (!calc.KINDS[kind]) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
-  return respond(interaction, kind, interaction.fields.getTextInputValue('have') || '', interaction.fields.getTextInputValue('want') || '');
+  const s = await load(interaction.user.id, kind);
+
+  if (action === 'have' || action === 'want') return interaction.update(panelView(kind, action, s));
+  if (action === 'reset') {
+    s[view === 'want' ? 'want' : 'have'] = counts([]);
+    await save(interaction.user.id, kind, s);
+    return interaction.update(panelView(kind, view === 'want' ? 'want' : 'have', s, view === 'want' ? '🗑️ Goal cleared.' : '🗑️ Inventory cleared.'));
+  }
+  if (action === 'set') {
+    const t = Number(tier);
+    const list = view === 'want' ? s.want : s.have;
+    const k = calc.KINDS[kind];
+    const input = new TextInputBuilder().setCustomId('n').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(4).setPlaceholder('0');
+    if (list[t]) input.setValue(String(list[t]));
+    return interaction.showModal(
+      new ModalBuilder()
+        .setCustomId(`calcm:${kind}:${view}:${t}`)
+        .setTitle(`${calc.label(t)} ${k.plural}`)
+        .addLabelComponents(new LabelBuilder().setLabel(view === 'want' ? `How many ${calc.label(t)} ${k.plural} do you want?` : `How many ${calc.label(t)} ${k.plural} do you own?`).setDescription(`A number from 0 to ${MAX}.`).setTextInputComponent(input))
+    );
+  }
+  if (action === 'calc') {
+    if (!s.want.some(Boolean)) return interaction.update(panelView(kind, 'want', s, '🎯 Set your goal first — press a rarity and type how many you want.'));
+    const embed = calc.resultEmbed(kind, s.have, s.want, calc.plan(s.have, s.want), interaction.user);
+    const dm = await interaction.user.send({ embeds: [embed] }).then(() => true, () => false);
+    return interaction.update(resultView(kind, s, embed, dm ? '📬 I also sent this to your DMs.' : "📭 Couldn't DM you a copy — your DMs are closed."));
+  }
+  return interaction.reply({ content: '❌ Unknown button.', ephemeral: true });
 }
 
-module.exports = { data, execute, handleCalcModal, form };
+/** A rarity's number box was submitted: save it and refresh the panel. */
+async function handleCalcModal(interaction) {
+  const [, kind, view, tier] = interaction.customId.split(':');
+  if (!calc.KINDS[kind] || !['have', 'want'].includes(view)) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
+  const t = Number(tier);
+  const raw = (interaction.fields.getTextInputValue('n') || '').trim().replace(/[x,\s]/gi, '');
+  const s = await load(interaction.user.id, kind);
+  let note = null;
+  if (raw && !/^\d+$/.test(raw)) note = `⚠️ “${raw.slice(0, 20)}” isn't a number — ${calc.label(t)} wasn't changed.`;
+  else {
+    const n = Math.min(MAX, Number(raw || 0));
+    s[view][t] = n;
+    await save(interaction.user.id, kind, s);
+    note = `✅ ${calc.label(t)}: **${n}**${Number(raw) > MAX ? ` (max ${MAX})` : ''}`;
+  }
+  const view2 = panelView(kind, view, s, note);
+  return interaction.isFromMessage?.() ? interaction.update(view2) : interaction.reply({ ...view2, ephemeral: true });
+}
+
+module.exports = { data, execute, handleCalcButton, handleCalcModal, menuView, panelView };

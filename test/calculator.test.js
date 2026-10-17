@@ -52,24 +52,45 @@ assert.match(gun,/409,600\*\* Diamonds/); assert.doesNotMatch(gun,/Pet Gems/,'gu
 assert.match(JSON.stringify(C.resultEmbed('pets',at({zzz:1}),at({zzz:1}),C.plan(at({zzz:1}),at({zzz:1}))).toJSON()),/already have everything/);
 console.log('✓ result embed');
 
-// ---- command: form (pre-filled), quick options, DM copy
-const user=(dmOk=true)=>({id:'u1',dms:[],send:async function(p){ if(!dmOk) throw new Error('closed'); this.dms.push(p); }});
-const ix=(sub,opts={},u=user())=>{ const r={user:u,customId:`calcm:${sub}`,out:null,modal:null,
-  options:{getSubcommand:()=>sub,getString:(k)=>opts[k]??null},
-  fields:{getTextInputValue:(k)=>opts[k]??''},reply:async(o)=>{r.out=o;},showModal:async(m)=>{r.modal=m;}}; return r; };
+// ---- /calculate panel: menu → pets/guns → 13 rarity buttons for inventory + goal → calculate (+ DM)
+const mkUser=(dmOk=true)=>({id:'u1',dms:[],send:async function(p){ if(!dmOk) throw new Error('closed'); this.dms.push(p); }});
+const btn=(customId,u)=>{ const r={customId,user:u,out:null,modal:null,reply:async(o)=>{r.out=o;},update:async(o)=>{r.out=o;},showModal:async(m)=>{r.modal=m;}}; return r; };
+const sub=(customId,u,n)=>{ const r={customId,user:u,out:null,isFromMessage:()=>true,fields:{getTextInputValue:()=>n},update:async(o)=>{r.out=o;},reply:async(o)=>{r.out=o;}}; return r; };
+const ids=(view)=>view.components.flatMap((row)=>row.toJSON().components.map((c)=>c.custom_id));
+const labels=(view)=>view.components.flatMap((row)=>row.toJSON().components.map((c)=>c.label));
 (async()=>{
-  let i=ix('pets'); await cmd.execute(i);
-  assert.ok(i.modal,'no options → the form'); const mj=JSON.stringify(i.modal.toJSON()); assert.match(mj,/calcm:pets/);
-  i=ix('pets',{have:'b 2, sss 2',want:'3x zzz'}); await i.user; await cmd.handleCalcModal(i);
-  assert.equal(i.out.ephemeral,true); assert.match(i.out.content,/sent this to your DMs/); assert.equal(i.user.dms.length,1,'DM copy');
-  assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/12,152/);
-  await new Promise((r)=>setTimeout(r,20));
-  i=ix('pets'); await cmd.execute(i);
-  assert.match(JSON.stringify(i.modal.toJSON()),/"value":"b 2, sss 2"/,'form pre-filled with last answers');
-  i=ix('guns',{want:'1x zzz'},user(false)); await cmd.execute(i);
-  assert.match(i.out.content,/Couldn't DM you/,'still replies when DMs are closed'); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/409,600/);
-  i=ix('pets',{have:'b 2',want:'q'}); await cmd.handleCalcModal(i);
-  assert.match(i.out.content,/Tell me what you want/,'nothing readable wanted → help');
-  console.log('✓ /calculate: form, pre-fill, quick options, DM');
+  const u=mkUser();
+  let r={user:u,reply:async(o)=>{r.out=o;}}; await cmd.execute(r);
+  assert.equal(r.out.ephemeral,true); assert.deepEqual(ids(r.out),['calc:pets:have','calc:guns:have'],'step 1: pick pets or guns');
+  // pets → inventory panel with a button per rarity
+  let i=btn('calc:pets:have',u); await cmd.handleCalcButton(i);
+  const tierIds=ids(i.out).filter((x)=>x.includes(':set:'));
+  assert.equal(tierIds.length,13,'13 rarity buttons'); assert.equal(tierIds[0],'calc:pets:set:have:0'); assert.equal(tierIds[12],'calc:pets:set:have:12');
+  assert.ok(labels(i.out).includes('ZZZ · 0'),'every rarity starts at 0');
+  assert.ok(ids(i.out).includes('calc:pets:want') && ids(i.out).includes('calc:pets:calc'),'goal + calculate buttons');
+  // set B = 2 and SSS = 2 through the number boxes
+  i=btn('calc:pets:set:have:2',u); await cmd.handleCalcButton(i);
+  assert.match(JSON.stringify(i.modal.toJSON()),/How many B pets do you own/);
+  i=sub('calcm:pets:have:2',u,'2'); await cmd.handleCalcModal(i); assert.match(i.out.content,/B: \*\*2\*\*/); assert.ok(labels(i.out).includes('B · 2'),'the button shows the new count');
+  await cmd.handleCalcModal(sub('calcm:pets:have:6',u,'2'));
+  i=sub('calcm:pets:have:0',u,'abc'); await cmd.handleCalcModal(i); assert.match(i.out.content,/isn't a number/);
+  i=btn('calc:pets:set:have:2',u); await cmd.handleCalcButton(i); assert.match(JSON.stringify(i.modal.toJSON()),/"value":"2"/,'box pre-filled with the saved number');
+  // calculate with no goal → sent to the goal panel
+  i=btn('calc:pets:calc',u); await cmd.handleCalcButton(i); assert.match(i.out.content,/Set your goal first/); assert.ok(ids(i.out).includes('calc:pets:set:want:12'));
+  // goal: 3x ZZZ
+  await cmd.handleCalcModal(sub('calcm:pets:want:12',u,'3'));
+  i=btn('calc:pets:want',u); await cmd.handleCalcButton(i);
+  assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/SSS\*\* ×2 · \*\*B\*\* ×2/,'inventory shown'); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/ZZZ\*\* ×3/,'goal shown');
+  i=btn('calc:pets:calc',u); await cmd.handleCalcButton(i);
+  assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/12,152\*\* D pets/); assert.match(i.out.content,/sent this to your DMs/); assert.equal(u.dms.length,1,'DM copy');
+  // saved: reopening shows the same numbers; guns are separate
+  i=btn('calc:pets:have',u); await cmd.handleCalcButton(i); assert.ok(labels(i.out).includes('SSS · 2'));
+  i=btn('calc:guns:have',u); await cmd.handleCalcButton(i); assert.ok(labels(i.out).includes('SSS · 0'),'guns have their own numbers');
+  // reset + closed DMs
+  i=btn('calc:pets:reset:have',u); await cmd.handleCalcButton(i); assert.ok(!labels(i.out).some((l)=>/· [1-9]/.test(l)),'inventory cleared');
+  const shy=mkUser(false); await cmd.handleCalcModal(sub('calcm:guns:want:12',shy,'1'));
+  i=btn('calc:guns:calc',shy); await cmd.handleCalcButton(i); assert.match(i.out.content,/Couldn't DM you/); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/409,600\*\* Diamonds/);
+  i=btn('calc:menu',u); await cmd.handleCalcButton(i); assert.deepEqual(ids(i.out),['calc:pets:have','calc:guns:have'],'back to the start');
+  console.log('✓ /calculate panel: pick, 13 rarity buttons for inventory + goal, calculate + DM, saved');
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});
