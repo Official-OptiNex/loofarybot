@@ -459,6 +459,7 @@ code { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.88em
 }
 .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
 .nav-item:hover { color: var(--text-main); background: var(--bg-card-hover); }
+a.nav-item { text-decoration: none; }
 .nav-item.active {
   color: var(--c-blue); font-weight: 600;
   background: linear-gradient(90deg, rgba(79, 124, 255, 0.16) 0%, rgba(79, 124, 255, 0) 100%);

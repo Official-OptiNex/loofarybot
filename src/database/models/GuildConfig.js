@@ -243,6 +243,9 @@ const GuildConfigSchema = new mongoose.Schema(
       },
       winMessage: { type: String, default: null } // null = the built-in message listing every winner
     },
+    // /calculate overrides per calculator (pets / guns / fish): name, emoji, on/off, cost per D and
+    // currencies, fish draw odds. Missing keys use the defaults in cogs/modules/calculator.js.
+    calculator: { type: mongoose.Schema.Types.Mixed, default: {} },
     // The Bubble Factory idle game (/idle, dashboard Leveling → Bubble Factory). Bubbles are its own
     // currency; cashing out to XP is capped per day so levels stay sane. See idleGame.js.
     idleGame: {

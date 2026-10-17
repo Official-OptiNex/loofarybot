@@ -15,9 +15,15 @@ function dashboardUrl(guildId) {
 }
 
 const permTag = (perm) => (perm ? ` · 🔒 ${perm}` : '');
+// Some entries are buttons members press (e.g. Apply), not slash commands.
+const slashCount = (g) => g.commands.filter((c) => c.usage.startsWith('/')).length;
+const countText = (g) => {
+  const n = slashCount(g), b = g.commands.length - n;
+  return [n && `${n} command${n === 1 ? '' : 's'}`, b && `${b} button${b === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+};
 
 function overviewEmbed(client) {
-  const total = commandReference.reduce((n, g) => n + g.commands.length, 0);
+  const total = commandReference.reduce((n, g) => n + slashCount(g), 0);
   return new EmbedBuilder()
     .setColor(BRAND_COLOR)
     .setAuthor({ name: 'LoofaryBot Help', iconURL: client.user?.displayAvatarURL({ size: 64 }) })
@@ -29,7 +35,7 @@ function overviewEmbed(client) {
     .addFields(
       commandReference.map((g) => ({
         name: `${g.icon} ${g.group}`,
-        value: `${g.blurb}\n-# ${g.commands.length} command${g.commands.length === 1 ? '' : 's'}`,
+        value: `${g.blurb}\n-# ${countText(g)}`,
         inline: true
       }))
     )
@@ -42,7 +48,7 @@ function categoryEmbed(group) {
     .setColor(BRAND_COLOR)
     .setTitle(`${group.icon} ${group.group}`)
     .setDescription(`${group.blurb}\n\n${lines.join('\n\n')}`.slice(0, 4096))
-    .setFooter({ text: `${group.commands.length} commands · choose another category below` });
+    .setFooter({ text: `${countText(group)} · choose another category below` });
 }
 
 /**

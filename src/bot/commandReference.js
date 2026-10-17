@@ -130,6 +130,7 @@ module.exports = [
       { usage: '/cases user · recent · view', perm: 'Timeout Members', description: 'Moderation history for a member or the whole server.' },
       { usage: '/cases reason · revoke · delete', perm: 'Timeout Members', description: 'Edit a case, revoke a warning, or delete a case.' },
       { usage: '/cases escalation add · remove · list', perm: 'Manage Server', description: 'Automatic timeout / kick / ban at N warnings.' },
+      { usage: '/cases dm', perm: 'Manage Server', description: 'DM members when they’re warned, timed out, kicked or banned (on/off).' },
       { usage: '/slowmode', perm: 'Manage Channels', description: 'Set or turn off a channel’s slowmode.' },
       { usage: '/lockdown', perm: 'Manage Channels', description: 'Stop non-staff from talking in a channel or the whole server.' },
       { usage: '/unlockdown', perm: 'Manage Channels', description: 'Lift a lockdown and restore the original permissions.' },
@@ -189,7 +190,8 @@ module.exports = [
     id: 'calculator',
     group: 'Calculator',
     icon: '🧮',
-    blurb: 'Upgrade calculators for pets, guns and fish — what you own, what you want, and what it costs.',
+    blurb: 'Upgrade calculators for pets, guns and fish — what you own, what you want, and what it costs. Names, costs, currencies and fish odds are set per server on the dashboard.',
+    tab: 'engagement',
     commands: [
       { usage: '/calculate', perm: null, description: 'Pick 🐾 Pets, 🔫 Guns or 🐟 Fish, then press a rarity (D → ZZZ) and type how many you own, switch to 🎯 Goal for how many you want, and press 🧮 Calculate. Counts what you own (2 of a rarity merge into 1 of the next) and shows the D summons and Pet Gems / Diamonds needed (fish: epic draws ≈ Diamonds, or days of free draws, from the draw odds) — also DMed to you. Your numbers are saved.' }
     ]
@@ -199,11 +201,24 @@ module.exports = [
     group: 'Guides',
     icon: '📖',
     blurb: 'A server guide library — forum posts the bot owns, with a pinned auto-updating index. Rich editing on the dashboard.',
+    page: 'guides',
     commands: [
       { usage: '/guide view · list · search', perm: null, description: 'Browse the guides — open one, list them (optionally by tag), or search titles and content.' },
       { usage: '/guide create · edit · delete', perm: 'Guide editor', description: 'Editors manage guides. `create`/`edit` hand off to the web editor (dashboard Guides page); each guide is a forum post that edits in place.' },
       { usage: '/guide setup', perm: 'Manage Server', description: 'Pick the forum channel, add an editor role, and auto-create a private #guide-editors channel. Also sets up the pinned 📖 Guides Index.' },
-      { usage: '/guide editor_add · editor_remove · legend', perm: 'Manage Server', description: 'Add/remove guide-editor roles (they get dashboard access to the Guides page only), or rebuild the index. Admins can bulk-import guides from JSON on the dashboard.' }
+      { usage: '/guide editor_add · editor_remove · legend', perm: 'Manage Server', description: 'Add/remove guide-editor roles (they get dashboard access to the Guides page only), or rebuild the index. Admins can bulk-import guides from JSON on the dashboard.' },
+      { usage: 'Approve · Reject buttons', perm: 'Manage Server', description: 'Guide editors’ new guides and deletions (and edits, if switched on) wait for an admin: requests post in the guide editors channel with Approve / Reject (with a note), and the editor is DMed the decision. Choose what needs approval on the dashboard Guides page.' }
+    ]
+  },
+  {
+    id: 'applications',
+    group: 'Applications',
+    icon: '🗂️',
+    blurb: 'Apply-for-a-role forms (e.g. Guide Editor): an Apply button, your questions, requirements, and a review channel with Approve / Deny.',
+    page: 'applications',
+    commands: [
+      { usage: 'Apply button', perm: null, description: 'Press Apply on an application panel, answer the questions (up to 5 per form) and submit. Forms can require a level, account age, days in the server or a role, with a cooldown before re-applying; you’re DMed the decision.' },
+      { usage: 'Approve · Deny buttons', perm: 'Reviewer', description: 'Each application posts in the review channel (optionally pinging a role). Approve gives the role; Deny asks for an optional reason. Build forms, panels and requirements on the dashboard Applications page.' }
     ]
   },
   {
@@ -261,7 +276,7 @@ module.exports = [
       { usage: '/loof help', perm: null, description: 'This help menu.' },
       { usage: '/loof ping', perm: null, description: "Bot latency." },
       { usage: '/serverinfo', perm: null, description: 'Server stats: members, boosts, channels and more.' },
-      { usage: '/serverstats setup · stat · refresh · remove', perm: 'Manage Server', description: 'View-only channels pinned at the top of the server showing live counts (members, online, boosts, total server XP, roles, channels), refreshed every ~30 min.' },
+      { usage: '/serverstats setup · stat · refresh · remove · status', perm: 'Manage Server', description: 'View-only channels pinned at the top of the server showing live counts (members, online, boosts, total server XP, roles, channels), refreshed every ~30 min.' },
       { usage: '/userinfo', perm: null, description: "A member's account age, join date and roles." },
       { usage: '/avatar', perm: null, description: "Someone's full-size avatar." }
     ]
