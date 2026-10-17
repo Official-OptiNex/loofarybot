@@ -25,7 +25,8 @@ const MOD_PAGES = {
   shop: 'XP Shop',
   embed: 'Embed Builder',
   botchat: 'Bot Chat (speak as the bot)',
-  guides: 'Guides'
+  guides: 'Guides',
+  applications: 'Applications'
 };
 const DEFAULT_MOD_PAGES = ['leaderboard', 'commands', 'logviewer'];
 
