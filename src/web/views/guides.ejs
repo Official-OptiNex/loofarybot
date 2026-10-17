@@ -97,6 +97,12 @@
     .gd-inc-empty{font-size:0.8rem;color:#949ba4;border:1px dashed #4e5058;border-radius:6px;padding:0.5rem;margin:0.3rem 0;}
     .gd-count{font-size:0.78rem;color:var(--text-muted,#9aa0b4);}
     .gd-count.over{color:var(--accent-red,#ff5c6c);font-weight:700;}
+    .gd-msg{border-top:2px dashed #4e5058;margin-top:0.9rem;padding-top:0.6rem;}
+    #codeExtra .gd-msg{border-top-color:var(--border-strong,#353950);}
+    .gd-msg-head{display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center;margin-bottom:0.4rem;}
+    .gd-msg-label{font-weight:700;font-size:0.82rem;color:#b5bac1;margin-right:0.2rem;}
+    .gd-msg-key{flex:1;min-width:9rem;width:auto!important;}
+    .gd-msg-sep{margin:0.9rem 0 0.3rem;padding-top:0.5rem;border-top:2px dashed #4e5058;font-size:0.75rem;font-weight:700;color:#949ba4;}
     /* ---- phones & small tablets */
     .gd-list-toggle,.gd-savebar{display:none;}
     .gd-hide-sm{display:inline;}
@@ -249,10 +255,12 @@
               <div id="vIncluded"></div>
               <div class="gd-content-wrap" id="vContentWrap"><div id="vContent" class="gd-content"></div></div>
               <div id="vEmbeds"></div>
+              <div id="vExtra"></div>
               <div id="vIndexList"></div>
             </div>
             <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.5rem;" id="vAddRow">
               <button class="btn secondary small" type="button" onclick="addEmbed()" id="vAddEmbed">+ Add embed</button>
+              <button class="btn secondary small" type="button" onclick="addMsg()" title="Another message in the same post — other guides can link straight to it">+ Add message</button>
               <span class="muted" style="font-size:0.78rem; align-self:center;">Tip: click any text to edit it. Select text, then use the toolbar. Typing <code>:Name:</code> turns into that server emoji.</span>
             </div>
           </div>
@@ -267,6 +275,8 @@
               <button class="btn secondary small" type="button" onclick="addEmbed()" id="addEmbedBtn">+ Add embed</button>
             </div>
             <div id="embeds"></div>
+            <div id="codeExtra"></div>
+            <button class="btn secondary small" type="button" onclick="addMsg()" id="codeAddMsg" style="margin-top:0.5rem;">+ Add message</button>
             <div id="codeIndex" style="display:none;"></div>
           </div>
 
@@ -299,7 +309,7 @@
         <% if (isAdmin) { %>
         <div class="card">
           <h3 style="margin-top:0;">📥 Import (admin)</h3>
-          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Add <code>"inIndex": true</code> to show a guide at the top of the pinned index post instead of as its own post. A guide with the same title as an existing one is <strong>updated</strong> in place. Link to another guide with <code>[text](guide:its-slug)</code> (or <code>guide:index</code>).</p>
+          <p class="muted" style="font-size:0.82rem; margin:0.2rem 0 0.5rem;">Paste a JSON <strong>array</strong>: <code>[{ "title": "...", "tags": ["Guides"], "body": { "embeds": [ … ] }, "images": ["https://…"] }]</code>. <code>body</code> can also be a markdown string. Add <code>"inIndex": true</code> to show a guide at the top of the pinned index post instead of as its own post. A guide with the same title as an existing one is <strong>updated</strong> in place. Link to another guide with <code>[text](guide:its-slug)</code> (or <code>guide:index</code>). Add <code>"messages": [{ "key": "name", "body": { … } }]</code> for extra messages in the same post, linkable with <code>guide:its-slug#name</code>.</p>
           <textarea id="importText" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre;"></textarea>
           <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.4rem;">
             <button class="btn" type="button" onclick="importGuides()">Import</button>
@@ -384,7 +394,7 @@
     // ---- state
     let mode = store.get('gd-mode') === 'code' ? 'code' : 'visual';
     let editing = 'guide'; // 'guide' | 'index'
-    let state = { content: '', embeds: [], tags: [] };
+    let state = { content: '', embeds: [], tags: [], extra: [] };
     let indexState = { name: '', title: '', color: DEFAULT_COLOR, intro: '', footer: '' };
     let isDirty = false;
     function dirty() { isDirty = true; updateCount(); }
@@ -393,36 +403,48 @@
     const inIndexGuide = (g) => !!g.inIndex || (g.tags || []).some((t) => String(t).trim().toLowerCase() === 'start here');
 
     // ---- body <-> editor (keeps embed parts the editor doesn't show, e.g. author/timestamp)
-    function bodyToState(body) {
+    const embedFromJson = (e) => {
+      const { title, description, color, url, image, thumbnail, footer, fields, ...extra } = e || {};
+      return {
+        title: title || '', description: description || '',
+        color: typeof color === 'number' ? E.intToHex(color) : (color || ''),
+        url: url || '', image: image?.url || (typeof image === 'string' ? image : ''), thumbnail: thumbnail?.url || (typeof thumbnail === 'string' ? thumbnail : ''),
+        footer: footer?.text || '', footerIcon: footer?.icon_url || '',
+        fields: (fields || []).map((f) => ({ name: f.name || '', value: f.value || '', inline: !!f.inline })),
+        extra
+      };
+    };
+    const embedToJson = (e) => {
+      const o = { ...(e.extra || {}) };
+      if (e.title) o.title = e.title;
+      if (e.url) o.url = e.url;
+      if (e.description) o.description = e.description;
+      if (e.color) o.color = E.colorToInt(e.color);
+      const fs = (e.fields || []).filter((f) => f.name || f.value);
+      if (fs.length) o.fields = fs;
+      if (e.image) o.image = { url: e.image };
+      if (e.thumbnail) o.thumbnail = { url: e.thumbnail };
+      if (e.footer) o.footer = e.footerIcon ? { text: e.footer, icon_url: e.footerIcon } : { text: e.footer };
+      return o;
+    };
+    // Message 0 is the post's first message (state itself); state.extra holds the extra messages after it.
+    function bodyToState(body, messages) {
       body = body || {};
       state.content = body.content || '';
-      state.embeds = (Array.isArray(body.embeds) ? body.embeds : []).map((e) => {
-        const { title, description, color, url, image, thumbnail, footer, fields, ...extra } = e || {};
-        return {
-          title: title || '', description: description || '',
-          color: typeof color === 'number' ? E.intToHex(color) : (color || ''),
-          url: url || '', image: image?.url || (typeof image === 'string' ? image : ''), thumbnail: thumbnail?.url || (typeof thumbnail === 'string' ? thumbnail : ''),
-          footer: footer?.text || '', footerIcon: footer?.icon_url || '',
-          fields: (fields || []).map((f) => ({ name: f.name || '', value: f.value || '', inline: !!f.inline })),
-          extra
-        };
-      });
+      state.embeds = (Array.isArray(body.embeds) ? body.embeds : []).map(embedFromJson);
+      if (messages !== undefined) state.extra = (messages || []).map((m) => ({ key: m.key || '', content: m.body?.content || '', embeds: (m.body?.embeds || []).map(embedFromJson) }));
     }
-    function stateToBody() {
-      const embeds = state.embeds.map((e) => {
-        const o = { ...(e.extra || {}) };
-        if (e.title) o.title = e.title;
-        if (e.url) o.url = e.url;
-        if (e.description) o.description = e.description;
-        if (e.color) o.color = E.colorToInt(e.color);
-        const fs = (e.fields || []).filter((f) => f.name || f.value);
-        if (fs.length) o.fields = fs;
-        if (e.image) o.image = { url: e.image };
-        if (e.thumbnail) o.thumbnail = { url: e.thumbnail };
-        if (e.footer) o.footer = e.footerIcon ? { text: e.footer, icon_url: e.footerIcon } : { text: e.footer };
-        return o;
-      });
-      return state.content ? { content: state.content, embeds } : { embeds };
+    const msgToBody = (m) => { const embeds = m.embeds.map(embedToJson); return m.content ? { content: m.content, embeds } : { embeds }; };
+    function stateToBody() { return msgToBody(state); }
+    const stateToMessages = () => (state.extra || []).map((m) => ({ key: m.key, body: msgToBody(m) }));
+    const msgAt = (mi) => (mi === 0 ? state : state.extra[mi - 1]);
+    const allMsgs = () => [state, ...(state.extra || [])];
+    const slugish = (v, max) => String(v || '').toLowerCase().trim().replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max);
+    const keyOf = (mi) => slugish(msgAt(mi).key, 40) || `part-${mi + 1}`;
+    const guideSlug = () => $('slug').value || slugish($('title').value, 80) || 'guide';
+    function copyMsgLink(mi) {
+      const link = `[${msgAt(mi).key || 'link text'}](guide:${guideSlug()}#${keyOf(mi)})`;
+      (navigator.clipboard?.writeText(link) || Promise.reject()).then(() => flash('📋 Copied ' + link + ' — paste it into any guide.'), () => prompt('Copy this link into any guide:', link));
     }
 
     // ---- read-only rendering (previews, included guides, the generated list)
@@ -479,8 +501,9 @@
     }
     function toolBtn(label, title, fn, disabled) { const b = el('button', 'gd-tbtn', label); b.type = 'button'; b.title = title; b.disabled = !!disabled; b.addEventListener('click', fn); return b; }
 
-    function visualEmbed(i) {
-      const e = state.embeds[i];
+    function visualEmbed(mi, i) {
+      const msg = msgAt(mi);
+      const e = msg.embeds[i];
       const card = el('div', 'p-embed v-embed');
       const paint = () => (card.style.borderLeft = `4px solid ${e.color || '#1e1f22'}`);
       paint();
@@ -491,10 +514,10 @@
         colorInput(e.color, (v) => { e.color = v; paint(); dirty(); }),
         toolBtn('⚙️<span class="gd-hide-sm"> Images & links</span>', 'Image, thumbnail, title link, footer icon', () => settings.classList.toggle('open')),
         toolBtn('+ Field', 'Add a name/value field', () => { e.fields.push({ name: '', value: '', inline: false }); renderVisual(); dirty(); }),
-        toolBtn('▲', 'Move up', () => moveEmbed(i, -1), i === 0),
-        toolBtn('▼', 'Move down', () => moveEmbed(i, 1), i === state.embeds.length - 1),
-        toolBtn('⧉', 'Duplicate', () => { state.embeds.splice(i + 1, 0, JSON.parse(JSON.stringify(e))); renderVisual(); dirty(); }, state.embeds.length >= 10),
-        toolBtn('🗑', 'Remove embed', () => { if (confirm('Remove this embed?')) removeEmbed(i); })
+        toolBtn('▲', 'Move up', () => moveEmbed(mi, i, -1), i === 0),
+        toolBtn('▼', 'Move down', () => moveEmbed(mi, i, 1), i === msg.embeds.length - 1),
+        toolBtn('⧉', 'Duplicate', () => { msg.embeds.splice(i + 1, 0, JSON.parse(JSON.stringify(e))); renderVisual(); dirty(); }, msg.embeds.length >= 10),
+        toolBtn('🗑', 'Remove embed', () => { if (confirm('Remove this embed?')) removeEmbed(mi, i); })
       );
       card.appendChild(tools);
 
@@ -511,6 +534,7 @@
       card.appendChild(thumb);
       const titleEd = editable('p-title', e.title, { multiline: false, placeholder: 'Embed title (optional)', onChange: (v) => { e.title = v; dirty(); } });
       titleEd.dataset.ei = i;
+      titleEd.dataset.mi = mi;
       card.appendChild(titleEd);
       card.appendChild(editable('p-desc', e.description, { placeholder: 'Write here… select text and use the toolbar to format it.', onChange: (v) => { e.description = v; dirty(); } }));
 
@@ -541,6 +565,31 @@
       return card;
     }
 
+    function msgHead(mi) {
+      const m = msgAt(mi);
+      const head = el('div', 'gd-msg-head');
+      const key = el('input', 'gd-mini gd-msg-key'); key.value = m.key; key.placeholder = `link name, e.g. ${keyOf(mi)}`; key.maxLength = 40;
+      key.addEventListener('input', () => { m.key = key.value; dirty(); });
+      head.append(
+        el('span', 'gd-msg-label', `💬 Message ${mi + 1}`),
+        key,
+        toolBtn('📋<span class="gd-hide-sm"> Copy link</span>', 'Copy a link straight to this message, to paste into any guide', () => copyMsgLink(mi)),
+        toolBtn('▲', 'Move message up', () => moveMsg(mi, -1), mi === 1),
+        toolBtn('▼', 'Move message down', () => moveMsg(mi, 1), mi === state.extra.length),
+        toolBtn('🗑', 'Remove message', () => { if (confirm(`Remove message ${mi + 1} from this post?`)) removeMsg(mi); })
+      );
+      return head;
+    }
+    function visualMessage(mi) {
+      const m = msgAt(mi);
+      const box = el('div', 'gd-msg');
+      box.appendChild(msgHead(mi));
+      box.appendChild(editable('gd-content', m.content, { placeholder: 'Message text above the embeds (optional)', onChange: (v) => { m.content = v; dirty(); } }));
+      m.embeds.forEach((_, i) => box.appendChild(visualEmbed(mi, i)));
+      if (m.embeds.length < 10) { const add = el('button', 'btn secondary small', '+ Add embed'); add.type = 'button'; add.addEventListener('click', () => addEmbed(mi)); box.appendChild(add); }
+      return box;
+    }
+
     function visualIndexEmbed() {
       const x = indexState;
       const card = el('div', 'p-embed v-embed');
@@ -569,49 +618,67 @@
       if (idx) ve.appendChild(visualIndexEmbed());
       else {
         $('vContentWrap').replaceChildren(editable('gd-content', state.content, { placeholder: 'Message text above the embeds (optional)', onChange: (v) => { state.content = v; $('content').value = v; dirty(); } }));
-        state.embeds.forEach((_, i) => ve.appendChild(visualEmbed(i)));
+        state.embeds.forEach((_, i) => ve.appendChild(visualEmbed(0, i)));
         $('vAddEmbed').style.display = state.embeds.length >= 10 ? 'none' : '';
       }
+      $('vExtra').replaceChildren(...(idx ? [] : state.extra.map((_, k) => visualMessage(k + 1))));
       updateCount();
     }
 
     /* ================================================================ MARKDOWN MODE */
 
-    function renderEmbeds() {
-      $('embeds').innerHTML = state.embeds.map((e, i) => `
-        <details class="gd-embed" ${i === 0 ? 'open' : ''}>
+    function codeEmbedHtml(mi, e, i, count) {
+      return `
+        <details class="gd-embed" ${i === 0 && mi === 0 ? 'open' : ''}>
           <summary>Embed ${i + 1}${e.title ? ' — ' + esc(e.title).slice(0, 40) : ''}</summary>
-          <label class="field"><span>Title</span><input class="md-in" value="${esc(e.title)}" oninput="upd(${i},'title',this.value)" maxlength="256"></label>
-          <label class="field"><span>Description <span class="muted" style="font-weight:400;">(markdown, 4096)</span></span><textarea class="md-in" rows="8" oninput="upd(${i},'description',this.value)" maxlength="4096">${esc(e.description)}</textarea></label>
+          <label class="field"><span>Title</span><input class="md-in" value="${esc(e.title)}" oninput="upd(${mi},${i},'title',this.value)" maxlength="256"></label>
+          <label class="field"><span>Description <span class="muted" style="font-weight:400;">(markdown, 4096)</span></span><textarea class="md-in" rows="8" oninput="upd(${mi},${i},'description',this.value)" maxlength="4096">${esc(e.description)}</textarea></label>
           <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${e.color || DEFAULT_COLOR}" oninput="upd(${i},'color',this.value)" style="width:100%; height:36px;"></label>
-            <label class="field" style="flex:3; min-width:200px;"><span>Title link</span><input value="${esc(e.url)}" oninput="upd(${i},'url',this.value)" placeholder="https://…"></label>
+            <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${e.color || DEFAULT_COLOR}" oninput="upd(${mi},${i},'color',this.value)" style="width:100%; height:36px;"></label>
+            <label class="field" style="flex:3; min-width:200px;"><span>Title link</span><input value="${esc(e.url)}" oninput="upd(${mi},${i},'url',this.value)" placeholder="https://…"></label>
           </div>
           <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <label class="field" style="flex:1; min-width:200px;"><span>Image URL</span><input value="${esc(e.image)}" oninput="upd(${i},'image',this.value)" placeholder="https://…"></label>
-            <label class="field" style="flex:1; min-width:200px;"><span>Thumbnail URL</span><input value="${esc(e.thumbnail)}" oninput="upd(${i},'thumbnail',this.value)" placeholder="https://…"></label>
+            <label class="field" style="flex:1; min-width:200px;"><span>Image URL</span><input value="${esc(e.image)}" oninput="upd(${mi},${i},'image',this.value)" placeholder="https://…"></label>
+            <label class="field" style="flex:1; min-width:200px;"><span>Thumbnail URL</span><input value="${esc(e.thumbnail)}" oninput="upd(${mi},${i},'thumbnail',this.value)" placeholder="https://…"></label>
           </div>
           <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <label class="field" style="flex:3; min-width:200px;"><span>Footer</span><input value="${esc(e.footer)}" oninput="upd(${i},'footer',this.value)" maxlength="2048"></label>
-            <label class="field" style="flex:2; min-width:160px;"><span>Footer icon URL</span><input value="${esc(e.footerIcon)}" oninput="upd(${i},'footerIcon',this.value)" placeholder="https://…"></label>
+            <label class="field" style="flex:3; min-width:200px;"><span>Footer</span><input value="${esc(e.footer)}" oninput="upd(${mi},${i},'footer',this.value)" maxlength="2048"></label>
+            <label class="field" style="flex:2; min-width:160px;"><span>Footer icon URL</span><input value="${esc(e.footerIcon)}" oninput="upd(${mi},${i},'footerIcon',this.value)" placeholder="https://…"></label>
           </div>
           <div style="margin:0.3rem 0;"><strong style="font-size:0.82rem;">Fields</strong></div>
-          <div>${(e.fields || []).map((f, fi) => fieldRow(i, fi, f)).join('')}</div>
+          <div>${(e.fields || []).map((f, fi) => fieldRow(mi, i, fi, f)).join('')}</div>
           <div style="display:flex; gap:0.4rem; margin-top:0.3rem;">
-            <button class="btn secondary small" type="button" onclick="addField(${i})">+ Field</button>
-            <button class="btn small" type="button" onclick="moveEmbed(${i},-1)" ${i === 0 ? 'disabled' : ''}>▲</button>
-            <button class="btn small" type="button" onclick="moveEmbed(${i},1)" ${i === state.embeds.length - 1 ? 'disabled' : ''}>▼</button>
-            <button class="btn danger small" type="button" onclick="removeEmbed(${i})" style="margin-left:auto;">Remove embed</button>
+            <button class="btn secondary small" type="button" onclick="addField(${mi},${i})">+ Field</button>
+            <button class="btn small" type="button" onclick="moveEmbed(${mi},${i},-1)" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button class="btn small" type="button" onclick="moveEmbed(${mi},${i},1)" ${i === count - 1 ? 'disabled' : ''}>▼</button>
+            <button class="btn danger small" type="button" onclick="removeEmbed(${mi},${i})" style="margin-left:auto;">Remove embed</button>
           </div>
-        </details>`).join('');
-      $('addEmbedBtn').style.display = state.embeds.length >= 10 ? 'none' : '';
+        </details>`;
     }
-    function fieldRow(ei, fi, f) {
+    function renderEmbeds() {
+      $('embeds').innerHTML = state.embeds.map((e, i) => codeEmbedHtml(0, e, i, state.embeds.length)).join('');
+      $('addEmbedBtn').style.display = state.embeds.length >= 10 ? 'none' : '';
+      $('codeExtra').innerHTML = state.extra.map((m, k) => {
+        const mi = k + 1;
+        return `<div class="gd-msg">
+          <div class="gd-msg-head"><span class="gd-msg-label">💬 Message ${mi + 1}</span>
+            <input class="gd-mini gd-msg-key" value="${esc(m.key)}" placeholder="link name, e.g. ${esc(keyOf(mi))}" maxlength="40" oninput="msgAt(${mi}).key=this.value; dirty()">
+            <button class="gd-tbtn" type="button" onclick="copyMsgLink(${mi})" title="Copy a link straight to this message">📋<span class="gd-hide-sm"> Copy link</span></button>
+            <button class="gd-tbtn" type="button" onclick="moveMsg(${mi},-1)" ${mi === 1 ? 'disabled' : ''}>▲</button>
+            <button class="gd-tbtn" type="button" onclick="moveMsg(${mi},1)" ${mi === state.extra.length ? 'disabled' : ''}>▼</button>
+            <button class="gd-tbtn" type="button" onclick="if(confirm('Remove message ${mi + 1} from this post?')) removeMsg(${mi})">🗑</button></div>
+          <label class="field"><span>Message text above the embeds <span class="muted" style="font-weight:400;">(optional)</span></span><textarea class="md-in" rows="2" maxlength="2000" oninput="msgAt(${mi}).content=this.value; dirty(); syncPreview()">${esc(m.content)}</textarea></label>
+          ${m.embeds.map((e, i) => codeEmbedHtml(mi, e, i, m.embeds.length)).join('')}
+          ${m.embeds.length < 10 ? `<button class="btn secondary small" type="button" onclick="addEmbed(${mi})">+ Add embed</button>` : ''}
+        </div>`;
+      }).join('');
+    }
+    function fieldRow(mi, ei, fi, f) {
       return `<div class="gd-field">
-        <input class="md-in" placeholder="Name" value="${esc(f.name)}" oninput="updField(${ei},${fi},'name',this.value)" maxlength="256" style="flex:1;">
-        <textarea class="md-in" placeholder="Value" rows="2" oninput="updField(${ei},${fi},'value',this.value)" maxlength="1024" style="flex:2;">${esc(f.value)}</textarea>
-        <label class="chip" title="Inline"><input type="checkbox" ${f.inline ? 'checked' : ''} onchange="updField(${ei},${fi},'inline',this.checked)"> inline</label>
-        <button class="btn danger small" type="button" onclick="removeField(${ei},${fi})">✕</button>
+        <input class="md-in" placeholder="Name" value="${esc(f.name)}" oninput="updField(${mi},${ei},${fi},'name',this.value)" maxlength="256" style="flex:1;">
+        <textarea class="md-in" placeholder="Value" rows="2" oninput="updField(${mi},${ei},${fi},'value',this.value)" maxlength="1024" style="flex:2;">${esc(f.value)}</textarea>
+        <label class="chip" title="Inline"><input type="checkbox" ${f.inline ? 'checked' : ''} onchange="updField(${mi},${ei},${fi},'inline',this.checked)"> inline</label>
+        <button class="btn danger small" type="button" onclick="removeField(${mi},${ei},${fi})">✕</button>
       </div>`;
     }
     function renderCodeIndex() {
@@ -624,10 +691,10 @@
           <label class="field" style="flex:3; min-width:200px;"><span>Footer <span class="muted" style="font-weight:400;">({count} = number of guides)</span></span><input value="${esc(x.footer)}" placeholder="${esc(indexCount())}" oninput="indexState.footer=this.value; dirty(); syncPreview()" maxlength="200"></label>
         </div>`;
     }
-    function upd(i, k, v) { state.embeds[i][k] = v; dirty(); syncPreview(); }
-    function updField(ei, fi, k, v) { state.embeds[ei].fields[fi][k] = v; dirty(); syncPreview(); }
-    function addField(i) { state.embeds[i].fields.push({ name: '', value: '', inline: false }); renderEditor(); dirty(); }
-    function removeField(ei, fi) { state.embeds[ei].fields.splice(fi, 1); renderEditor(); dirty(); }
+    function upd(mi, i, k, v) { msgAt(mi).embeds[i][k] = v; dirty(); syncPreview(); }
+    function updField(mi, ei, fi, k, v) { msgAt(mi).embeds[ei].fields[fi][k] = v; dirty(); syncPreview(); }
+    function addField(mi, i) { msgAt(mi).embeds[i].fields.push({ name: '', value: '', inline: false }); renderEditor(); dirty(); }
+    function removeField(mi, ei, fi) { msgAt(mi).embeds[ei].fields.splice(fi, 1); renderEditor(); dirty(); }
 
     function syncPreview() {
       if (mode !== 'code') return;
@@ -640,15 +707,24 @@
       } else {
         $('pIncluded').innerHTML = '';
         $('pContent').innerHTML = V.toHtml(state.content);
-        $('pEmbeds').innerHTML = stateToBody().embeds.map(previewEmbedHtml).join('');
+        $('pEmbeds').innerHTML = stateToBody().embeds.map(previewEmbedHtml).join('') + state.extra.map((m, k) =>
+          `<div class="gd-msg-sep">💬 Message ${k + 2} · #${esc(keyOf(k + 1))}</div>${m.content ? `<div class="gd-content">${V.toHtml(m.content)}</div>` : ''}${msgToBody(m).embeds.map(previewEmbedHtml).join('')}`).join('');
       }
     }
 
     /* ================================================================ SHARED */
 
-    function addEmbed() { if (state.embeds.length >= 10) return; state.embeds.push(blankEmbed()); renderEditor(); dirty(); }
-    function removeEmbed(i) { state.embeds.splice(i, 1); renderEditor(); dirty(); }
-    function moveEmbed(i, d) { const j = i + d; if (j < 0 || j >= state.embeds.length) return; [state.embeds[i], state.embeds[j]] = [state.embeds[j], state.embeds[i]]; renderEditor(); dirty(); }
+    function addEmbed(mi = 0) { const m = msgAt(mi); if (m.embeds.length >= 10) return; m.embeds.push(blankEmbed()); renderEditor(); dirty(); }
+    function removeEmbed(mi, i) { msgAt(mi).embeds.splice(i, 1); renderEditor(); dirty(); }
+    function moveEmbed(mi, i, d) { const list = msgAt(mi).embeds; const j = i + d; if (j < 0 || j >= list.length) return; [list[i], list[j]] = [list[j], list[i]]; renderEditor(); dirty(); }
+    function addMsg() {
+      if (state.extra.length >= 20) return flash('A post can have up to 20 extra messages.');
+      state.extra.push({ key: '', content: '', embeds: [blankEmbed()] }); renderEditor(); dirty();
+      const blocks = document.querySelectorAll(mode === 'visual' ? '#vExtra .gd-msg' : '#codeExtra .gd-msg');
+      blocks[blocks.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    function removeMsg(mi) { state.extra.splice(mi - 1, 1); renderEditor(); dirty(); }
+    function moveMsg(mi, d) { const i = mi - 1, j = i + d; if (j < 0 || j >= state.extra.length) return; [state.extra[i], state.extra[j]] = [state.extra[j], state.extra[i]]; renderEditor(); dirty(); }
 
     function renderEditor() {
       const idx = editing === 'index';
@@ -665,6 +741,8 @@
       $('codeEmbedsHead').style.display = idx ? 'none' : '';
       $('embeds').style.display = idx ? 'none' : '';
       $('codeIndex').style.display = idx ? '' : 'none';
+      $('codeExtra').style.display = idx ? 'none' : '';
+      $('codeAddMsg').style.display = idx ? 'none' : '';
       if (mode === 'visual') renderVisual();
       else { if (idx) renderCodeIndex(); else { renderEmbeds(); $('content').value = state.content; } syncPreview(); }
       updateCount();
@@ -689,11 +767,15 @@
     function updateCount() {
       const box = $('sizeCount');
       if (editing === 'index') { box.textContent = ''; return; }
-      const body = E.normalizeMessage(stateToBody());
-      const total = body.embeds.reduce((n, e) => n + E.embedLength(e), 0);
-      const longDesc = state.embeds.findIndex((e) => e.description.length > 4096);
-      box.textContent = `${total.toLocaleString()} / 6,000 characters` + (longDesc >= 0 ? ` · ⚠️ Embed ${longDesc + 1}’s text is over 4,096` : '');
-      box.classList.toggle('over', total > 6000 || longDesc >= 0);
+      // Discord's limits are per message: 6,000 characters across its embeds, 4,096 per embed text.
+      const sizes = allMsgs().map((m) => E.normalizeMessage(msgToBody(m)).embeds.reduce((n, e) => n + E.embedLength(e), 0));
+      const over = sizes.findIndex((n) => n > 6000);
+      let longDesc = null;
+      allMsgs().forEach((m, mi) => m.embeds.forEach((e, i) => { if (!longDesc && e.description.length > 4096) longDesc = [mi, i]; }));
+      const biggest = Math.max(...sizes);
+      box.textContent = (sizes.length > 1 ? `${sizes.length} messages · biggest ${biggest.toLocaleString()} / 6,000` : `${biggest.toLocaleString()} / 6,000 characters`)
+        + (over >= 0 ? ` · ⚠️ message ${over + 1} is over 6,000` : '') + (longDesc ? ` · ⚠️ message ${longDesc[0] + 1}, embed ${longDesc[1] + 1} text is over 4,096` : '');
+      box.classList.toggle('over', over >= 0 || !!longDesc);
     }
 
     // ---- toolbar: formats the visual editor, or wraps markdown around the selection in Markdown mode
@@ -731,14 +813,14 @@
         // Discord can't link part of an embed title — a link there makes the whole title clickable.
         const ed = mode === 'visual' && V.activeEditor();
         if (ed && ed.dataset.ei !== undefined) {
-          const e = state.embeds[Number(ed.dataset.ei)];
+          const e = msgAt(Number(ed.dataset.mi || 0)).embeds[Number(ed.dataset.ei)];
           const url = prompt('Make this embed title a link to (https://…) — leave empty to remove', e.url || 'https://');
           if (url !== null) { e.url = /^https?:\/\/\S+$/.test(url.trim()) ? url.trim() : ''; dirty(); renderVisual(); flash(e.url ? '🔗 Title is now a link.' : 'Title link removed.'); }
           return;
         }
-        const slugs = GUIDES.map((g) => g.slug).join(', ');
-        const url = prompt(`Link to a web address (https://…) or another guide (guide:slug).\nGuides: guide:index, ${slugs}`, 'https://');
-        if (url && /^(https?:\/\/\S+|guide:[\w-]+)$/.test(url.trim())) runTool('link', null, url.trim()); return;
+        const slugs = GUIDES.flatMap((g) => [g.slug, ...(g.messages || []).map((m) => `${g.slug}#${m.key}`)]).join(', ');
+        const url = prompt(`Link to a web address (https://…), a guide (guide:slug) or one message in a guide (guide:slug#name).\nAvailable: guide:index, ${slugs}`, 'https://');
+        if (url && /^(https?:\/\/\S+|guide:[\w-]+(#[\w-]+)?)$/.test(url.trim())) runTool('link', null, url.trim()); return;
       }
       runTool(b.dataset.cmd);
     });
@@ -767,11 +849,11 @@
       try {
         const b = JSON.parse($('rawJson').value);
         const body = Array.isArray(b) ? { embeds: b } : (('embeds' in b) || ('content' in b)) ? b : { embeds: [b] };
-        bodyToState(body); if (!state.embeds.length) state.embeds = [blankEmbed()];
+        bodyToState(body, Array.isArray(body.messages) ? body.messages : undefined); if (!state.embeds.length) state.embeds = [blankEmbed()];
         renderEditor(); dirty(); $('editorStatus').textContent = '✅ JSON applied.';
       } catch (e) { $('editorStatus').textContent = '⚠️ Invalid JSON: ' + e.message; }
     }
-    function fillRaw() { $('rawJson').value = JSON.stringify(stateToBody(), null, 2); }
+    function fillRaw() { $('rawJson').value = JSON.stringify(state.extra.length ? { ...stateToBody(), messages: stateToMessages() } : stateToBody(), null, 2); }
 
     // ---- list (organize)
     function renderList() {
@@ -811,7 +893,7 @@
       if (!force && !leaveOk()) return;
       editing = 'guide';
       $('slug').value = ''; $('title').value = ''; $('inIndex').checked = false;
-      state = { content: '', embeds: [blankEmbed()], tags: [] };
+      state = { content: '', embeds: [blankEmbed()], tags: [], extra: [] };
       $('editorTitle').textContent = 'New guide'; $('deleteBtn').style.display = 'none'; $('saveBtn').textContent = '💾 Save guide'; $('clearBtn').style.display = '';
       $('editorStatus').textContent = '';
       renderTagChips(); renderEditor(); renderList(); isDirty = false; updateCount();
@@ -822,8 +904,8 @@
       if (!leaveOk()) return;
       editing = 'guide';
       $('slug').value = g.slug; $('title').value = g.title; $('inIndex').checked = !!g.inIndex;
-      state = { content: '', embeds: [], tags: [...(g.tags || [])] };
-      bodyToState(g.body || { content: '', embeds: [] }); if (!state.embeds.length) state.embeds = [blankEmbed()];
+      state = { content: '', embeds: [], tags: [...(g.tags || [])], extra: [] };
+      bodyToState(g.body || { content: '', embeds: [] }, g.messages || []); if (!state.embeds.length) state.embeds = [blankEmbed()];
       $('editorTitle').textContent = 'Editing: ' + g.title; $('deleteBtn').style.display = ''; $('saveBtn').textContent = '💾 Save guide'; $('clearBtn').style.display = '';
       $('editorStatus').textContent = '';
       renderTagChips(); renderEditor(); renderList(); isDirty = false; updateCount();
@@ -845,13 +927,13 @@
     async function saveGuide() {
       const title = $('title').value.trim(); if (!title) { $('editorStatus').textContent = '⚠️ Post title required.'; $('title').focus(); return; }
       $('editorStatus').textContent = 'Saving…';
-      const res = await post('save', { slug: $('slug').value || undefined, title, tags: state.tags, inIndex: $('inIndex').checked, body: stateToBody() });
+      const res = await post('save', { slug: $('slug').value || undefined, title, tags: state.tags, inIndex: $('inIndex').checked, body: stateToBody(), messages: stateToMessages() });
       if (!res.ok) { $('editorStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
       isDirty = false;
       $('editorStatus').textContent = '✅ Saved — the forum post is updated.'; $('slug').value = res.guide.slug; $('listCurrent').textContent = res.guide.title; $('editorTitle').textContent = 'Editing: ' + res.guide.title; $('deleteBtn').style.display = '';
       await refresh();
       const g = GUIDES.find((x) => x.slug === res.guide.slug);
-      if (g) { bodyToState(g.body); if (!state.embeds.length) state.embeds = [blankEmbed()]; renderEditor(); isDirty = false; } // show emojis the server resolved
+      if (g) { bodyToState(g.body, g.messages || []); if (!state.embeds.length) state.embeds = [blankEmbed()]; renderEditor(); isDirty = false; } // show emojis the server resolved
     }
     async function saveIndex() {
       $('editorStatus').textContent = 'Saving…';

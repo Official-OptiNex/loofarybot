@@ -51,7 +51,7 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
       roles,
       forumTags,
       editorData,
-      guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } }))
+      guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] }, messages: (g.messages || []).map((m) => ({ key: m.key, messageId: m.messageId || null, body: m.body || { embeds: [] } })) }))
     });
   } catch (err) {
     // Without this an error here leaves the browser loading forever.
@@ -64,7 +64,7 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
 router.get('/:guildId/guides/data', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
   const list = await guides.listGuides(req.guild.id).catch((err) => (console.error('Guide list failed:', err), null));
   if (!list) return res.status(500).json({ ok: false, error: 'Failed to load guides.' });
-  res.json({ ok: true, guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] } })) });
+  res.json({ ok: true, guides: list.map((g) => ({ slug: g.slug, title: g.title, tags: g.tags || [], inIndex: !!g.inIndex, threadId: g.threadId, body: g.body || { content: '', embeds: [] }, messages: (g.messages || []).map((m) => ({ key: m.key, messageId: m.messageId || null, body: m.body || { embeds: [] } })) })) });
 });
 
 // Create or edit a guide (editors).
@@ -77,12 +77,13 @@ router.post('/:guildId/guides/save', requireAuth, requireGuildAccess, requirePag
     const tags = Array.isArray(req.body.tags) ? req.body.tags.map(String).filter(Boolean).slice(0, 5) : [];
     const inIndex = !!req.body.inIndex;
     const body = req.body.body ?? { content: '', embeds: [] };
+    const messages = Array.isArray(req.body.messages) ? req.body.messages : undefined;
     const userId = req.session.user.id;
 
     const existing = req.body.slug ? await GuideModel.exists({ guildId: req.guild.id, slug: String(req.body.slug) }) : null;
     const result = existing
-      ? await guides.editGuide(req.guild, String(req.body.slug), { title, tags, body, inIndex }, userId, s)
-      : await guides.createGuide(req.guild, { title, tags, body, inIndex, authorId: userId, createdBy: userId }, s);
+      ? await guides.editGuide(req.guild, String(req.body.slug), { title, tags, body, messages, inIndex }, userId, s)
+      : await guides.createGuide(req.guild, { title, tags, body, messages: messages || [], inIndex, authorId: userId, createdBy: userId }, s);
     if (result.error) return res.status(400).json({ ok: false, error: result.error });
     res.locals.audit = { section: 'Guides', action: existing ? 'Edited a guide' : 'Created a guide', detail: title };
     res.json({ ok: true, guide: { slug: result.guide.slug, title: result.guide.title, tags: result.guide.tags || [], inIndex: !!result.guide.inIndex, threadId: result.guide.threadId } });

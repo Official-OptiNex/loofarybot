@@ -13,6 +13,9 @@ const GuideSchema = new mongoose.Schema(
     tags: { type: [String], default: [] },
     // Shown at the top of the pinned index post instead of as a forum post of its own.
     inIndex: { type: Boolean, default: false },
+    // Extra messages posted after the first one in the guide's post, in order: [{ key, body, messageId }].
+    // Each can be linked to directly with guide:slug#key (a link to one message, not just the post).
+    messages: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // The guide body in Discord message JSON ({ content, embeds: [...] }).
     body: { type: mongoose.Schema.Types.Mixed, default: null },
 
