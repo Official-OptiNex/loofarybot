@@ -60,20 +60,22 @@ function parseCounts(text) {
 }
 
 /**
- * Plans reaching every wanted pet from what's owned. Goals are filled highest rarity first; each one
- * uses an owned pet of that rarity, else a spare higher one, else merges owned lower pets and buys the
- * rest as D summons (a rarity t pet is worth 2^t D). Returns
+ * Plans reaching every wanted pet from what's owned. Owned pets of a wanted rarity count first; then
+ * goals are filled highest rarity first from a spare higher pet, else by merging owned lower pets and
+ * buying the rest as D summons (a rarity t pet is worth 2^t D). Returns
  * { goals: [{ tier, count, owned, upgraded, build: [{ used: counts, buyD }] }], buyD, leftover: counts }.
  */
 function plan(have, want) {
   const left = have.slice();
+  // Pets that already match a goal count for it first (the total is the same either way, but this reads right).
+  const owned = want.map((n, t) => Math.min(n, left[t]));
+  owned.forEach((n, t) => (left[t] -= n));
   const goals = [];
   let buyD = 0;
   for (let t = TIERS.length - 1; t >= 0; t--) {
     if (!want[t]) continue;
-    const g = { tier: t, count: want[t], owned: 0, upgraded: [], builds: 0, used: new Array(TIERS.length).fill(0), buyD: 0 };
-    for (let k = 0; k < want[t]; k++) {
-      if (left[t] > 0) { left[t]--; g.owned++; continue; }
+    const g = { tier: t, count: want[t], owned: owned[t], upgraded: [], builds: 0, used: new Array(TIERS.length).fill(0), buyD: 0 };
+    for (let k = owned[t]; k < want[t]; k++) {
       const higher = left.findIndex((n, i) => i > t && n > 0); // a spare better one already does the job
       if (higher !== -1) { left[higher]--; g.upgraded.push(higher); continue; }
       // Merge owned lower pets (largest first — always fits exactly, they're powers of two) and buy the rest.

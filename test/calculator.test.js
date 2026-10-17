@@ -34,6 +34,7 @@ r=C.plan(at({a:3}),at({a:2})); assert.equal(r.buyD,0); assert.deepEqual(r.leftov
 // several goals share the owned pets (highest goal first): 3x ZZZ + 2x XXX from 1 XXX + 3 SS
 r=C.plan(at({xxx:1,ss:3}),at({zzz:3,xxx:2}));
 assert.equal(r.buyD,3*4096+2*512-512-3*32,'everything owned is used once');
+assert.equal(r.goals.find((g)=>g.tier===9).owned,1,'the owned XXX counts toward the XXX goal');
 // a pet is never split: an S covers one C goal (it's better), the other C is built
 r=C.plan(at({s:1}),at({c:2})); assert.equal(r.buyD,2); assert.deepEqual(r.goals[0].upgraded,[4]);
 // a higher pet under a bigger goal is merged into it rather than wasted on a small one
