@@ -452,6 +452,8 @@
   function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
   const hpe = config.honeypotEmbed || {};
   const we = welcome.embedConfig || {};
+  // "New here?" settings with defaults filled in (from cogs/modules/newMember.settings).
+  const nmS = locals.newMember || { enabled: false, onWelcome: true, buttonLabel: 'New here? Click me', buttonEmoji: '👋', buttonStyle: 'Primary', message: { content: '', embeds: [] }, panel: { content: '', embeds: [] }, panelChannelId: null, panelMessageId: null };
 %>
     <!-- WELCOME -->
     <div class="tab-panel hidden" id="tab-welcome">
@@ -472,6 +474,7 @@
           <div class="subtabs" data-subtabs>
             <button class="active" data-sub="w-message">✉️ Message</button>
             <button data-sub="w-embed">🧩 Embed</button>
+            <button data-sub="w-newmember">🧭 New members</button>
             <button data-sub="w-goodbye">🚪 Goodbye</button>
           </div>
 
@@ -526,6 +529,74 @@
               </div>
             </div>
           </div>
+          <div class="subpage hidden" data-page="w-newmember">
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">“New here?” button</div><div class="setting-help">New members press it and get a private message only they can see (<em>“Only you can see this”</em>) — commands, channels, anything you like. Discord only allows private messages as a reply to a click, so it's a button rather than something sent on join. Also <code>/welcome newmember</code>.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="nmEnabled" <%= nmS.enabled ? 'checked' : '' %>><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">On the welcome message</div><div class="setting-help">Adds the button under the welcome ping<%= welcome.enabled ? '' : ' (welcome messages are off — turn them on in Message)' %>.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="nmOnWelcome" <%= nmS.onWelcome ? 'checked' : '' %>><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Button</div><div class="setting-help">Emoji, text and color.</div></div>
+                <div class="setting-control">
+                  <input id="nmEmoji" value="<%= nmS.buttonEmoji %>" placeholder="👋" style="flex:0 0 64px; min-width:64px;" oninput="renderNewMemberPreview()">
+                  <input id="nmLabel" maxlength="80" value="<%= nmS.buttonLabel %>" placeholder="New here? Click me" oninput="renderNewMemberPreview()">
+                  <select id="nmStyle" onchange="renderNewMemberPreview()" style="flex:0 0 110px;">
+                    <% [['Primary','Blurple'],['Secondary','Grey'],['Success','Green'],['Danger','Red']].forEach(([v, l]) => { %><option value="<%= v %>" <%= nmS.buttonStyle === v ? 'selected' : '' %>><%= l %></option><% }) %>
+                  </select>
+                </div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">The private message</div><div class="setting-help">Up to 10 embeds. Placeholders <code>{user}</code> <code>{username}</code> <code>{server}</code> <code>{membercount}</code>, and <code>{avatar}</code> as an image / thumbnail. Design it in the Embed Builder, or edit the JSON below.</div></div>
+                <div class="field-row" style="flex-wrap:wrap; gap:0.5rem;">
+                  <% if (can('embed')) { %><a class="btn secondary small" href="/dashboard/<%= guild.id %>/embed?newmember=1">🖌️ Edit in Embed Builder</a><% } %>
+                  <button type="button" class="btn secondary small" onclick="testNewMember()">📨 DM me a test</button>
+                  <button type="button" class="btn secondary small" onclick="resetNewMember()">↺ Starter message</button>
+                </div>
+                <details>
+                  <summary class="muted" style="cursor:pointer;">📝 JSON (Discord / Discohook format)</summary>
+                  <textarea id="nmJson" rows="10" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem;" oninput="renderNewMemberPreview()"><%= JSON.stringify(nmS.message, null, 2) %></textarea>
+                </details>
+              </div>
+            </div>
+            <div class="card">
+              <h3 style="margin-top:0;">Preview <span class="muted" style="font-weight:400; font-size:0.8rem;">· as <%= viewer.username %> would see it</span></h3>
+              <div class="discord-chat">
+                <div class="discord-message-preview">
+                  <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
+                  <div class="discord-message-body">
+                    <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span></div>
+                    <div id="nmPreview"></div>
+                    <div class="muted" style="font-size:0.75rem; margin-top:0.35rem;">👁️ Only you can see this · Dismiss message</div>
+                  </div>
+                </div>
+              </div>
+              <p class="muted" style="font-size:0.78rem; margin:0.6rem 0 0;">Button: <span id="nmButtonPreview" class="btn small"></span></p>
+            </div>
+            <div class="card settings-card">
+              <div class="setting-row">
+                <div><div class="setting-title">Panel in a channel <span class="muted">(optional)</span></div><div class="setting-help">A message with the same button, e.g. in #start-here, so anyone can open it again later. Posting again in the same channel updates it in place.</div></div>
+                <div class="setting-control">
+                  <select id="nmPanelChannel"><%- channelOptions(nmS.panelChannelId, '— Pick a channel —') %></select>
+                  <button type="button" class="btn secondary small" onclick="postNewMemberPanel()"><%= nmS.panelMessageId ? '🔄 Update / move' : '📌 Post panel' %></button>
+                </div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Panel message</div><div class="setting-help">What sits above the button. <% if (can('embed')) { %><a href="/dashboard/<%= guild.id %>/embed?newmember=panel">Edit in Embed Builder</a> or the JSON.<% } %></div></div>
+                <details>
+                  <summary class="muted" style="cursor:pointer;">📝 Panel JSON</summary>
+                  <textarea id="nmPanelJson" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem;"><%= JSON.stringify(nmS.panel, null, 2) %></textarea>
+                </details>
+              </div>
+            </div>
+            <div class="savebar" style="position:static;">
+              <button class="btn" onclick="saveNewMember()">Save “New here?”</button>
+            </div>
+          </div>
+
           <div class="subpage hidden" data-page="w-goodbye">
             <% const gb = Object.assign({ enabled: false, channelId: null, messageContent: '👋 **{username}** left **{server}**. We now have {membercount} members.', embedEnabled: false, embedConfig: {} }, welcome.goodbye || {}); const gbe = gb.embedConfig || {}; %>
             <div class="card settings-card">
@@ -2283,6 +2354,78 @@
     function saveWelcome() {
       postJson('welcome', readWelcomeForm(), '✅ Welcome settings saved.');
     }
+
+    // --- "New here?" private message ---
+    const nmStarter = <%- JSON.stringify(locals.newMemberStarter || { content: '', embeds: [] }).replace(/</g, '\\u003c') %>;
+    function readNmJson(id) {
+      try { return { value: JSON.parse(document.getElementById(id).value || '{}') }; } catch (e) { return { error: e.message }; }
+    }
+    function renderNewMemberPreview() {
+      const box = document.getElementById('nmPreview');
+      if (!box) return;
+      const btn = document.getElementById('nmButtonPreview');
+      btn.textContent = `${document.getElementById('nmEmoji').value} ${document.getElementById('nmLabel').value}`.trim() || 'Start here';
+      btn.className = 'btn small' + ({ Secondary: ' secondary', Success: ' success', Danger: ' danger' }[document.getElementById('nmStyle').value] || '');
+      const parsed = readNmJson('nmJson');
+      if (parsed.error) { box.innerHTML = `<div class="muted">⚠️ JSON error: ${esc(parsed.error)}</div>`; return; }
+      const m = parsed.value || {};
+      const avatarOr = (u) => (u === '{avatar}' ? viewer.avatarUrl : safeUrl(u || ''));
+      const urlOf = (v) => (v && typeof v === 'object' ? v.url : v);
+      const hex = (c) => (typeof c === 'number' ? '#' + c.toString(16).padStart(6, '0') : c || '#202225');
+      box.innerHTML = (m.content ? `<div class="desc">${miniMarkdown(fillPlaceholders(m.content))}</div>` : '') +
+        (m.embeds || []).map((e) => {
+          const thumb = avatarOr(urlOf(e.thumbnail)), img = avatarOr(urlOf(e.image));
+          const fields = (e.fields || []).map((f) => `<div style="margin-top:0.45rem;${f.inline ? 'display:inline-block; width:31%; vertical-align:top; margin-right:2%;' : ''}"><div style="font-weight:700; font-size:0.85rem;">${fillPlaceholders(f.name)}</div><div class="desc" style="font-size:0.85rem;">${miniMarkdown(fillPlaceholders(f.value))}</div></div>`).join('');
+          const footer = typeof e.footer === 'string' ? e.footer : e.footer?.text;
+          return `<div class="discord-embed-preview" style="margin-top:0.4rem; border-left-color:${esc(hex(e.color))}; overflow:hidden;">` +
+            (thumb ? `<img src="${esc(thumb)}" alt="" style="float:right; width:72px; height:72px; object-fit:cover; margin:0 0 0.5rem 0.75rem; border-radius:4px;">` : '') +
+            (e.author?.name ? `<div style="font-size:0.8rem; font-weight:600;">${fillPlaceholders(e.author.name)}</div>` : '') +
+            (e.title ? `<div class="title">${fillPlaceholders(e.title)}</div>` : '') +
+            (e.description ? `<div class="desc">${miniMarkdown(fillPlaceholders(e.description))}</div>` : '') + fields +
+            (img ? `<img src="${esc(img)}" alt="" style="max-width:100%; border-radius:4px; margin-top:0.5rem; display:block;">` : '') +
+            (footer ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:#949ba4;">${fillPlaceholders(footer)}</div>` : '') + '</div>';
+        }).join('');
+    }
+    function readNewMemberForm() {
+      const msg = readNmJson('nmJson'), panel = readNmJson('nmPanelJson');
+      if (msg.error) return { error: 'Message JSON: ' + msg.error };
+      if (panel.error) return { error: 'Panel JSON: ' + panel.error };
+      return {
+        enabled: document.getElementById('nmEnabled').checked,
+        onWelcome: document.getElementById('nmOnWelcome').checked,
+        buttonEmoji: document.getElementById('nmEmoji').value.trim(),
+        buttonLabel: document.getElementById('nmLabel').value.trim(),
+        buttonStyle: document.getElementById('nmStyle').value,
+        message: msg.value,
+        panel: panel.value
+      };
+    }
+    function saveNewMember() {
+      const body = readNewMemberForm();
+      if (body.error) return showToast('❌ ' + body.error);
+      postJson('welcome/newmember', body, '✅ “New here?” saved.');
+    }
+    function resetNewMember() {
+      document.getElementById('nmJson').value = JSON.stringify(nmStarter, null, 2);
+      renderNewMemberPreview();
+      showToast('↺ Starter message loaded — press Save to keep it.');
+    }
+    async function testNewMember() {
+      const msg = readNmJson('nmJson');
+      if (msg.error) return showToast('❌ Message JSON: ' + msg.error);
+      await postJson('welcome/newmember/test', { message: msg.value }, '📨 Sent to your DMs.');
+    }
+    async function postNewMemberPanel() {
+      const channelId = document.getElementById('nmPanelChannel').value;
+      if (!channelId) return showToast('❌ Pick a channel first.');
+      const body = readNewMemberForm();
+      if (body.error) return showToast('❌ ' + body.error);
+      // Save first so the panel uses the current button and text.
+      const saved = await fetch(`/api/guilds/${guildId}/welcome/newmember`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!saved.ok) { const d = await saved.json().catch(() => ({})); return showToast('❌ ' + (d.error || 'Failed to save.')); }
+      await postJson('welcome/newmember/panel', { channelId }, '📌 Panel posted.');
+    }
+    if (document.getElementById('nmJson')) renderNewMemberPreview();
 
     // --- Goodbye messages ---
     async function saveGoodbye(test) {

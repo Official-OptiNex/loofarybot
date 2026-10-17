@@ -225,10 +225,12 @@ module.exports = [
     id: 'welcome',
     group: 'Welcome & Goodbye',
     icon: '👋',
-    blurb: 'Greet people who join and say goodbye to people who leave.',
+    blurb: 'Greet people who join (with an optional private “New here?” intro) and say goodbye to people who leave.',
     tab: 'welcome',
     commands: [
       { usage: '/welcome set · toggle · test · show', perm: 'Manage Server', description: 'Welcome channel and message, on/off, a test post and the current setup.' },
+      { usage: '/welcome newmember', perm: 'Manage Server', description: 'The “New here?” button on the welcome message — new members press it for a private (“Only you can see this”) multi-embed intro. On/off, button text, emoji and color; design the message on the dashboard.' },
+      { usage: '/welcome newmember_panel · newmember_preview', perm: 'Manage Server', description: 'Post (or update) a panel with the same button in any channel, or see the private message as a new member would.' },
       { usage: '/goodbye set · toggle · test · show', perm: 'Manage Server', description: 'The same for goodbye messages when someone leaves.' }
     ]
   },

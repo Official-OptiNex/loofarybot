@@ -102,9 +102,10 @@
         <div class="savebar eb-savebar">
           <span class="hint" id="totalHint"></span>
           <button class="btn secondary" type="button" onclick="useAsWelcome()">👋 Use as welcome message</button>
+          <button class="btn secondary" type="button" onclick="useAsNewMember()">🧭 Use as “New here?” message</button>
           <button class="btn" type="button" id="sendBtn" onclick="sendMessage()">🚀 Send</button>
         </div>
-        <p class="muted" style="font-size:0.78rem;">Welcome messages use the text and the first embed (no fields) and support <code>{user}</code>, <code>{username}</code>, <code>{server}</code>, <code>{membercount}</code>, and <code>{avatar}</code> as the thumbnail. Shortcut: <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.</p>
+        <p class="muted" style="font-size:0.78rem;">The “New here?” message keeps every embed (up to 10) and the same placeholders. Welcome messages use the text and the first embed (no fields) and support <code>{user}</code>, <code>{username}</code>, <code>{server}</code>, <code>{membercount}</code>, and <code>{avatar}</code> as the thumbnail. Shortcut: <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the loaded template.</p>
 
         <details class="card eb-card eb-json" id="jsonPanel">
           <summary>📝 JSON editor <span class="muted" style="font-weight:400;">· edit the raw message (Discord / Discohook format)</span></summary>

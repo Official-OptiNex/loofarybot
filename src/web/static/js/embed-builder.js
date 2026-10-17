@@ -724,10 +724,41 @@
     showToast('👋 Loaded your welcome message — edit it, then click “Use as welcome message”.');
   }
 
+  /* ------------------------------------------------------------ "New here?" message tie-in */
+
+  // ?newmember=1 edits the private message, ?newmember=panel the panel; the button saves back to it.
+  const newMemberTarget = () => {
+    const v = new URLSearchParams(location.search).get('newmember');
+    return v === 'panel' ? 'panel' : v ? 'message' : null;
+  };
+  window.useAsNewMember = async () => {
+    const s = readState();
+    const key = newMemberTarget() || 'message';
+    try {
+      await api('POST', `/api/guilds/${guildId}/welcome/newmember`, { [key]: { content: s.content, embeds: s.embeds } });
+      showToast(`✅ Saved as the "New here?" ${key === 'panel' ? 'panel' : 'message'} — opening the Welcome tab…`);
+      setTimeout(() => (location.href = `/dashboard/${guildId}#welcome`), 900);
+    } catch (err) {
+      showToast(`❌ ${err.message}`);
+    }
+  };
+
+  async function loadNewMemberIntoBuilder(key) {
+    const res = await fetch(`/api/guilds/${guildId}/welcome`);
+    const { config, newMember } = await res.json();
+    const m = (newMember && newMember[key]) || (config && config.newMember && config.newMember[key]) || { content: '', embeds: [] };
+    renderEditor({ content: m.content || '', embeds: (m.embeds && m.embeds.length ? m.embeds : [blankEmbed()]).map((e) => ({ ...e })) });
+    showToast(`👋 Loaded the "New here?" ${key === 'panel' ? 'panel' : 'message'} — edit it, then click “Use as New here? message”.`);
+  }
+
   /* ------------------------------------------------------------ start */
 
   (async () => {
     await Promise.all([LoofMentions.load(guildId), loadTemplates()]);
+    if (newMemberTarget()) {
+      await loadNewMemberIntoBuilder(newMemberTarget()).catch(() => renderEditor({ content: '', embeds: [blankEmbed()] }));
+      return;
+    }
     if (new URLSearchParams(location.search).get('welcome') === '1') {
       await loadWelcomeIntoBuilder().catch(() => renderEditor({ content: '', embeds: [blankEmbed()] }));
       return;
