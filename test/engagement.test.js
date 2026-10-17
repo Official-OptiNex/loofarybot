@@ -103,8 +103,37 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   const longSum='14'+'+983-983+742-742+615-615'.repeat(70); assert.equal(C.parseCount(longSum),14,'long sums are read to the end');
   assert.equal(C.parseCount('1'+'+1-1'.repeat(1100)),null,'over the length limit: not counted at all, rather than partly');
   assert.equal(C.parseCount('('.repeat(3000)+'5'+')'.repeat(3000)),null,'absurd nesting is rejected safely');
+  // What people actually type: superscripts, **, implicit multiplication, Discord formatting, keycaps,
+  // thousands separators, floating-point near-misses, word mod, unicode symbols.
+  for (const [inp,exp] of [['3²',9],['3**2',9],['2⁻¹*4',2],['(1+2)²',9],['³√27',3],['∜16',2],['2(3)',6],['6/2(1+2)',9],['2√9',6],
+    ['**5**',5],['*3*(-1*-1)*',3],['__7__',7],['||9||',9],['`4`',4],['# 7',7],['> 8',8],['5️⃣',5],['🔟',10],['1,000',1000],['12,345 yay',12345],
+    ['2e3',2000],['0.1+0.2+0.7',1],['4.35*100',435],['(√2)²',2],['3×4',12],['12÷4',3],['5−2',3],['3 – 1',2],['2·3',6],
+    ['17 mod 5',2],['-7 mod 3',2],['mod(-7,3)',2],['e^ln(5)',5],['integral(x,0,3,2x)',9],['πr'.replace('r','')+'-pi+4',4],
+    ['5.',5],['5?',5],['5🔥',5],['5 (finally)',5],['5, yes',5],['gcd(12,180)',12],['2^3^2',512]])
+    assert.equal(C.parseCount(inp),exp,`maths: ${inp}`);
+  // Never count just the part we could read: more maths / digits / letters glued on → unreadable (❓, no reset).
+  for (const inp of ['2 3','5th','3 + nice','10%','5,5','17mod5','3^','sqrt(-4)'])
+    assert.deepEqual(C.readCount(inp),{bad:'unreadable'},`unreadable: ${inp}`);
+  assert.deepEqual(C.readCount('7/2'),{bad:'fraction',value:3.5}); assert.deepEqual(C.readCount('2-5'),{bad:'negative',value:-3});
+  assert.deepEqual(C.readCount('10^13'),{bad:'huge',value:1e13});
+  for (const inp of ['hello!','pi is cool','x','lol 5','- list item']) assert.equal(C.readCount(inp),null,`chat: ${inp}`);
+  assert.deepEqual(C.readCount('5+5',false),{bad:'unreadable'},'maths off: a sum is not read as its first number');
+  assert.deepEqual(C.readCount('3²',false),{bad:'unreadable'});
+  assert.equal(C.parseCount('nCr(200000,100000)'),null,'nCr / nPr / factorials are inside the work budget');
   const t0=Date.now(); for (let k=0;k<500;k++) C.parseCount('sum(i,1,1000,prod(j,1,1000,j))'); assert.ok(Date.now()-t0<1000,'hostile maths stays cheap');
   console.log('✓ counting maths: PEMDAS, factorials, roots, nCr/nPr, functions, ∑/∏/∫; junk ignored; capped against abuse');
+
+  // Unreadable / unusable maths in the channel: ❓ + a hint, the message stays, the run is untouched.
+  { const cur=cfg().counting.current, resets=cfg().counting.resets, n0=sent.length;
+    for (const bad of ['2 3','7/2','3²²²²²²²²²²']) {
+      const y=await count('ben',bad); assert.deepEqual(y.m.reacts,['❓'],`❓ for ${bad}`); assert.equal(y.m.deleted,false);
+    }
+    assert.equal(cfg().counting.current,cur,'no count'); assert.equal(cfg().counting.resets,resets,'no reset');
+    assert.match(sent.at(-1).m.payload.content,/didn't count \(no reset\)/); assert.match(sent[n0+1].m.payload.content,/works out to \*\*3\.5\*\*/);
+    const y=await count('ben',`${cur+1}²`.replace('²','')); assert.deepEqual(y.m.reacts,['✅'],'then the right number still counts');
+    cfg().counting.current=cur; cfg().counting.lastUserId='ann';
+  }
+  console.log('✓ unreadable maths / fractions get ❓ with a reason — never a reset');
 
   // Counting twice in a row: deleted, NOT a reset — griefers can't wipe the run.
   let before=sent.length;
