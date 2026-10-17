@@ -45,6 +45,7 @@ module.exports = function registerInteractionCreateEvent(client) {
         if (interaction.customId.startsWith('hpembed_modal:')) return await honeypotCommand.handleModalSubmit(interaction, client);
         if (interaction.customId.startsWith('gwd:')) return await giveawayForm.handleDraftModal(interaction);
         if (interaction.customId.startsWith('tkm:')) return await handleTicketModal(interaction);
+        if (interaction.customId.startsWith('calcm:')) return await require('../commands/calculate').handleCalcModal(interaction);
         if (interaction.customId.startsWith('gchm:')) return await require('../cogs/modules/guideApprovals').handleChangeModal(interaction);
         if (interaction.customId.startsWith('apm:')) return await require('../cogs/modules/applications').handleApplicationModal(interaction);
         if (interaction.customId.startsWith('shop:')) return await require('../cogs/modules/shop').handleShopInteraction(interaction);

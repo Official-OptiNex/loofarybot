@@ -186,6 +186,15 @@ module.exports = [
     ]
   },
   {
+    id: 'calculator',
+    group: 'Calculator',
+    icon: '🧮',
+    blurb: 'Upgrade calculators for pets and guns — what you own, what you want, and what it costs.',
+    commands: [
+      { usage: '/calculate pets · guns', perm: null, description: 'Opens a form (remembers your last answers): your pets/guns and the ones you want (e.g. `3x zzz, 2x xxx`). Works out the D summons needed — counting what you own, 2 of a rarity merge into 1 of the next — and the Pet Gems / Diamonds it costs. Replies privately and DMs you a copy. Quick form: `have:` and `want:` options.' }
+    ]
+  },
+  {
     id: 'guides',
     group: 'Guides',
     icon: '📖',
