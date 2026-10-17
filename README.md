@@ -624,12 +624,21 @@ Members spend XP on fun extras. The shop is open by default and comes with start
     *Manage Messages* are exempt). Turn it off to let people chat.
   - **Slowmode** — the channel is put in slowmode (default **1200s / 20 min**; set 0 to disable) so
     nobody can spam the channel. Needs *Manage Channels*.
-- **Maths** count when **allow sums** is on — not just `3*4`, but full expressions: PEMDAS with
-  `+ - * / % ^` and brackets, factorials (`5!`), roots (`√144`, `∛27`, `root(27,3)`), functions
-  (`sqrt`, `abs`, `floor`, `gcd`, `lcm`, `nCr`/`choose`, `nPr`, `log`, `min`, `max`, …), constants
-  (`pi`, `e`), and even summations `∑(i,1,5,i)`, products `∏(i,1,5,i)` and definite integrals
-  `∫(x,0,3,2*x)`. Only a whole-number result counts; trailing chat (`3*4 nice`) is ignored. It's a
-  safe evaluator (no `eval`) with every loop capped so it can't be abused.
+- **Maths** count when **allow sums** is on — not just `3*4`, but full expressions:
+  - PEMDAS with `+ - * / % ^` (or `**`) and brackets, superscript powers (`3²`, `2⁻¹`), implicit
+    multiplication (`2(3)`, `2π`, `2√9`), `×` `÷` `−` `·`, and `17 mod 5`.
+  - Factorials (`5!`), roots (`√144`, `∛27`, `³√27`, `∜16`, `root(27,3)`), functions (`sqrt`, `abs`,
+    `floor`, `gcd`, `lcm`, `nCr`/`choose`, `nPr`, `log`, `min`, `max`, …), constants (`pi`/`π`, `e`,
+    `tau`, `phi`), and even summations `∑(i,1,5,i)`, products `∏(i,1,5,i)` and integrals `∫(x,0,3,2x)`.
+  - Discord formatting (`**5**`, `*5*`, `||5||`, `# 5`), keycap emoji (`5️⃣`, `🔟`), thousands
+    separators (`1,000`) and `2e3` are understood. Floating-point near-misses (`0.1+0.2+0.7`, `4.35*100`)
+    count as the whole number they are.
+  - Chat after the maths is fine (`3*4 nice`, `5 🔥`, `5.`). But if the bot **can't read all of the
+    maths** (`2 3`, `5th`, `10%`), or it works out to a fraction / negative (`7/2`, `2-5`), the message
+    gets **❓** with a short reason — it **doesn't count and never resets the run**. (It never counts
+    just the part it understood.)
+  - It's a safe evaluator (no `eval`) with every loop — including factorials and `nCr` — capped so it
+    can't be abused.
 - If someone deletes or edits the latest count, the bot re-posts an authoritative record and the
   stored number never changes.
 - **`67+67` easter egg** (needs sums on): if someone writes `67+67` (= 134) as their count, it still

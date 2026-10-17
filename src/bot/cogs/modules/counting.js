@@ -110,13 +110,17 @@ async function maybeRewardGoal(message, n, goals) {
 
 // ---------------------------------------------------------------- Parsing (no eval)
 //
-// A safe maths evaluator for the counting channel. Supports PEMDAS (+ - * / % ^, brackets, unary
-// signs), factorials (n!), roots (√, ∛, root(x,n)), a set of functions (sqrt, cbrt, abs, floor, ceil,
-// round, trunc, sign, exp, ln, log, log2, log10, min, max, gcd, lcm, mod, pow, nCr/choose, nPr/perm,
-// sin/cos/tan) and constants (pi/π, e, tau/τ, phi), plus bound-variable summation (∑/sum), product
-// (∏/prod) and definite integral (∫/integral). It parses a maximal valid expression from the start of
-// the message, so trailing chat ("3*4 nice") is ignored. No eval(); every loop and step is capped so a
-// message can't tie up the bot.
+// A safe maths evaluator for the counting channel. Supports PEMDAS (+ - * / % ^ and **, brackets, unary
+// signs), superscript powers (3², 2⁻¹), implicit multiplication (2(3), 2π, 2√9), factorials (n!), roots
+// (√, ∛, ∜, ³√, root(x,n)), a set of functions (sqrt, cbrt, abs, floor, ceil, round, trunc, sign, exp,
+// ln, log, log2, log10, min, max, gcd, lcm, mod / "a mod b", pow, nCr/choose, nPr/perm, sin/cos/tan) and
+// constants (pi/π, e, tau/τ, phi/φ), plus bound-variable summation (∑/sum), product (∏/prod) and definite
+// integral (∫/integral). Discord formatting (**5**), keycaps (5️⃣) and thousands separators (1,000) are
+// understood, and results a hair off a whole number (floating point) snap to it.
+// The maths must be the whole message, or be followed by chat after a space ("3*4 nice") or by
+// punctuation/emoji ("5!", "5🔥"). If anything maths-like is left that we couldn't read ("2 3", "5th"),
+// the message is unreadable — it gets ❓ and never counts as just the part we understood (or resets).
+// No eval(); every loop and step (incl. factorials and nCr) is capped so a message can't tie up the bot.
 
 const MAX_COUNT = 1e12;
 const ITER_BUDGET = 100000; // total summation / product / integral steps allowed per expression
@@ -129,55 +133,142 @@ const FN1 = {
 };
 
 const req = (v, n) => { if (v.length !== n) throw new Error('args'); };
-const intArg = (v) => { if (!Number.isInteger(v)) throw new Error('int'); return v; };
+const intArg = (v) => { v = snap(v); if (!Number.isInteger(v)) throw new Error('int'); return v; };
+// Remainder that's never negative for a positive divisor (-7 mod 3 = 2), like in maths.
+function modulo(a, b) {
+  if (b === 0) throw new Error('%0');
+  const r = a % b;
+  return r !== 0 && (r < 0) !== (b < 0) ? r + b : r;
+}
 const gcd2 = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a; };
-function factorial(n) {
+function factorial(n, env) {
+  n = snap(n);
   if (!Number.isInteger(n) || n < 0 || n > 170) throw new Error('factorial');
+  if (env) spend(env, n);
   let r = 1;
   for (let k = 2; k <= n; k++) r *= k;
   return r;
 }
-function nCr(n, k) {
+function nCr(n, k, env) {
   if (!Number.isInteger(n) || !Number.isInteger(k) || n < 0 || k < 0 || k > n) throw new Error('nCr');
   k = Math.min(k, n - k);
   if (k > 100000) throw new Error('nCr big');
+  if (env) spend(env, k);
   let r = 1;
   for (let i = 0; i < k; i++) r = (r * (n - i)) / (i + 1);
   return Math.round(r);
 }
-function nPr(n, k) {
+function nPr(n, k, env) {
   if (!Number.isInteger(n) || !Number.isInteger(k) || n < 0 || k < 0 || k > n || k > 100000) throw new Error('nPr');
+  if (env) spend(env, k);
   let r = 1;
   for (let i = 0; i < k; i++) r *= n - i;
   return r;
 }
 
-// Tokeniser: numbers, names (functions/constants/variables), operators, and the root symbols. Stops at
-// the first character it doesn't recognise, leaving the rest as trailing chat.
-const NUM_RE = /^(?:\d+(?:\.\d+)?|\.\d+)/;
+// ---- Reading what people type
+//
+// Before parsing, a message is normalised: Discord formatting around the number (**5**, *3*, ||5||,
+// `5`, # headings, > quotes) is removed; keycap emoji (5️⃣, 🔟) become digits; superscript powers
+// become ^ (3² → 3^(2), 2⁻¹ → 2^(-1)); fancy/fullwidth characters are simplified (NFKC); and maths
+// symbols map to operators (× ✕ ⋅ ∙ → *, ÷ → /, − – → -, ** → ^, π τ φ → pi tau phi, ∑ Σ → sum,
+// ∏ → prod, ∫ → integral, ³√ → ∛, ⁴√ → ∜). Thousands separators (1,000) are dropped.
+
+const SUPERSCRIPT = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-', '⁽': '(', '⁾': ')' };
+// Function names a message may start with (so "sqrt(16)" is maths, but "hello(" is chat).
+const FUNCTIONS = new Set([...Object.keys(FN1), 'root', 'pow', 'log', 'mod', 'min', 'max', 'gcd', 'lcm', 'ncr', 'choose', 'comb', 'npr', 'perm', 'fact', 'factorial', 'sum', 'prod', 'integral']);
+
+function stripMarkdown(s) {
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(/^(?:#{1,3}|-#|>{1,3})\s+/, '').trim(); // headings, subtext, quotes
+    // A formatted chunk at the start: **5**, *3*(-1*-1)*, __5__, ~~5~~, ||5||, `5` (rest of the message kept).
+    s = s.replace(/^(\*{1,3}|_{1,2}|~~|\|\||`+)(.+?)\1(?!\S)/s, '$2').trim();
+  } while (s !== prev);
+  return s;
+}
+
+function normalize(raw) {
+  let s = stripMarkdown(String(raw || '').trim());
+  s = s
+    .replace(/([0-9])️?⃣/g, '$1') // keycaps 5️⃣
+    .replace(/🔟/g, '10')
+    .replace(/²√/g, '√')
+    .replace(/³√/g, '∛')
+    .replace(/⁴√/g, '∜')
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾]+/g, (m) => `^(${[...m].map((c) => SUPERSCRIPT[c]).join('')})`)
+    .normalize('NFKC')
+    .replace(/\*\*/g, '^')
+    .replace(/(\d|\))\s*[x×·]\s*(?=[\d.(√∛∜])/gi, '$1*')
+    .replace(/[×✕✖⨯⋅∙]/g, '*')
+    .replace(/[÷∕⁄]/g, '/')
+    .replace(/[−–‐‑﹣]/g, '-')
+    .replace(/π/g, 'pi')
+    .replace(/τ/g, 'tau')
+    .replace(/[φϕ]/g, 'phi')
+    .replace(/[∑Σ]/g, 'sum')
+    .replace(/∏/g, 'prod')
+    .replace(/∫/g, 'integral')
+    .replace(/([\w)!.])\s+mod\s+(?=[\w(.√∛∜+-])/gi, '$1 % ') // "17 mod 5"
+    // 1,000 / 12,345,678 → digits (not inside function arguments like gcd(12,180)).
+    .replace(/(^|[\s+\-*/^])(\d{1,3}(?:,\d{3})+)(?![\d,]|\.\d)/g, (_, pre, n) => pre + n.replace(/,/g, ''));
+  return s;
+}
+
+// Does the message start like maths (a number, a bracket, a root, a sign before one, or a function call)?
+function looksLikeMaths(s) {
+  if (/^(?:[\d.(√∛∜]|[+-]\s*[\d.(√∛∜])/.test(s)) return true;
+  const m = s.match(/^([a-z]\w*)\s*\(/i);
+  if (m && FUNCTIONS.has(m[1].toLowerCase())) return true;
+  return /^(?:pi|tau|phi|e)\s*[-+*/^%(]/i.test(s);
+}
+
+// What may follow the maths: nothing, chat after a space ("12 nice", "5 (finally)"), or punctuation /
+// emoji glued on ("5.", "5?", "5🔥"). More maths, digits or letters glued on means we couldn't read it
+// all ("3 2", "5th", "3²" if it weren't supported) — never count just the part we understood.
+function trailingOk(rest) {
+  if (!rest) return true;
+  if (/^\s/.test(rest)) {
+    const t = rest.trimStart();
+    if (!t || /^\(\s*[a-z]/i.test(t)) return true;
+    return !/^[\d+\-*/%^!=.,()√∛∜]/.test(t);
+  }
+  return /^[.,!?:;~…'"]+(?:\s|$)/.test(rest) || /^[^\w\s+\-*/%^=().,√∛∜]/u.test(rest);
+}
+
+// Tokeniser: numbers (incl. 1.5, .5, 2e3), names (functions/constants/variables), operators and the
+// root symbols. Each token remembers where it ends and whether whitespace came before it.
+const NUM_RE = /^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i;
 const NAME_RE = /^[A-Za-z_]\w*/;
 // Long enough for any Discord message (4000 characters with Nitro). Maths that hits a limit counts as
-// not maths at all, rather than counting whatever part of it fit.
+// unreadable, rather than counting whatever part of it fit.
 const MAX_EXPR_CHARS = 4000;
 const MAX_TOKENS = 2500;
 function tokenize(str) {
   const tokens = [];
-  let s = str;
-  while (s.length) {
+  let pos = 0;
+  let ws = false;
+  while (pos < str.length) {
     if (tokens.length >= MAX_TOKENS) throw new Error('too long');
-    if (s[0] === ' ' || s[0] === '\t') { s = s.slice(1); continue; }
+    const s = str.slice(pos);
+    if (/^\s/.test(s)) { pos++; ws = true; continue; }
     let m = s.match(NUM_RE);
-    if (m) { tokens.push({ t: 'num', v: Number(m[0]) }); s = s.slice(m[0].length); continue; }
-    m = s.match(NAME_RE);
-    if (m) { tokens.push({ t: 'name', v: m[0].toLowerCase() }); s = s.slice(m[0].length); continue; }
-    if ('+-*/%^!(),'.includes(s[0]) || s[0] === '√' || s[0] === '∛') { tokens.push({ t: s[0] }); s = s.slice(1); continue; }
-    break;
+    let tk = null;
+    if (m) tk = { t: 'num', v: Number(m[0]), len: m[0].length };
+    else if ((m = s.match(NAME_RE))) tk = { t: 'name', v: m[0].toLowerCase(), len: m[0].length };
+    else if ('+-*/%^!(),√∛∜'.includes(s[0])) tk = { t: s[0], len: 1 };
+    else break;
+    tokens.push({ ...tk, ws, end: pos + tk.len });
+    pos += tk.len;
+    ws = false;
   }
   return tokens;
 }
 
-// Recursive-descent parser → AST. Dangling operators at the end are backed out (try/restore) so a
-// trailing bit of chat never fails the whole parse.
+// Recursive-descent parser → { ast, used } (how many tokens the expression used). Dangling operators at
+// the end are backed out (try/restore); the caller decides whether what's left over is fine.
+// Implicit multiplication works when things are written together: 2(3), (2)(3), 2pi, 2√9, 3x.
 function parseExpr(tokens) {
   let i = 0;
   const eat = (t) => { if (tokens[i] && tokens[i].t === t) return tokens[i++]; throw new Error('expected ' + t); };
@@ -207,17 +298,50 @@ function parseExpr(tokens) {
   }
   function unary() {
     const tk = tokens[i];
-    if (tk && (tk.t === '+' || tk.t === '-' || tk.t === '√' || tk.t === '∛')) { i++; return { k: 'unary', op: tk.t, x: unary() }; }
+    if (tk && (tk.t === '+' || tk.t === '-' || tk.t === '√' || tk.t === '∛' || tk.t === '∜')) { i++; return { k: 'unary', op: tk.t, x: unary() }; }
     return power();
   }
-  function binLevel(ops, next) {
-    let e = next();
-    while (tokens[i] && ops.includes(tokens[i].t)) { const op = tokens[i].t; const save = i; i++; let r; try { r = next(); } catch { i = save; break; } e = { k: 'bin', op, l: e, r }; }
+  // Written-together multiplication: the next token touches this one and starts a new factor.
+  const implicitNext = () => {
+    const tk = tokens[i];
+    if (!tk || tk.ws) return false;
+    if (tk.t === '(' || tk.t === '√' || tk.t === '∛' || tk.t === '∜' || tk.t === 'num') return true;
+    return tk.t === 'name' && (tk.v in CONSTS || FUNCTIONS.has(tk.v) || tk.v.length === 1);
+  };
+  function muldiv() {
+    let e = unary();
+    for (;;) {
+      const tk = tokens[i];
+      if (tk && ['*', '/', '%'].includes(tk.t)) {
+        const save = i; i++;
+        let r; try { r = unary(); } catch { i = save; break; }
+        e = { k: 'bin', op: tk.t, l: e, r };
+      } else if (implicitNext()) {
+        const save = i;
+        let r; try { r = unary(); } catch { i = save; break; }
+        e = { k: 'bin', op: '*', l: e, r };
+      } else break;
+    }
     return e;
   }
-  const muldiv = () => binLevel(['*', '/', '%'], unary);
-  const addsub = () => binLevel(['+', '-'], muldiv);
-  return addsub(); // trailing tokens are intentionally ignored
+  function addsub() {
+    let e = muldiv();
+    while (tokens[i] && (tokens[i].t === '+' || tokens[i].t === '-')) {
+      const op = tokens[i].t; const save = i; i++;
+      let r; try { r = muldiv(); } catch { i = save; break; }
+      e = { k: 'bin', op, l: e, r };
+    }
+    return e;
+  }
+  const ast = addsub();
+  return { ast, used: i };
+}
+// Floating-point maths is slightly off at times (0.1+0.2+0.7 = 0.9999999999999999, 4.35*100 =
+// 434.99999999999994, √2² = 2.0000000000000004): anything within a hair of a whole number is that number.
+function snap(v) {
+  if (!Number.isFinite(v)) return v;
+  const near = Math.round(v);
+  return Math.abs(v - near) <= 1e-9 * Math.max(1, Math.abs(v)) ? near : v;
 }
 
 function evalNode(node, env) {
@@ -232,9 +356,10 @@ function evalNode(node, env) {
       if (node.op === '-') return -x;
       if (node.op === '+') return x;
       if (node.op === '√') { if (x < 0) throw new Error('√<0'); return Math.sqrt(x); }
+      if (node.op === '∜') { if (x < 0) throw new Error('∜<0'); return Math.sqrt(Math.sqrt(x)); }
       return Math.cbrt(x);
     }
-    case 'fact': return factorial(evalNode(node.x, env));
+    case 'fact': return factorial(evalNode(node.x, env), env);
     case 'pow': {
       const b = evalNode(node.l, env);
       const e = evalNode(node.r, env);
@@ -248,8 +373,7 @@ function evalNode(node, env) {
       if (node.op === '-') return l - r;
       if (node.op === '*') return l * r;
       if (node.op === '/') { if (r === 0) throw new Error('/0'); return l / r; }
-      if (r === 0) throw new Error('%0');
-      return l % r;
+      return modulo(l, r);
     }
     case 'call': return evalCall(node, env);
   }
@@ -301,61 +425,73 @@ function evalCall(node, env) {
     case 'root': req(vals, 2); { const [x, r] = vals; if (r === 0) throw new Error('root0'); return x < 0 && Math.round(r) % 2 ? -(Math.abs(x) ** (1 / r)) : x ** (1 / r); }
     case 'pow': req(vals, 2); if (Math.abs(vals[1]) > 1024) throw new Error('big'); return vals[0] ** vals[1];
     case 'log': if (vals.length === 1) return Math.log10(vals[0]); req(vals, 2); return Math.log(vals[0]) / Math.log(vals[1]);
-    case 'mod': req(vals, 2); if (vals[1] === 0) throw new Error('%0'); return vals[0] % vals[1];
+    case 'mod': req(vals, 2); return modulo(vals[0], vals[1]);
     case 'min': if (!vals.length) throw new Error('min'); return Math.min(...vals);
     case 'max': if (!vals.length) throw new Error('max'); return Math.max(...vals);
     case 'gcd': if (vals.length < 2) throw new Error('gcd'); return vals.map(intArg).reduce((x, y) => gcd2(x, y));
     case 'lcm': if (vals.length < 2) throw new Error('lcm'); return vals.map(intArg).reduce((x, y) => { const g = gcd2(x, y); return g ? Math.abs((x / g) * y) : 0; });
-    case 'ncr': case 'choose': case 'comb': req(vals, 2); return nCr(intArg(vals[0]), intArg(vals[1]));
-    case 'npr': case 'perm': req(vals, 2); return nPr(intArg(vals[0]), intArg(vals[1]));
-    case 'fact': case 'factorial': req(vals, 1); return factorial(intArg(vals[0]));
+    case 'ncr': case 'choose': case 'comb': req(vals, 2); return nCr(intArg(vals[0]), intArg(vals[1]), env);
+    case 'npr': case 'perm': req(vals, 2); return nPr(intArg(vals[0]), intArg(vals[1]), env);
+    case 'fact': case 'factorial': req(vals, 1); return factorial(intArg(vals[0]), env);
   }
   throw new Error('fn ' + name);
 }
 
-// Evaluates a maths expression. Returns a finite number, or null for anything that isn't valid maths.
+// Evaluates a whole maths expression (already normalised). Returns a number, or null when it isn't
+// valid maths or something is left over that we couldn't read.
 function evaluate(expr) {
+  const r = evalPrefix(String(expr));
+  return r && trailingOk(r.rest) ? r.value : null;
+}
+
+// Parses and evaluates the maths at the start of `str`: { value, rest } (rest = the text after it), or null.
+function evalPrefix(str) {
   try {
-    const str = String(expr);
     if (str.length > MAX_EXPR_CHARS) return null;
     const tokens = tokenize(str);
     if (!tokens.length) return null;
-    const ast = parseExpr(tokens);
-    const v = evalNode(ast, { vars: new Map(), budget: ITER_BUDGET });
-    return Number.isFinite(v) ? v : null;
+    const { ast, used } = parseExpr(tokens);
+    const value = snap(evalNode(ast, { vars: new Map(), budget: ITER_BUDGET }));
+    if (!Number.isFinite(value)) return null;
+    return { value, rest: str.slice(tokens[used - 1].end) };
   } catch {
     return null;
   }
 }
 
 /**
- * The number a message counts as, or null when it isn't a count (normal chat is ignored).
- * Only the start matters: "12 nice" counts as 12. With math on, "3*4", "5!", "√144", "∑(i,1,5,i)" etc.
+ * Reads a counting message. Returns:
+ * - { n } — the number it counts as ("12 nice" → 12; with maths on "3*4", "3²", "5!", "√144", "2(3)"…),
+ * - { bad, value? } — it looks like a count but isn't a usable one: 'unreadable' (maths we can't read, or
+ *   more maths/letters glued on), 'fraction' (3.5), 'negative', 'huge' (over a trillion). Never resets.
+ * - null — ordinary chat.
  */
-function plainNumber(text) {
-  const m = String(text).match(/^(\d+)(?!\d|\.\d|\s*[-+*/^×÷])/);
-  const n = m ? Number(m[1]) : null;
-  return n !== null && n <= MAX_COUNT ? n : null;
+function readCount(content, mathAllowed = true) {
+  const s = normalize(content);
+  if (!s) return null;
+  if (!mathAllowed) {
+    const m = s.match(/^\d+/);
+    if (!m) return null;
+    const n = Number(m[0]);
+    if (!trailingOk(s.slice(m[0].length))) return { bad: 'unreadable' };
+    return n <= MAX_COUNT ? { n } : { bad: 'huge' };
+  }
+  if (!looksLikeMaths(s)) return null;
+  const r = evalPrefix(s);
+  // "100!" / "99999!" — a factorial too big to be a count is just the excited number typed.
+  const excited = s.match(/^(\d+)!+$/);
+  if (excited && (!r || r.value > MAX_COUNT)) return Number(excited[1]) <= MAX_COUNT ? { n: Number(excited[1]) } : { bad: 'huge' };
+  if (!r || !trailingOk(r.rest)) return { bad: 'unreadable' };
+  if (r.value < 0) return { bad: 'negative', value: r.value };
+  if (!Number.isInteger(r.value)) return { bad: 'fraction', value: r.value };
+  if (r.value > MAX_COUNT) return { bad: 'huge', value: r.value };
+  return { n: r.value };
 }
 
+/** The number a message counts as, or null (chat, or not a usable count). */
 function parseCount(content, mathAllowed = true) {
-  const raw = String(content || '').trim();
-  if (!raw) return null;
-  if (!mathAllowed) return plainNumber(raw);
-  // Normalise the common maths symbols, then evaluate the start of the message.
-  const pre = raw
-    .replace(/(\d)\s*[x×·]\s*(?=[\d.(√∛])/gi, '$1*')
-    .replace(/×/g, '*')
-    .replace(/÷/g, '/')
-    .replace(/−/g, '-')
-    .replace(/[∑Σ]/g, 'sum')
-    .replace(/∏/g, 'prod')
-    .replace(/∫/g, 'integral');
-  const v = evaluate(pre);
-  // Not valid maths, or not a usable count (negative, fractional, too big) — fall back to a plain
-  // number at the start ("12 nice" → 12), which is null for ordinary chat.
-  if (v === null || !Number.isInteger(v) || v < 0 || v > MAX_COUNT) return plainNumber(raw);
-  return v;
+  const r = readCount(content, mathAllowed);
+  return r && r.n !== undefined ? r.n : null;
 }
 
 // ---------------------------------------------------------------- Game
@@ -385,7 +521,25 @@ async function handleCounting(message, config) {
   const s = countingSettings(config);
   if (!s.enabled || !s.channelId || message.channelId !== s.channelId) return false;
   if (message.author.bot || message.webhookId || message.system) return false;
-  const n = parseCount(message.content, s.mathAllowed);
+  const read = readCount(message.content, s.mathAllowed);
+  if (read && read.bad) {
+    // Looks like a count but isn't one we can use (unreadable maths, 3.5, a negative…). It doesn't
+    // count and never resets the run — just say why and leave the message.
+    await react(message, '❓');
+    const value = Number.isFinite(read.value) ? +read.value.toPrecision(6) : null;
+    const why = {
+      unreadable: s.mathAllowed ? "I couldn't read that maths" : 'maths is off here — type the plain number',
+      fraction: `that works out to **${value}** — counts are whole numbers`,
+      negative: `that works out to **${value}** — counts can't be negative`,
+      huge: "that number's way too big"
+    }[read.bad];
+    const hint = await message.channel
+      .send({ content: `❓ ${message.author}, ${why}. It didn't count (no reset) — try writing it another way.`, allowedMentions: { parse: [] } })
+      .catch(() => null);
+    if (hint?.delete) setTimeout(() => hint.delete().catch(() => null), 10000);
+    return true;
+  }
+  const n = read ? read.n : null;
   if (n === null) {
     // Numbers-only: quietly remove normal chatter so the channel stays clean (staff are exempt so they
     // can still post notes). The count is never touched by non-numbers.
@@ -718,6 +872,8 @@ function registerCountingEvents(client) {
 module.exports = {
   registerCountingEvents,
   evaluate,
+  normalize,
+  readCount,
   parseCount,
   countingSettings,
   goalSettings,
