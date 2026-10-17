@@ -135,6 +135,11 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   // Race: two people send 101 at the same moment — only one counts.
   const [p1,p2]=[msg('ann','101'),msg('cat','101')]; await Promise.all([C.handleCounting(p1,cfg()),C.handleCounting(p2,cfg())]);
   assert.equal(cfg().counting.current,101); assert.deepEqual([p1.reacts,p2.reacts].map(a=>a[0]).sort(),['✅','👀']);
+  // The same message delivered twice (two bot instances during a deploy) counts once and never resets.
+  const resets0=cfg().counting.resets; const dupe=msg('ben','102');
+  assert.equal(await C.handleCounting(dupe,cfg()),true); assert.equal(await C.handleCounting(dupe,cfg()),true);
+  assert.deepEqual(dupe.reacts,['✅'],'no ❌ on the second delivery'); assert.equal(cfg().counting.current,102); assert.equal(cfg().counting.resets,resets0);
+  await C.saveSettings(guild,{current:101}); // back to 101 for the edit checks below
   console.log('✓ set the count, 💯 milestones, deleting the latest count posts the next number, simultaneous counts can’t both win');
 
   // Editing your count to a different number can't rewind or disguise it either ("39" → "38").

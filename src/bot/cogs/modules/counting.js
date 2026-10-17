@@ -356,6 +356,9 @@ async function handleCounting(message, config) {
   // Not the next number (or the same person twice). Look at the live state to explain why.
   const fresh = countingSettings(await GuildConfig.findOne({ guildId: message.guild.id }, { counting: 1 }).lean());
   if (!fresh.enabled || fresh.channelId !== s.channelId) return false;
+  // This exact message is already the accepted count — a duplicate delivery (e.g. two bot instances
+  // overlapping during a deploy). Never judge it a second time.
+  if (fresh.lastMessageId === message.id) return true;
 
   // Someone else posted this exact number a moment ago — they were just faster. No reset.
   if (n === fresh.current && fresh.lastUserId !== userId && fresh.lastCountAt && Date.now() - fresh.lastCountAt.getTime() < SAME_NUMBER_GRACE_MS) {
