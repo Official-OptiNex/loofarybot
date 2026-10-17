@@ -15,7 +15,9 @@ const threads=[]; let tid=100;
 function makeThread(id,name,payload,tags){ const t={id,name,appliedTags:tags||[],pinned:false,deleted:false,
   starter:{id,payload,edit:async(p)=>{t.starter.payload=p;return t.starter;}},
   fetchStarterMessage:async()=>t.starter, setName:async(n)=>{t.name=n;}, setAppliedTags:async(a)=>{t.appliedTags=a;},
-  pin:async()=>{t.pinned=true;}, delete:async()=>{t.deleted=true; cache.delete(id);}}; return t; }
+  pin:async()=>{t.pinned=true;}, delete:async()=>{t.deleted=true; cache.delete(id);},
+  msgs:new Map(), send:async(payload)=>{ const m={id:'m'+(tid++),payload,deleted:false,edit:async(p)=>{m.payload=p;return m;},delete:async()=>{m.deleted=true;t.msgs.delete(m.id);}}; t.msgs.set(m.id,m); return m; }};
+  t.messages={fetch:async(mid)=>t.msgs.get(mid)||Promise.reject(new Error('unknown message'))}; return t; }
 const cache=new Collection();
 const forum={id:'forum',type:ChannelType.GuildForum,name:'guides',availableTags:[{id:'tg1',name:'Guides'},{id:'tg2',name:'FAQ'}],
   threads:{ create:async({name,message,appliedTags})=>{ const t=makeThread('t'+(tid++),name,message,appliedTags); threads.push(t); cache.set(t.id,t); return t; },
@@ -189,6 +191,38 @@ const member=(roleIds=[],admin=false)=>({id:'u1',permissions:{has:(p)=>admin},ro
   assert.match(JSON.stringify(cache.get(la.threadId).starter.payload),/see C/,'link to a deleted guide → plain text');
   for (const sl of ['link-a','link-b']) await G.deleteGuide(guild,sl,await freshSettings());
   console.log('✓ guide links + import updates in place');
+
+  // ---- extra messages in one post, each linkable on its own (guide:slug#key)
+  const beforeFaq=threads.length;
+  const xfq=await G.importGuides(guild,[
+    {title:'FAQs',tags:['FAQs'],body:'Contents: [Main](guide:faqs#main-stage) · [Gun](guide:faqs#gun)',messages:[{key:'Main Stage',body:'main answers'},{key:'gun',body:{embeds:[{title:'Gun',description:'gun answers'}]}}]},
+    {title:'Main Guide',tags:['Guides'],body:'see [Main Stage FAQs](guide:faqs#main-stage) and [all](guide:faqs)'}
+  ],'u1',await freshSettings());
+  assert.deepEqual(xfq.imported,['FAQs','Main Guide']); assert.equal(threads.length,beforeFaq+2,"one post for all FAQs");
+  let xfaqG=await G.getGuide('g','faqs'); const xft=cache.get(xfaqG.threadId);
+  assert.deepEqual(xfaqG.messages.map((m)=>m.key),['main-stage','gun'],'keys cleaned');
+  const [xm1,xm2]=xfaqG.messages.map((m)=>xft.msgs.get(m.messageId));
+  assert.ok(xm1&&xm2,'both extra messages posted in the post');
+  assert.match(JSON.stringify(xm1.payload),/main answers/); assert.match(JSON.stringify(xm2.payload),/gun answers/);
+  const xfs=JSON.stringify(xft.starter.payload);
+  assert.ok(xfs.includes(`[Main](https://discord.com/channels/g/${xft.id}/${xm1.id})`),'contents links straight to its own messages');
+  const mgPost=JSON.stringify(cache.get((await G.getGuide('g','main guide')).threadId).starter.payload);
+  assert.ok(mgPost.includes(`[Main Stage FAQs](https://discord.com/channels/g/${xft.id}/${xm1.id})`),'other guides link to one message');
+  assert.ok(mgPost.includes(`[all](https://discord.com/channels/g/${xft.id})`),'plain guide: link → the post');
+  // edit: same messages edited in place, a removed one deleted, a new one posted
+  await G.editGuide(guild,'faqs',{messages:[{key:'gun',body:'gun v2'},{key:'skin',body:'skins'}]},'u1',await freshSettings());
+  xfaqG=await G.getGuide('g','faqs');
+  assert.equal(xfaqG.messages[0].messageId,xm1.id,'position 1 keeps its Discord message');
+  assert.match(JSON.stringify(xm1.payload),/gun v2/,'edited in place');
+  assert.equal(xfaqG.messages[1].messageId,xm2.id,'position 2 keeps its Discord message too'); assert.match(JSON.stringify(xm2.payload),/skins/,'…now showing the new content');
+  await G.editGuide(guild,'faqs',{messages:[{key:'gun',body:'gun v3'}]},'u1',await freshSettings());
+  assert.equal(xm2.deleted,true,'a removed message is deleted from the post');
+  await G.editGuide(guild,'faqs',{messages:[{key:'gun',body:'gun v3'},{key:'pets',body:'pets'}]},'u1',await freshSettings());
+  xfaqG=await G.getGuide('g','faqs'); assert.match(JSON.stringify(xft.msgs.get(xfaqG.messages[1].messageId).payload),/pets/,'an added message is posted');
+  const xmg2=JSON.stringify(cache.get((await G.getGuide('g','main guide')).threadId).starter.payload);
+  assert.ok(xmg2.includes(' and ')&&xmg2.includes('see Main Stage FAQs'),'link to a removed message → plain text (linking guide refreshed)');
+  for (const sl of ['faqs','main-guide']) await G.deleteGuide(guild,sl,await freshSettings());
+  console.log('✓ multi-message guides + message links');
 
   // ---- private editor channel: created, @everyone denied view, editor role allowed
   const ec=await G.ensureEditorChannel(guild,s,{});

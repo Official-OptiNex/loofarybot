@@ -95,24 +95,46 @@ function normalizeBody(body) {
   return EmbedJson.normalizeMessage(body || {});
 }
 
-// Links between guides are stored as [text](guide:slug) — guide:index is the pinned index post — and
-// become real post links when published, so they survive posts being recreated.
-const GUIDE_LINK = /\[((?:[^\[\]\\]|\\.)+)\]\(<?guide:([\w-]+)>?\)/g;
-const hasGuideLinks = (body) => /\(<?guide:[\w-]+>?\)/.test(JSON.stringify(body || {}));
+// Links between guides are stored as [text](guide:slug) — guide:index is the pinned index post, and
+// guide:slug#key one of a guide's extra messages — and become real Discord links when published, so
+// they survive posts being recreated.
+const GUIDE_LINK = /\[((?:[^\[\]\\]|\\.)+)\]\(<?guide:([\w-]+(?:#[\w-]+)?)>?\)/g;
+const LINK_TARGETS = /guide:([\w-]+)(?:#[\w-]+)?/g;
+const hasGuideLinks = (guide) => /\(<?guide:[\w-]+(?:#[\w-]+)?>?\)/.test(JSON.stringify([guide?.body, guide?.messages]));
+const linkedSlugs = (guide) => new Set([...JSON.stringify([guide?.body, guide?.messages]).matchAll(LINK_TARGETS)].map((m) => m[1]));
+const MAX_MESSAGES = 20;
 
-/** slug → post url for every guide (plus 'index'); guides shown inside the index link to it. */
-async function guideLinks(guild) {
-  const [all, cfg] = await Promise.all([Guide.find({ guildId: guild.id }, { slug: 1, threadId: 1 }).lean(), GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean()]);
-  const url = (id) => (id ? `https://discord.com/channels/${guild.id}/${id}` : null);
+/** A url-safe message key (used in guide:slug#key links). */
+const messageKey = (k, i) => slugify(k || '').slice(0, 40) || `part-${i + 2}`;
+
+/** Cleans a guide's extra messages: [{ key, body }], keys unique, bodies normalised. */
+function normalizeMessages(guild, list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).slice(0, MAX_MESSAGES).map((m, i) => {
+    let key = messageKey(m?.key, i);
+    while (seen.has(key)) key = `${key}-${i + 2}`;
+    seen.add(key);
+    const raw = m && (m.body !== undefined ? m.body : { content: m.content, embeds: m.embeds });
+    return { key, body: normalizeBody(resolveEmojis(guild, raw)) };
+  });
+}
+
+/** slug (and slug#key) → Discord url for every guide, plus 'index'. `also` adds a guide not saved yet. */
+async function guideLinks(guild, also = null) {
+  const [all, cfg] = await Promise.all([Guide.find({ guildId: guild.id }, { slug: 1, threadId: 1, messages: 1 }).lean(), GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean()]);
+  const url = (...ids) => (ids.every(Boolean) ? `https://discord.com/channels/${guild.id}/${ids.join('/')}` : null);
   const map = { index: url(guidesSettings(cfg).legendThreadId) };
-  for (const g of all) map[g.slug] = url(g.threadId);
+  for (const g of also ? [...all.filter((x) => x.slug !== also.slug), also] : all) {
+    map[g.slug] = url(g.threadId);
+    for (const m of g.messages || []) map[`${g.slug}#${m.key}`] = url(g.threadId, m.messageId);
+  }
   return map;
 }
 
-/** Swaps guide:slug links for post urls (an unknown or unposted guide leaves just the link text). */
+/** Swaps guide: links for Discord urls (an unknown or unposted target leaves just the link text). */
 function resolveGuideLinks(value, links) {
   if (!links) return value;
-  if (typeof value === 'string') return value.replace(GUIDE_LINK, (m, text, slug) => (links[slug] ? `[${text}](${links[slug]})` : text));
+  if (typeof value === 'string') return value.replace(GUIDE_LINK, (m, text, target) => (links[target] ? `[${text}](${links[target]})` : text));
   if (Array.isArray(value)) return value.map((v) => resolveGuideLinks(v, links));
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveGuideLinks(v, links)]));
   return value;
@@ -161,32 +183,65 @@ async function publishGuide(guild, guide, settings) {
     }
     return { threadId: legendThreadId, messageId: legendThreadId };
   }
-  const payload = buildPayload(guide, await guideLinks(guild));
   const appliedTags = mapTags(forum, guide.tags);
+  const messages = (guide.messages || []).map((m) => ({ ...m }));
 
   let thread = await fetchThread(forum, guide.threadId);
   if (thread && thread.id === guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean()).legendThreadId) thread = null; // was Start Here; needs its own post again
+  const starterPayload = (links) => buildPayload(guide, links);
+  let starter = null;
   if (thread) {
     if (thread.name !== guide.title) await thread.setName(guide.title.slice(0, 100)).catch(() => null);
     if (thread.setAppliedTags) await thread.setAppliedTags(appliedTags).catch(() => null);
-    const starter = await thread.fetchStarterMessage().catch(() => null);
-    if (starter) await starter.edit(payload).catch(() => null);
-    return { threadId: thread.id, messageId: thread.id };
+    starter = await thread.fetchStarterMessage().catch(() => null);
+    if (starter) await starter.edit(starterPayload(await guideLinks(guild, { ...guide, threadId: thread.id, messages }))).catch(() => null);
+  } else {
+    // A new post: its follow-up messages are new too.
+    messages.forEach((m) => delete m.messageId);
+    thread = await forum.threads.create({ name: guide.title.slice(0, 100), message: starterPayload(await guideLinks(guild, { ...guide, threadId: null, messages })), appliedTags }).catch((e) => ({ error: e.message }));
+    if (!thread || thread.error) return { error: `Couldn't post the guide. (${thread?.error || 'unknown error'})` };
   }
-  thread = await forum.threads.create({ name: guide.title.slice(0, 100), message: payload, appliedTags }).catch((e) => ({ error: e.message }));
-  if (!thread || thread.error) return { error: `Couldn't post the guide. (${thread?.error || 'unknown error'})` };
-  return { threadId: thread.id, messageId: thread.id };
+
+  // Follow-up messages, edited in place by position; extras are posted, leftovers deleted.
+  let posted = false;
+  const links = await guideLinks(guild, { ...guide, threadId: thread.id, messages });
+  for (const m of messages) {
+    const payload = buildPayload({ title: guide.title, body: m.body }, links);
+    const old = m.messageId && (await thread.messages?.fetch(m.messageId).catch(() => null));
+    if (old) await old.edit(payload).catch(() => null);
+    else {
+      const sent = await thread.send?.(payload).catch(() => null);
+      m.messageId = sent?.id || null;
+      posted = true;
+    }
+  }
+  for (const id of guide.removedMessageIds || []) {
+    const old = await thread.messages?.fetch(id).catch(() => null);
+    if (old) await old.delete().catch(() => null);
+  }
+  // Links to this guide's own new messages (e.g. a contents list) only resolve once they exist.
+  if (posted && linkedSlugs(guide).has(guide.slug)) {
+    const fresh = await guideLinks(guild, { ...guide, threadId: thread.id, messages });
+    if (!starter) starter = await thread.fetchStarterMessage?.().catch(() => null);
+    if (starter) await starter.edit(starterPayload(fresh)).catch(() => null);
+    for (const m of messages) {
+      const msg = m.messageId && (await thread.messages?.fetch(m.messageId).catch(() => null));
+      if (msg) await msg.edit(buildPayload({ title: guide.title, body: m.body }, fresh)).catch(() => null);
+    }
+  }
+  return { threadId: thread.id, messageId: thread.id, messages };
 }
 
-async function createGuide(guild, { title, tags = [], body = null, inIndex = false, authorId = null, createdBy = null }, settings, { rebuild = true } = {}) {
+async function createGuide(guild, { title, tags = [], body = null, messages = [], inIndex = false, authorId = null, createdBy = null }, settings, { rebuild = true } = {}) {
   const cleanTitle = String(title || '').trim().slice(0, 100);
   if (!cleanTitle) return { error: 'A guide needs a title.' };
   const slug = await uniqueSlug(guild.id, cleanTitle);
-  const guide = { guildId: guild.id, slug, title: cleanTitle, tags: (tags || []).map(String).slice(0, 5), body: normalizeBody(resolveEmojis(guild, body)), inIndex: !!inIndex, authorId, createdBy };
+  const guide = { guildId: guild.id, slug, title: cleanTitle, tags: (tags || []).map(String).slice(0, 5), body: normalizeBody(resolveEmojis(guild, body)), messages: normalizeMessages(guild, messages), inIndex: !!inIndex, authorId, createdBy };
   const pub = await publishGuide(guild, guide, settings);
   if (pub.error) return { error: pub.error };
   guide.threadId = pub.threadId;
   guide.messageId = pub.messageId;
+  if (pub.messages) guide.messages = pub.messages;
   const doc = await Guide.create(guide);
   if (rebuild) {
     await rebuildLegend(guild, settings);
@@ -206,13 +261,27 @@ async function editGuide(guild, slug, patch, byId, settings, { rebuild = true } 
     guide.markModified('body');
   }
   if (patch.authorId !== undefined) guide.authorId = patch.authorId;
+  const before = (guide.messages || []).map((m) => `${m.key}:${m.messageId}`).join();
+  let removedMessageIds = [];
+  if (patch.messages !== undefined) {
+    // The message at each position stays the same Discord message; only its content changes.
+    const old = guide.messages || [];
+    const next = normalizeMessages(guild, patch.messages);
+    next.forEach((m, i) => (m.messageId = old[i]?.messageId || null));
+    removedMessageIds = old.slice(next.length).map((m) => m.messageId).filter(Boolean);
+    guide.messages = next;
+    guide.markModified('messages');
+  }
   guide.editedBy = byId;
-  const pub = await publishGuide(guild, guide, settings);
+  const pub = await publishGuide(guild, { ...guide.toObject(), removedMessageIds }, settings);
   if (pub.error) return { error: pub.error };
   guide.threadId = pub.threadId;
   guide.messageId = pub.messageId;
+  if (pub.messages) { guide.messages = pub.messages; guide.markModified('messages'); }
   await guide.save();
   if (rebuild) await rebuildLegend(guild, settings);
+  // Message links into this guide moved (keys reordered, messages added/removed): update linking guides.
+  if (before !== (guide.messages || []).map((m) => `${m.key}:${m.messageId}`).join()) await refreshLinkingGuides(guild, settings, [slug]);
   return { guide: guide.toObject() };
 }
 
@@ -343,8 +412,8 @@ async function refreshLinkingGuides(guild, settings, slugs = null) {
   const all = await Guide.find({ guildId: guild.id }).lean();
   const wanted = slugs && new Set(slugs);
   for (const g of all) {
-    if (!hasGuideLinks(g.body) || isInIndex(g)) continue;
-    if (wanted && ![...JSON.stringify(g.body).matchAll(/guide:([\w-]+)/g)].some((m) => wanted.has(m[1]))) continue;
+    if (!hasGuideLinks(g) || isInIndex(g) || (wanted && wanted.has(g.slug) && wanted.size === 1)) continue;
+    if (wanted && ![...linkedSlugs(g)].some((s) => wanted.has(s))) continue;
     await publishGuide(guild, g, settings);
   }
 }
@@ -377,7 +446,7 @@ async function importGuides(guild, items, byId, settings) {
         base.embeds.push({ image: { url: u } });
       }
     }
-    const fields = { title, tags: raw.tags || raw.category ? [].concat(raw.tags || raw.category) : [], body: base, inIndex: !!(raw.inIndex ?? raw.includeInIndex) };
+    const fields = { title, tags: raw.tags || raw.category ? [].concat(raw.tags || raw.category) : [], body: base, messages: Array.isArray(raw.messages) ? raw.messages : [], inIndex: !!(raw.inIndex ?? raw.includeInIndex) };
     const same = existing.find((g) => g.title.trim().toLowerCase() === title.toLowerCase());
     if (same) {
       const res = await editGuide(guild, same.slug, fields, byId, settings, { rebuild: false });
