@@ -161,7 +161,7 @@
   <main class="site-main" style="max-width:1200px; margin:0 auto; padding:1.2rem 16px;">
     <div class="page-heading">
       <div>
-        <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
+        <% if (guidesOnly) { %><a class="muted" href="/dashboard" style="font-size:0.85rem;">← Servers</a><% } else { %><a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a><% } %>
         <h1 style="font-size:1.45rem; margin-top:0.2rem;">📖 Guides</h1>
         <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Each guide is a forum post the bot owns — edit here and the live post updates. The pinned <strong>📖 Guides Index</strong> follows your order automatically.</p>
       </div>
