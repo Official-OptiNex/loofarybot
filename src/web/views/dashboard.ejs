@@ -38,7 +38,7 @@
     <% } else { %>
       <div class="guild-grid" id="guildGrid">
         <% guilds.forEach(g => { %>
-          <a class="guild-tile" href="/dashboard/<%= g.id %>" data-name="<%= g.name.toLowerCase() %>">
+          <a class="guild-tile" href="<%= g.home || ('/dashboard/' + g.id) %>" data-name="<%= g.name.toLowerCase() %>">
             <div class="guild-tile-banner" style="<%= g.iconUrl ? `background-image:url('${g.iconUrl}')` : '' %>"></div>
             <div class="guild-tile-body">
               <% if (g.iconUrl) { %>
@@ -50,7 +50,7 @@
               <div class="guild-tile-stats">
                 <span>👥 <%= g.memberCount.toLocaleString() %></span>
                 <span>💬 <%= g.channelCount %></span>
-                <span class="status-chip <%= g.accessLevel === 'admin' ? 'good' : 'warn' %>"><span class="dot"></span><%= g.accessLevel === 'admin' ? 'Admin' : 'Moderator' %></span>
+                <span class="status-chip <%= g.accessLevel === 'admin' ? 'good' : 'warn' %>"><span class="dot"></span><%= g.accessLevel === 'admin' ? 'Admin' : g.accessLevel === 'guides' ? '📖 Guide editor' : 'Moderator' %></span>
               </div>
               <span class="guild-tile-cta">Open dashboard →</span>
             </div>

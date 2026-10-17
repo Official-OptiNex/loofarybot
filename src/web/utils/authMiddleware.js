@@ -99,6 +99,12 @@ async function requireGuildAccess(req, res, next) {
   next();
 }
 
+// True when the Guides page is all this user can open (a guide editor who isn't a moderator/admin).
+const guidesOnly = (access) => !!access && access.level === 'mod' && access.pages?.size === 1 && access.pages.has('guides');
+
+/** Where this user's dashboard for a guild starts: the Guides page for guide-only editors, else the overview. */
+const homeFor = (guildId, access) => (guidesOnly(access) ? `/dashboard/${guildId}/guides` : `/dashboard/${guildId}`);
+
 const canUse = (access, page) => !!access && (access.level === 'admin' || (page !== 'settings' && access.pages?.has(page)));
 
 // Route guard: requirePage('leveling') etc. 'settings' is admin-only.
@@ -112,6 +118,8 @@ module.exports = {
   requirePage,
   resolveAccess,
   canUse,
+  guidesOnly,
+  homeFor,
   sessionHasManage,
   MOD_PAGES,
   DEFAULT_MOD_PAGES,

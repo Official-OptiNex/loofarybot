@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAuth, requireGuildAccess, resolveAccess, canUse, sessionHasManage, MOD_PAGES } = require('../utils/authMiddleware');
+const { requireAuth, requireGuildAccess, resolveAccess, canUse, guidesOnly, homeFor, sessionHasManage, MOD_PAGES } = require('../utils/authMiddleware');
 const { inviteUrl } = require('../utils/site');
 const GuildConfig = require('../../database/models/GuildConfig');
 const TicketConfig = require('../../database/models/TicketConfig');
@@ -31,7 +31,8 @@ router.get('/', requireAuth, async (req, res) => {
             iconUrl: liveGuild.iconURL({ size: 128 }),
             memberCount: liveGuild.memberCount,
             channelCount: liveGuild.channels.cache.size,
-            accessLevel: access.level
+            accessLevel: guidesOnly(access) ? 'guides' : access.level,
+            home: homeFor(g.id, access)
           }
         : null;
     })
@@ -49,6 +50,9 @@ router.get('/', requireAuth, async (req, res) => {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // Someone who can only edit guides, in a single server, has nothing to pick: go straight there.
+  if (guilds.length === 1 && guilds[0].accessLevel === 'guides' && !addable.length) return res.redirect(guilds[0].home);
+
   res.render('dashboard', {
     guilds,
     addable,
@@ -57,6 +61,8 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
+  // Guide editors have no overview to see — the Guides page is their dashboard.
+  if (guidesOnly(req.access)) return res.redirect(`/dashboard/${req.guild.id}/guides`);
   const [configDoc, welcomeDoc, levelAgg] = await Promise.all([
     GuildConfig.findOne({ guildId: req.guild.id }),
     WelcomeConfig.findOne({ guildId: req.guild.id }).lean(),

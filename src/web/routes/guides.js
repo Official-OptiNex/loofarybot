@@ -3,7 +3,7 @@ const { PermissionFlagsBits, ChannelType } = require('discord.js');
 const guides = require('../../bot/cogs/modules/guides');
 const GuideModel = require('../../database/models/Guide');
 const GuildConfig = require('../../database/models/GuildConfig');
-const { requireAuth, requireGuildAccess, requirePage } = require('../utils/authMiddleware');
+const { requireAuth, requireGuildAccess, requirePage, guidesOnly } = require('../utils/authMiddleware');
 const { auditTrail } = require('../utils/audit');
 
 const router = express.Router();
@@ -45,6 +45,7 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
     res.render('guides', {
       guild,
       isAdmin: isAdmin(req),
+      guidesOnly: guidesOnly(req.access),
       settings: s,
       forums,
       textChannels,
