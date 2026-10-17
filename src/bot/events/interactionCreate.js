@@ -18,6 +18,7 @@ function routeButton(interaction) {
   if (id.startsWith('rr:')) return handleRoleButton(interaction);
   if (id.startsWith('poll:')) return handleVote(interaction);
   if (id.startsWith('tk:')) return handleTicketButton(interaction); // support tickets
+  if (id.startsWith('ap:')) return require('../cogs/modules/applications').handleApplicationButton(interaction); // applications
   if (id.startsWith('shop:')) return require('../cogs/modules/shop').handleShopInteraction(interaction); // XP shop
   if (id.startsWith('idle:')) return require('../cogs/modules/idleGame').handleIdleInteraction(interaction); // Bubble Factory idle game
   if (id.startsWith('xpd:')) return handleDropButton(interaction); // chat XP drops
@@ -43,6 +44,7 @@ module.exports = function registerInteractionCreateEvent(client) {
         if (interaction.customId.startsWith('hpembed_modal:')) return await honeypotCommand.handleModalSubmit(interaction, client);
         if (interaction.customId.startsWith('gwd:')) return await giveawayForm.handleDraftModal(interaction);
         if (interaction.customId.startsWith('tkm:')) return await handleTicketModal(interaction);
+        if (interaction.customId.startsWith('apm:')) return await require('../cogs/modules/applications').handleApplicationModal(interaction);
         if (interaction.customId.startsWith('shop:')) return await require('../cogs/modules/shop').handleShopInteraction(interaction);
         return;
       }

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Applications | <%= guild.name %></title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
+  <style>
+    .ap-tabs{display:flex;gap:0.3rem;margin:0 0 1rem;border-bottom:1px solid var(--border-card,#26293a);}
+    .ap-tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--text-muted,#9aa0b4);padding:0.55rem 0.9rem;font-weight:600;cursor:pointer;font-size:0.92rem;}
+    .ap-tabs button.on{color:var(--text-main,#e6e8ef);border-bottom-color:var(--accent-blue,#4f7cff);}
+    .ap-wrap{display:grid;grid-template-columns:280px minmax(0,1fr);gap:1rem;align-items:start;}
+    .ap-wrap > *{min-width:0;}
+    @media (max-width:860px){ .ap-wrap{grid-template-columns:minmax(0,1fr);} }
+    .ap-forms .row{display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.5rem;border-radius:8px;cursor:pointer;}
+    .ap-forms .row:hover,.ap-forms .row.on{background:var(--bg-elevated,#1a1d2b);}
+    .ap-forms .dot{width:0.55rem;height:0.55rem;border-radius:50%;flex:0 0 auto;}
+    .ap-sec{border-top:1px solid var(--border-card,#26293a);padding-top:0.9rem;margin-top:0.9rem;}
+    .ap-sec > h4{margin:0 0 0.15rem;font-size:0.98rem;}
+    .ap-sec > p.muted{margin:0 0 0.6rem;font-size:0.8rem;}
+    .ap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.6rem;}
+    .ap-q{border:1px solid var(--border-card,#26293a);border-radius:10px;padding:0.6rem;margin-bottom:0.5rem;}
+    .ap-q-top{display:flex;gap:0.4rem;align-items:center;}
+    .ap-q-top input{flex:1;}
+    .ap-roles{display:flex;flex-wrap:wrap;gap:0.35rem;max-height:150px;overflow:auto;padding:0.1rem;}
+    .ap-roles .chip{cursor:pointer;user-select:none;}
+    .ap-roles .chip.on{background:var(--accent-blue,#4f7cff);color:#fff;border-color:var(--accent-blue,#4f7cff);}
+    .ap-preview{background:#313338;border-radius:10px;padding:0.8rem 0.9rem;color:#dbdee1;font-size:0.92rem;}
+    .ap-preview .p-embed{background:#2b2d31;border-radius:4px;padding:0.5rem 0.9rem 0.75rem 0.75rem;margin-top:0.35rem;max-width:520px;}
+    .ap-preview .p-title{font-weight:600;color:#f2f3f5;}
+    .ap-preview .p-desc{margin-top:0.3rem;font-size:0.875rem;white-space:pre-wrap;}
+    .ap-preview .ap-btn{display:inline-flex;align-items:center;gap:0.3rem;margin-top:0.5rem;padding:0.35rem 0.9rem;border-radius:4px;color:#fff;font-weight:500;font-size:0.875rem;}
+    .ap-preview .p-thumb{float:right;max-width:72px;max-height:72px;border-radius:4px;margin-left:0.6rem;}
+    .ap-preview .p-image{max-width:100%;border-radius:4px;margin-top:0.5rem;display:block;}
+    .ap-preview .p-foot{font-size:0.75rem;color:#b5bac1;margin-top:0.4rem;}
+    .vb-h1{font-size:1.4rem;font-weight:700}.vb-h2{font-size:1.2rem;font-weight:700}.vb-h3{font-size:1rem;font-weight:700}.vb-sub{font-size:0.75rem;color:#949ba4}
+    .vb-li{padding-left:1em;position:relative}.vb-li::before{content:'•';position:absolute;left:0.2em}.vb-quote{border-left:4px solid #4e5058;padding-left:0.6em}
+    .v-emoji{height:1.375em;vertical-align:-0.3em}.mention-pill{background:rgba(88,101,242,.3);color:#c9cdfb;border-radius:3px;padding:0 2px}
+    .ap-actions{position:sticky;bottom:0;z-index:5;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;padding:0.7rem 0;margin-top:1rem;background:var(--bg-card,#151826);border-top:1px solid var(--border-card,#26293a);}
+    .ap-app{border:1px solid var(--border-card,#26293a);border-radius:12px;padding:0.8rem 0.9rem;margin-bottom:0.7rem;}
+    .ap-app-head{display:flex;flex-wrap:wrap;gap:0.4rem 0.7rem;align-items:center;}
+    .ap-app-head strong{font-size:0.98rem;}
+    .ap-badge{font-size:0.72rem;font-weight:700;padding:0.15rem 0.5rem;border-radius:999px;}
+    .ap-badge.PENDING{background:rgba(88,101,242,.18);color:#8ea1ff;}
+    .ap-badge.APPROVED{background:rgba(87,242,135,.15);color:var(--accent-green,#3ddc97);}
+    .ap-badge.DENIED{background:rgba(237,66,69,.15);color:var(--accent-red,#ff5c6c);}
+    .ap-ans{margin:0.6rem 0 0;}
+    .ap-ans dt{font-weight:600;font-size:0.82rem;color:var(--text-muted,#9aa0b4);margin-top:0.45rem;}
+    .ap-ans dd{margin:0.1rem 0 0;white-space:pre-wrap;word-wrap:break-word;}
+    .ap-filters{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.8rem;}
+    .ap-filters select{width:auto;}
+    .gd-ac{position:fixed;z-index:60;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-strong,#353950);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:4px;max-height:260px;overflow:auto;}
+    .gd-ac-item{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.55rem;border-radius:6px;cursor:pointer;font-size:0.86rem;}
+    .gd-ac-item.on,.gd-ac-item:hover{background:var(--accent-blue,#4f7cff);color:#fff;}
+    .gd-ac-item img{width:22px;height:22px;object-fit:contain;}
+    .gd-ac-item small{margin-left:auto;opacity:.7;font-size:0.74rem;}
+    @media (max-width:600px){
+      .site-main{padding-left:12px!important;padding-right:12px!important;}
+      input,textarea,select{font-size:16px!important;}
+      .ap-wrap .card{padding:0.85rem;}
+    }
+  </style>
+</head>
+<body class="site">
+  <%- include('partials/site-bar') %>
+
+  <main class="site-main" style="max-width:1200px; margin:0 auto; padding:1.2rem 16px;">
+    <div class="page-heading">
+      <div>
+        <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
+        <h1 style="font-size:1.45rem; margin-top:0.2rem;">🗂️ Applications</h1>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Post a panel with an <strong>Apply</strong> button in any channel. Members who meet your requirements answer your questions; applications land in a review channel with Approve / Deny buttons.</p>
+      </div>
+    </div>
+
+    <div class="ap-tabs" role="tablist">
+      <button type="button" id="tabForms" class="on" onclick="showTab('forms')">📝 Forms</button>
+      <button type="button" id="tabApps" onclick="showTab('apps')">📥 Applications <span id="pendingBadge"></span></button>
+    </div>
+
+    <!-- FORMS -->
+    <div id="formsTab" class="ap-wrap">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+          <h3 style="margin:0;">Forms</h3>
+          <button class="btn small" type="button" onclick="newForm()">+ New form</button>
+        </div>
+        <div class="ap-forms" id="formList" style="margin-top:0.5rem;"></div>
+      </div>
+
+      <div class="card" id="editor">
+        <h3 style="margin:0;" id="editorTitle">New form</h3>
+
+        <div class="ap-sec" style="border-top:0; margin-top:0.4rem; padding-top:0;">
+          <div class="ap-grid">
+            <label class="field"><span>Form name <span class="muted" style="font-weight:400;">(shown to reviewers)</span></span><input id="fName" maxlength="80" placeholder="e.g. Guide Editor"></label>
+            <label class="field" style="flex-direction:row; align-items:center; gap:0.5rem; margin-top:1.4rem;"><input type="checkbox" id="fOpen" style="width:auto;"> <span>Accepting applications</span></label>
+          </div>
+        </div>
+
+        <div class="ap-sec">
+          <h4>📣 Panel</h4>
+          <p class="muted">The message with the Apply button. Put a role ping in the message text if you want to ping people when it's posted.</p>
+          <label class="field"><span>Message text above the embed <span class="muted" style="font-weight:400;">(optional — role pings here will ping)</span></span><textarea id="pContent" class="ac-on" rows="2" maxlength="2000" placeholder="e.g. @Members we're looking for guide editors!"></textarea></label>
+          <label class="field"><span>Embed title</span><input id="pTitle" class="ac-on" maxlength="256"></label>
+          <label class="field"><span>Embed text <span class="muted" style="font-weight:400;">(markdown)</span></span><textarea id="pDesc" class="ac-on" rows="5" maxlength="4000"></textarea></label>
+          <div class="ap-grid">
+            <label class="field"><span>Colour</span><input type="color" id="pColor" style="height:38px;"></label>
+            <label class="field"><span>Big image URL</span><input id="pImage" placeholder="https://…"></label>
+            <label class="field"><span>Thumbnail URL</span><input id="pThumb" placeholder="https://…"></label>
+          </div>
+          <label class="field"><span>Footer</span><input id="pFooter" maxlength="2048"></label>
+          <div class="ap-grid">
+            <label class="field"><span>Button label</span><input id="bLabel" maxlength="80"></label>
+            <label class="field"><span>Button emoji</span><input id="bEmoji" maxlength="64" placeholder="📝 or a server emoji"></label>
+            <label class="field"><span>Button colour</span><select id="bStyle"><option value="Primary">Blurple</option><option value="Success">Green</option><option value="Secondary">Grey</option><option value="Danger">Red</option></select></label>
+          </div>
+          <div class="field"><span>Preview</span><div class="ap-preview" id="preview"></div></div>
+          <div class="field-row" style="align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <select id="publishChannel" style="max-width:260px;">
+              <option value="">— pick a channel for the panel —</option>
+              <% channels.forEach((c) => { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %>
+            </select>
+            <button class="btn secondary small" type="button" onclick="publish()">📤 Post / move panel</button>
+            <span class="muted" id="panelWhere" style="font-size:0.8rem;"></span>
+          </div>
+        </div>
+
+        <div class="ap-sec">
+          <h4>❓ Questions</h4>
+          <p class="muted">Up to <%= maxQuestions %> (Discord's limit for a pop-up form). Labels are at most 45 characters.</p>
+          <div id="questions"></div>
+          <button class="btn secondary small" type="button" id="addQ" onclick="addQuestion()">+ Add question</button>
+        </div>
+
+        <div class="ap-sec">
+          <h4>🛡️ Who can apply</h4>
+          <p class="muted">Keeps out brand-new and spam accounts. 0 = no limit. Members who don't qualify see exactly what they're missing.</p>
+          <div class="ap-grid">
+            <label class="field"><span>Minimum level</span><input type="number" id="rLevel" min="0" max="1000"></label>
+            <label class="field"><span>Account age (days)</span><input type="number" id="rAge" min="0" max="3650"></label>
+            <label class="field"><span>Days in the server</span><input type="number" id="rDays" min="0" max="3650"></label>
+            <label class="field"><span>Must have role</span><select id="rRole"><option value="">— none —</option><% roles.forEach((r) => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
+          </div>
+          <div class="ap-grid">
+            <label class="field"><span>Re-apply wait after a denial (hours)</span><input type="number" id="lCooldown" min="0" max="8760"></label>
+            <label class="field" style="flex-direction:row; align-items:center; gap:0.5rem; margin-top:1.4rem;"><input type="checkbox" id="lBlockRole" style="width:auto;"> <span>Can't apply if they already have the approve role</span></label>
+          </div>
+          <p class="muted" style="font-size:0.78rem; margin:0.2rem 0 0;">Always on: one pending application per person per form.</p>
+        </div>
+
+        <div class="ap-sec">
+          <h4>📥 Review</h4>
+          <p class="muted">Where applications go and who decides. People with Manage Server can always review.</p>
+          <div class="ap-grid">
+            <label class="field"><span>Review channel</span><select id="vChannel"><option value="">— pick a channel —</option><% channels.forEach((c) => { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></label>
+            <label class="field"><span>Give this role on approval <span class="muted" style="font-weight:400;">(optional)</span></span><select id="vApproveRole"><option value="">— don't give a role —</option><% roles.forEach((r) => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
+          </div>
+          <div class="field"><span>Ping on new applications <span class="muted" style="font-weight:400;">(optional — these roles can also review)</span></span><div class="ap-roles" id="vPing"></div></div>
+          <div class="field"><span>Reviewer roles <span class="muted" style="font-weight:400;">(can approve / deny)</span></span><div class="ap-roles" id="vReviewers"></div></div>
+          <label class="field" style="flex-direction:row; align-items:center; gap:0.5rem;"><input type="checkbox" id="vDm" style="width:auto;"> <span>DM the applicant when they're approved or denied</span></label>
+          <label class="field"><span>Approved message <span class="muted" style="font-weight:400;">({form} {server} {user} {reason})</span></span><textarea id="vOk" class="ac-on" rows="2" maxlength="1500"></textarea></label>
+          <label class="field"><span>Denied message</span><textarea id="vNo" class="ac-on" rows="2" maxlength="1500"></textarea></label>
+        </div>
+
+        <div class="ap-actions">
+          <button class="btn" type="button" onclick="saveForm()" id="saveBtn">💾 Save form</button>
+          <button class="btn danger small" type="button" id="deleteBtn" onclick="deleteForm()" style="display:none;">Delete</button>
+          <span class="muted" id="status" style="margin-left:auto; font-size:0.84rem;"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPLICATIONS -->
+    <div id="appsTab" class="card" style="display:none;">
+      <div class="ap-filters">
+        <select id="fltForm" onchange="renderApps()"><option value="">All forms</option></select>
+        <select id="fltStatus" onchange="renderApps()"><option value="PENDING">Pending</option><option value="">All</option><option value="APPROVED">Approved</option><option value="DENIED">Denied</option></select>
+        <button class="btn secondary small" type="button" onclick="refresh()">↻ Refresh</button>
+      </div>
+      <div id="appList"></div>
+    </div>
+  </main>
+
+  <script id="formsData" type="application/json"><%- JSON.stringify(forms).replace(/</g, '\\u003c') %></script>
+  <script id="appsData" type="application/json"><%- JSON.stringify(applications).replace(/</g, '\\u003c') %></script>
+  <script id="rolesData" type="application/json"><%- JSON.stringify(roles).replace(/</g, '\\u003c') %></script>
+  <script id="channelsData" type="application/json"><%- JSON.stringify(channels).replace(/</g, '\\u003c') %></script>
+  <script id="editorData" type="application/json"><%- JSON.stringify(editorData).replace(/</g, '\\u003c') %></script>
+  <script src="/js/visual-md.js"></script>
+  <script src="/js/autofill.js"></script>
+  <script>
+    const GUILD = '<%= guild.id %>';
+    const MAX_Q = <%= maxQuestions %>;
+    const $ = (id) => document.getElementById(id);
+    const read = (id) => JSON.parse($(id).textContent);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let FORMS = read('formsData'), APPS = read('appsData');
+    const ROLES = read('rolesData'), CHANNELS = read('channelsData'), EDITOR = read('editorData');
+    VisualMD.setData(EDITOR); GuideAutofill.setData(EDITOR);
+    fetch(`/api/guilds/${GUILD}/mentionable`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { GuideAutofill.setData({ users: d.users || [] }); VisualMD.setData({ users: d.users || [] }); } }).catch(() => {});
+    const call = async (path, body) => {
+      const r = await fetch(`/dashboard/${GUILD}/applications${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+      return r.json().catch(() => ({ ok: false, error: 'Request failed.' }));
+    };
+    const flash = (msg) => { $('status').textContent = msg; };
+    const md = (s) => VisualMD.toHtml(s || '');
+
+    // ---- tabs
+    function showTab(t) {
+      $('formsTab').style.display = t === 'forms' ? '' : 'none';
+      $('appsTab').style.display = t === 'apps' ? '' : 'none';
+      $('tabForms').classList.toggle('on', t === 'forms'); $('tabApps').classList.toggle('on', t === 'apps');
+      if (t === 'apps') renderApps();
+    }
+
+    // ---- editing state
+    const DEFAULT = () => ({
+      formId: null, name: '', open: true,
+      panel: { channelId: null, messageId: null, content: '', title: '📝 Apply', description: 'Press the button below to apply.', color: '#5865F2', imageUrl: '', thumbnailUrl: '', footer: '' },
+      button: { label: 'Apply', emoji: '📝', style: 'Primary' },
+      questions: [{ label: 'Why do you want to apply?', placeholder: '', style: 'paragraph', required: true, minLength: 0, maxLength: 1000 }],
+      requirements: { minLevel: 5, minAccountAgeDays: 30, minDaysInServer: 0, requiredRoleId: null },
+      limits: { reapplyCooldownHours: 72, blockIfHasRole: true },
+      review: { channelId: null, pingRoleIds: [], reviewerRoleIds: [], approveRoleId: null, dmApplicant: true,
+        approveMessage: '🎉 Your application for **{form}** in **{server}** was approved!', denyMessage: 'Your application for **{form}** in **{server}** was not accepted this time.' }
+    });
+    let cur = DEFAULT();
+    let dirty = false;
+    window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+    function roleChips(boxId, list) {
+      $(boxId).innerHTML = ROLES.map((r) => `<span class="chip ${list.includes(r.id) ? 'on' : ''}" data-id="${r.id}">@${esc(r.name)}</span>`).join('') || '<span class="muted">No roles.</span>';
+      $(boxId).onclick = (e) => { const c = e.target.closest('.chip'); if (!c) return; c.classList.toggle('on'); dirty = true; };
+    }
+    const chipsOf = (boxId) => [...$(boxId).querySelectorAll('.chip.on')].map((c) => c.dataset.id);
+
+    function load(f) {
+      cur = JSON.parse(JSON.stringify(f));
+      $('editorTitle').textContent = f.formId ? 'Editing: ' + f.name : 'New form';
+      $('fName').value = f.name; $('fOpen').checked = f.open;
+      $('pContent').value = f.panel.content || ''; $('pTitle').value = f.panel.title || ''; $('pDesc').value = f.panel.description || '';
+      $('pColor').value = /^#[0-9a-f]{6}$/i.test(f.panel.color) ? f.panel.color : '#5865f2'; $('pImage').value = f.panel.imageUrl || ''; $('pThumb').value = f.panel.thumbnailUrl || ''; $('pFooter').value = f.panel.footer || '';
+      $('bLabel').value = f.button.label; $('bEmoji').value = f.button.emoji || ''; $('bStyle').value = f.button.style || 'Primary';
+      $('rLevel').value = f.requirements.minLevel || 0; $('rAge').value = f.requirements.minAccountAgeDays || 0; $('rDays').value = f.requirements.minDaysInServer || 0; $('rRole').value = f.requirements.requiredRoleId || '';
+      $('lCooldown').value = f.limits.reapplyCooldownHours ?? 72; $('lBlockRole').checked = f.limits.blockIfHasRole !== false;
+      $('vChannel').value = f.review.channelId || ''; $('vApproveRole').value = f.review.approveRoleId || '';
+      roleChips('vPing', f.review.pingRoleIds || []); roleChips('vReviewers', f.review.reviewerRoleIds || []);
+      $('vDm').checked = f.review.dmApplicant !== false; $('vOk').value = f.review.approveMessage || ''; $('vNo').value = f.review.denyMessage || '';
+      $('publishChannel').value = f.panel.channelId || '';
+      $('panelWhere').innerHTML = f.panel.messageId ? `Posted in <a href="https://discord.com/channels/${GUILD}/${f.panel.channelId}/${f.panel.messageId}" target="_blank" rel="noopener">#${esc((CHANNELS.find((c) => c.id === f.panel.channelId) || {}).name || 'channel')}</a> — saving updates it.` : f.formId ? 'Not posted yet.' : 'Save the form first, then post it.';
+      $('deleteBtn').style.display = f.formId ? '' : 'none';
+      renderQuestions(); preview(); renderForms(); flash(''); dirty = false;
+    }
+    function collect() {
+      return {
+        name: $('fName').value, open: $('fOpen').checked,
+        panel: { content: $('pContent').value, title: $('pTitle').value, description: $('pDesc').value, color: $('pColor').value, imageUrl: $('pImage').value, thumbnailUrl: $('pThumb').value, footer: $('pFooter').value },
+        button: { label: $('bLabel').value, emoji: $('bEmoji').value, style: $('bStyle').value },
+        questions: cur.questions,
+        requirements: { minLevel: $('rLevel').value, minAccountAgeDays: $('rAge').value, minDaysInServer: $('rDays').value, requiredRoleId: $('rRole').value || null },
+        limits: { reapplyCooldownHours: $('lCooldown').value, blockIfHasRole: $('lBlockRole').checked },
+        review: { channelId: $('vChannel').value || null, approveRoleId: $('vApproveRole').value || null, pingRoleIds: chipsOf('vPing'), reviewerRoleIds: chipsOf('vReviewers'), dmApplicant: $('vDm').checked, approveMessage: $('vOk').value, denyMessage: $('vNo').value }
+      };
+    }
+    document.getElementById('editor').addEventListener('input', () => { dirty = true; preview(); });
+    document.getElementById('editor').addEventListener('change', () => { dirty = true; preview(); });
+
+    // ---- questions
+    function renderQuestions() {
+      $('questions').innerHTML = cur.questions.map((q, i) => `
+        <div class="ap-q">
+          <div class="ap-q-top">
+            <strong class="muted" style="font-size:0.8rem;">${i + 1}.</strong>
+            <input maxlength="45" placeholder="Question (max 45 characters)" value="${esc(q.label)}" oninput="cur.questions[${i}].label=this.value">
+            <button class="btn small secondary" type="button" onclick="moveQ(${i},-1)" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button class="btn small secondary" type="button" onclick="moveQ(${i},1)" ${i === cur.questions.length - 1 ? 'disabled' : ''}>▼</button>
+            <button class="btn small danger" type="button" onclick="removeQ(${i})" ${cur.questions.length === 1 ? 'disabled' : ''}>✕</button>
+          </div>
+          <div class="ap-grid" style="margin-top:0.4rem;">
+            <label class="field"><span>Hint text</span><input maxlength="100" value="${esc(q.placeholder)}" oninput="cur.questions[${i}].placeholder=this.value" placeholder="Shown greyed out in the box"></label>
+            <label class="field"><span>Answer box</span><select onchange="cur.questions[${i}].style=this.value"><option value="paragraph" ${q.style !== 'short' ? 'selected' : ''}>Long (paragraph)</option><option value="short" ${q.style === 'short' ? 'selected' : ''}>Short (one line)</option></select></label>
+            <label class="field"><span>Max length</span><input type="number" min="1" max="1000" value="${q.maxLength || 1000}" oninput="cur.questions[${i}].maxLength=Number(this.value)"></label>
+            <label class="field" style="flex-direction:row; align-items:center; gap:0.5rem; margin-top:1.4rem;"><input type="checkbox" style="width:auto;" ${q.required !== false ? 'checked' : ''} onchange="cur.questions[${i}].required=this.checked"> <span>Required</span></label>
+          </div>
+        </div>`).join('');
+      $('addQ').style.display = cur.questions.length >= MAX_Q ? 'none' : '';
+    }
+    function addQuestion() { if (cur.questions.length >= MAX_Q) return; cur.questions.push({ label: '', placeholder: '', style: 'paragraph', required: true, minLength: 0, maxLength: 1000 }); renderQuestions(); dirty = true; }
+    function removeQ(i) { cur.questions.splice(i, 1); renderQuestions(); dirty = true; }
+    function moveQ(i, d) { const j = i + d; if (j < 0 || j >= cur.questions.length) return; [cur.questions[i], cur.questions[j]] = [cur.questions[j], cur.questions[i]]; renderQuestions(); dirty = true; }
+
+    // ---- panel preview
+    const BTN = { Primary: '#5865f2', Success: '#248046', Secondary: '#4e5058', Danger: '#da373c' };
+    function preview() {
+      const c = collect();
+      const img = (u, cls) => (/^https?:\/\/\S+$/.test(u) ? `<img class="${cls}" src="${esc(u)}" alt="">` : '');
+      const emoji = c.button.emoji ? VisualMD.inlineToHtml(c.button.emoji) + ' ' : '';
+      $('preview').innerHTML = `${c.panel.content ? `<div>${md(c.panel.content)}</div>` : ''}
+        <div class="p-embed" style="border-left:4px solid ${esc(c.panel.color)};">${img(c.panel.thumbnailUrl, 'p-thumb')}
+          ${c.panel.title ? `<div class="p-title">${VisualMD.inlineToHtml(c.panel.title)}</div>` : ''}${c.panel.description ? `<div class="p-desc">${md(c.panel.description)}</div>` : ''}
+          ${img(c.panel.imageUrl, 'p-image')}${c.panel.footer ? `<div class="p-foot">${esc(c.panel.footer)}</div>` : ''}</div>
+        <span class="ap-btn" style="background:${BTN[c.button.style] || BTN.Primary}; ${c.open ? '' : 'opacity:.5;'}">${emoji}${esc(c.button.label || 'Apply')}${c.open ? '' : ' (closed)'}</span>`;
+    }
+
+    // ---- forms list
+    function renderForms() {
+      $('formList').innerHTML = FORMS.map((f) => {
+        const pending = APPS.filter((a) => a.formId === f.formId && a.status === 'PENDING').length;
+        return `<div class="row ${cur.formId === f.formId ? 'on' : ''}" onclick="pick('${f.formId}')">
+          <span class="dot" style="background:${f.open ? 'var(--accent-green,#3ddc97)' : 'var(--text-muted,#9aa0b4)'}" title="${f.open ? 'Open' : 'Closed'}"></span>
+          <div style="flex:1; min-width:0;"><div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(f.name)}</div>
+          <div class="muted" style="font-size:0.74rem;">${f.panel.messageId ? 'Posted' : 'Not posted'} · ${pending} pending</div></div></div>`;
+      }).join('') || '<p class="muted" style="font-size:0.85rem;">No forms yet — press <strong>+ New form</strong>.</p>';
+      const p = APPS.filter((a) => a.status === 'PENDING').length;
+      $('pendingBadge').textContent = p ? `(${p})` : '';
+      $('fltForm').innerHTML = '<option value="">All forms</option>' + FORMS.map((f) => `<option value="${f.formId}">${esc(f.name)}</option>`).join('');
+    }
+    const leaveOk = () => !dirty || confirm('You have unsaved changes — discard them?');
+    function pick(id) { const f = FORMS.find((x) => x.formId === id); if (f && leaveOk()) load(f); }
+    function newForm() { if (leaveOk()) load(DEFAULT()); }
+
+    async function saveForm() {
+      flash('Saving…');
+      const res = await call(cur.formId ? `/forms/${cur.formId}` : '/forms', collect());
+      if (!res.ok) return flash('❌ ' + (res.error || 'Failed.'));
+      const i = FORMS.findIndex((f) => f.formId === res.form.formId);
+      if (i >= 0) FORMS[i] = res.form; else FORMS.push(res.form);
+      load(res.form); flash(res.form.panel.messageId ? '✅ Saved — the posted panel is updated.' : '✅ Saved. Pick a channel and press “Post panel”.');
+    }
+    async function deleteForm() {
+      if (!cur.formId || !confirm(`Delete “${cur.name}”? Its panel message is removed too. Past applications are kept.`)) return;
+      const res = await call(`/forms/${cur.formId}/delete`);
+      if (!res.ok) return flash('❌ ' + (res.error || 'Failed.'));
+      FORMS = FORMS.filter((f) => f.formId !== cur.formId); dirty = false; load(DEFAULT()); flash('🗑 Deleted.');
+    }
+    async function publish() {
+      if (!cur.formId) return flash('Save the form first.');
+      const channelId = $('publishChannel').value; if (!channelId) return flash('Pick a channel for the panel.');
+      if (dirty) { await saveForm(); if (dirty) return; }
+      flash('Posting…');
+      const res = await call(`/forms/${cur.formId}/publish`, { channelId });
+      if (!res.ok) return flash('❌ ' + (res.error || 'Failed.'));
+      const i = FORMS.findIndex((f) => f.formId === res.form.formId); FORMS[i] = res.form; load(res.form); flash('✅ Panel posted.');
+    }
+
+    // ---- applications
+    function renderApps() {
+      const form = $('fltForm').value, status = $('fltStatus').value;
+      const list = APPS.filter((a) => (!form || a.formId === form) && (!status || a.status === status));
+      const when = (d) => (d ? new Date(d).toLocaleString() : '');
+      $('appList').innerHTML = list.map((a) => `
+        <div class="ap-app">
+          <div class="ap-app-head">
+            <strong>${esc(a.userTag || a.userId)}</strong><span class="ap-badge ${a.status}">${a.status === 'PENDING' ? 'Pending' : a.status === 'APPROVED' ? 'Approved' : 'Denied'}</span>
+            <span class="muted" style="font-size:0.8rem;">${esc(a.formName)} · ${when(a.createdAt)}</span>
+            ${a.reviewUrl ? `<a class="muted" style="font-size:0.8rem; margin-left:auto;" href="${a.reviewUrl}" target="_blank" rel="noopener">Open in Discord ↗</a>` : ''}
+          </div>
+          <dl class="ap-ans">${a.answers.map((x) => `<dt>${esc(x.question)}</dt><dd>${esc(x.answer || '—')}</dd>`).join('')}</dl>
+          ${a.status === 'PENDING'
+            ? `<div style="display:flex; gap:0.4rem; margin-top:0.6rem;"><button class="btn small" type="button" onclick="decide('${a.id}',true)">✅ Approve</button><button class="btn small danger" type="button" onclick="decide('${a.id}',false)">❌ Deny</button></div>`
+            : `<p class="muted" style="font-size:0.8rem; margin:0.5rem 0 0;">${a.status === 'APPROVED' ? 'Approved' : 'Denied'} by ${esc(a.decidedByTag || 'staff')} · ${when(a.decidedAt)}${a.reason ? ' — ' + esc(a.reason) : ''}</p>`}
+        </div>`).join('') || '<p class="muted">Nothing here.</p>';
+    }
+    async function decide(id, approve) {
+      const reason = prompt(`${approve ? 'Approve' : 'Deny'} — optional note for the applicant:`, '');
+      if (reason === null) return;
+      const res = await call(`/${id}/decide`, { approve, reason });
+      if (!res.ok) return alert(res.error || 'Failed.');
+      const i = APPS.findIndex((a) => a.id === id); if (i >= 0) APPS[i] = res.application;
+      renderApps(); renderForms();
+      if (res.warnings?.length) alert('⚠️ ' + res.warnings.join(' ').replace(/<@&\d+>/g, 'the role'));
+    }
+    async function refresh() {
+      const r = await fetch(`/dashboard/${GUILD}/applications/data`).then((x) => x.json()).catch(() => null);
+      if (r?.ok) { FORMS = r.forms; APPS = r.applications; renderForms(); renderApps(); }
+    }
+
+    load(FORMS[0] || DEFAULT());
+    if (new URLSearchParams(location.search).get('tab') === 'apps') showTab('apps');
+  </script>
+</body>
+</html>
