@@ -445,9 +445,21 @@
     }).catch(() => {});
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    // Never leaves the page stuck on "Saving…": network errors and a 2-minute timeout come back as errors,
+    // and a slow save (a big guide while Discord is rate-limiting) says it's still working.
     const post = async (path, body) => {
-      const r = await fetch(`/dashboard/${GUILD}/guides/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      return { status: r.status, ...(await r.json().catch(() => ({}))) };
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 120000);
+      const status = $('editorStatus');
+      const slow = setTimeout(() => { if (status && /…$/.test(status.textContent)) status.textContent += ' (still working — Discord is slow to update big guides)'; }, 10000);
+      try {
+        const r = await fetch(`/dashboard/${GUILD}/guides/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal });
+        return { status: r.status, ...(await r.json().catch(() => ({ error: `The server answered ${r.status}.` }))) };
+      } catch (err) {
+        return { ok: false, error: err.name === 'AbortError' ? 'Timed out after 2 minutes — the save may still finish. Reload in a minute to check.' : "Couldn't reach the server — check your connection and try again." };
+      } finally {
+        clearTimeout(timer); clearTimeout(slow);
+      }
     };
     const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
