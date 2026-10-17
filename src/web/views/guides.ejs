@@ -95,6 +95,12 @@
     .gd-inc:hover{box-shadow:0 0 0 1px #5865f2;}
     .gd-inc-label{font-size:0.72rem;color:#949ba4;margin:0.3rem 0 -0.2rem;}
     .gd-inc-empty{font-size:0.8rem;color:#949ba4;border:1px dashed #4e5058;border-radius:6px;padding:0.5rem;margin:0.3rem 0;}
+.gd-ac{position:fixed;z-index:60;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-strong,#353950);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:4px;max-height:260px;overflow:auto;}
+    .gd-ac-item{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.55rem;border-radius:6px;cursor:pointer;font-size:0.86rem;color:var(--text-main,#e6e8ef);}
+    .gd-ac-item.on,.gd-ac-item:hover{background:var(--accent-blue,#4f7cff);color:#fff;}
+    .gd-ac-item img{width:22px;height:22px;object-fit:contain;}
+    .gd-ac-item small{margin-left:auto;opacity:.7;font-size:0.74rem;}
+    @media (max-width:600px){ .gd-ac-item{padding:0.6rem;font-size:1rem;} }
     .gd-count{font-size:0.78rem;color:var(--text-muted,#9aa0b4);}
     .gd-count.over{color:var(--accent-red,#ff5c6c);font-weight:700;}
     .gd-msg{border-top:2px dashed #4e5058;margin-top:0.9rem;padding-top:0.6rem;}
@@ -265,14 +271,14 @@
             <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.5rem;" id="vAddRow">
               <button class="btn secondary small" type="button" onclick="addEmbed()" id="vAddEmbed">+ Add embed</button>
               <button class="btn secondary small" type="button" onclick="addMsg()" title="Another message in the same post — other guides can link straight to it">+ Add message</button>
-              <span class="muted" style="font-size:0.78rem; align-self:center;">Tip: click any text to edit it. Select text, then use the toolbar. Typing <code>:Name:</code> turns into that server emoji.</span>
+              <span class="muted" style="font-size:0.78rem; align-self:center;">Tip: click any text to edit it. Select text, then use the toolbar. Type <code>:</code> for server emojis, <code>@</code> for members &amp; roles, <code>#</code> for channels.</span>
             </div>
           </div>
 
           <!-- MARKDOWN editor: the raw fields -->
           <div id="codeWrap" style="display:none;">
             <details id="contentWrap"><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Message text above the embeds (optional)</summary>
-              <textarea id="content" maxlength="2000" rows="2" placeholder="Shown above the embeds. Mentions here actually ping." oninput="state.content=this.value; dirty(); syncPreview()" style="width:100%; margin-top:0.4rem;"></textarea>
+              <textarea id="content" class="ac-on" maxlength="2000" rows="2" placeholder="Shown above the embeds. Mentions here actually ping." oninput="state.content=this.value; dirty(); syncPreview()" style="width:100%; margin-top:0.4rem;"></textarea>
             </details>
             <div style="display:flex; justify-content:space-between; align-items:center; margin:0.6rem 0 0.2rem;" id="codeEmbedsHead">
               <strong style="font-size:0.9rem;">Embeds</strong>
@@ -373,6 +379,7 @@
   </script>
   <script src="/js/embed-json.js"></script>
   <script src="/js/visual-md.js"></script>
+  <script src="/js/autofill.js"></script>
   <script>
     const GUILD = '<%= guild.id %>';
     const E = window.EmbedJson;
@@ -383,6 +390,14 @@
     const EDITOR_DATA = readJson('editorData');
     let INDEX = readJson('indexData');
     V.setData(EDITOR_DATA);
+    GuideAutofill.setData(EDITOR_DATA);
+    // Members for @-mentions (the same list the Embed Builder's autofill uses).
+    fetch(`/api/guilds/${GUILD}/mentionable`).then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!d) return;
+      const users = d.users || [];
+      GuideAutofill.setData({ users, roles: d.roles?.length ? d.roles : EDITOR_DATA.roles, channels: d.channels?.length ? d.channels : EDITOR_DATA.channels });
+      V.setData({ users });
+    }).catch(() => {});
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const post = async (path, body) => {
@@ -635,8 +650,8 @@
       return `
         <details class="gd-embed" ${i === 0 && mi === 0 ? 'open' : ''}>
           <summary>Embed ${i + 1}${e.title ? ' — ' + esc(e.title).slice(0, 40) : ''}</summary>
-          <label class="field"><span>Title</span><input class="md-in" value="${esc(e.title)}" oninput="upd(${mi},${i},'title',this.value)" maxlength="256"></label>
-          <label class="field"><span>Description <span class="muted" style="font-weight:400;">(markdown, 4096)</span></span><textarea class="md-in" rows="8" oninput="upd(${mi},${i},'description',this.value)" maxlength="4096">${esc(e.description)}</textarea></label>
+          <label class="field"><span>Title</span><input class="md-in ac-on" value="${esc(e.title)}" oninput="upd(${mi},${i},'title',this.value)" maxlength="256"></label>
+          <label class="field"><span>Description <span class="muted" style="font-weight:400;">(markdown, 4096)</span></span><textarea class="md-in ac-on" rows="8" oninput="upd(${mi},${i},'description',this.value)" maxlength="4096">${esc(e.description)}</textarea></label>
           <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
             <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${e.color || DEFAULT_COLOR}" oninput="upd(${mi},${i},'color',this.value)" style="width:100%; height:36px;"></label>
             <label class="field" style="flex:3; min-width:200px;"><span>Title link</span><input value="${esc(e.url)}" oninput="upd(${mi},${i},'url',this.value)" placeholder="https://…"></label>
@@ -671,7 +686,7 @@
             <button class="gd-tbtn" type="button" onclick="moveMsg(${mi},-1)" ${mi === 1 ? 'disabled' : ''}>▲</button>
             <button class="gd-tbtn" type="button" onclick="moveMsg(${mi},1)" ${mi === state.extra.length ? 'disabled' : ''}>▼</button>
             <button class="gd-tbtn" type="button" onclick="if(confirm('Remove message ${mi + 1} from this post?')) removeMsg(${mi})">🗑</button></div>
-          <label class="field"><span>Message text above the embeds <span class="muted" style="font-weight:400;">(optional)</span></span><textarea class="md-in" rows="2" maxlength="2000" oninput="msgAt(${mi}).content=this.value; dirty(); syncPreview()">${esc(m.content)}</textarea></label>
+          <label class="field"><span>Message text above the embeds <span class="muted" style="font-weight:400;">(optional)</span></span><textarea class="md-in ac-on" rows="2" maxlength="2000" oninput="msgAt(${mi}).content=this.value; dirty(); syncPreview()">${esc(m.content)}</textarea></label>
           ${m.embeds.map((e, i) => codeEmbedHtml(mi, e, i, m.embeds.length)).join('')}
           ${m.embeds.length < 10 ? `<button class="btn secondary small" type="button" onclick="addEmbed(${mi})">+ Add embed</button>` : ''}
         </div>`;
@@ -679,8 +694,8 @@
     }
     function fieldRow(mi, ei, fi, f) {
       return `<div class="gd-field">
-        <input class="md-in" placeholder="Name" value="${esc(f.name)}" oninput="updField(${mi},${ei},${fi},'name',this.value)" maxlength="256" style="flex:1;">
-        <textarea class="md-in" placeholder="Value" rows="2" oninput="updField(${mi},${ei},${fi},'value',this.value)" maxlength="1024" style="flex:2;">${esc(f.value)}</textarea>
+        <input class="md-in ac-on" placeholder="Name" value="${esc(f.name)}" oninput="updField(${mi},${ei},${fi},'name',this.value)" maxlength="256" style="flex:1;">
+        <textarea class="md-in ac-on" placeholder="Value" rows="2" oninput="updField(${mi},${ei},${fi},'value',this.value)" maxlength="1024" style="flex:2;">${esc(f.value)}</textarea>
         <label class="chip" title="Inline"><input type="checkbox" ${f.inline ? 'checked' : ''} onchange="updField(${mi},${ei},${fi},'inline',this.checked)"> inline</label>
         <button class="btn danger small" type="button" onclick="removeField(${mi},${ei},${fi})">✕</button>
       </div>`;
@@ -688,8 +703,8 @@
     function renderCodeIndex() {
       const x = indexState;
       $('codeIndex').innerHTML = `
-        <label class="field"><span>Box title</span><input class="md-in" value="${esc(x.title)}" placeholder="${esc(LEGEND_TITLE)}" oninput="indexState.title=this.value; dirty(); syncPreview()" maxlength="256"></label>
-        <label class="field"><span>Intro text above the guide list <span class="muted" style="font-weight:400;">(markdown)</span></span><textarea class="md-in" rows="6" oninput="indexState.intro=this.value; dirty(); syncPreview()" maxlength="3000">${esc(x.intro)}</textarea></label>
+        <label class="field"><span>Box title</span><input class="md-in ac-on" value="${esc(x.title)}" placeholder="${esc(LEGEND_TITLE)}" oninput="indexState.title=this.value; dirty(); syncPreview()" maxlength="256"></label>
+        <label class="field"><span>Intro text above the guide list <span class="muted" style="font-weight:400;">(markdown)</span></span><textarea class="md-in ac-on" rows="6" oninput="indexState.intro=this.value; dirty(); syncPreview()" maxlength="3000">${esc(x.intro)}</textarea></label>
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
           <label class="field" style="flex:1; min-width:120px;"><span>Color</span><input type="color" value="${x.color || DEFAULT_COLOR}" oninput="indexState.color=this.value; dirty(); syncPreview()" style="width:100%; height:36px;"></label>
           <label class="field" style="flex:3; min-width:200px;"><span>Footer <span class="muted" style="font-weight:400;">({count} = number of guides)</span></span><input value="${esc(x.footer)}" placeholder="${esc(indexCount())}" oninput="indexState.footer=this.value; dirty(); syncPreview()" maxlength="200"></label>
