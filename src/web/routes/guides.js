@@ -1,6 +1,7 @@
 const express = require('express');
 const { PermissionFlagsBits, ChannelType } = require('discord.js');
 const guides = require('../../bot/cogs/modules/guides');
+const approvals = require('../../bot/cogs/modules/guideApprovals');
 const GuideModel = require('../../database/models/Guide');
 const GuildConfig = require('../../database/models/GuildConfig');
 const { requireAuth, requireGuildAccess, requirePage, guidesOnly } = require('../utils/authMiddleware');
@@ -10,6 +11,12 @@ const router = express.Router();
 
 const isAdmin = (req) => req.access?.level === 'admin';
 const adminOnly = (req, res, next) => (isAdmin(req) ? next() : res.status(403).json({ ok: false, error: 'Only admins can change guide settings or import.' }));
+
+const byOf = (req) => ({ id: req.session.user.id, tag: req.session.user.global_name || req.session.user.username || req.session.user.name || null });
+const changeView = (c) => ({
+  id: String(c._id), type: c.type, slug: c.slug, title: c.title, payload: c.payload, requestedBy: c.requestedBy, requestedByTag: c.requestedByTag,
+  status: c.status, decidedByTag: c.decidedByTag, decidedAt: c.decidedAt, note: c.note, error: c.error, createdAt: c.createdAt
+});
 
 async function settingsOf(guild) {
   return guides.guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
@@ -40,12 +47,14 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
       channels: guild.channels.cache.filter((c) => c.name && c.type !== ChannelType.GuildCategory && !c.isThread?.()).map((c) => ({ id: c.id, name: c.name })),
       roles
     };
-    const list = await guides.listGuides(guild.id);
+    const [list, changes] = await Promise.all([guides.listGuides(guild.id), approvals.listChanges(guild.id)]);
 
     res.render('guides', {
       guild,
       isAdmin: isAdmin(req),
       guidesOnly: guidesOnly(req.access),
+      me: req.session.user.id,
+      changes: changes.map(changeView),
       settings: s,
       forums,
       textChannels,
@@ -82,6 +91,13 @@ router.post('/:guildId/guides/save', requireAuth, requireGuildAccess, requirePag
     const userId = req.session.user.id;
 
     const existing = req.body.slug ? await GuideModel.exists({ guildId: req.guild.id, slug: String(req.body.slug) }) : null;
+    // Guide editors' adds (and edits, if switched on) wait for an admin.
+    if (approvals.needsApproval(s, existing ? 'edit' : 'create', isAdmin(req))) {
+      const reqd = await approvals.requestChange(req.guild, { type: existing ? 'edit' : 'create', slug: existing ? String(req.body.slug) : null, payload: { title, tags, body, messages: messages || [], inIndex } }, byOf(req), s);
+      if (reqd.error) return res.status(400).json({ ok: false, error: reqd.error });
+      res.locals.audit = { section: 'Guides', action: existing ? 'Requested a guide edit' : 'Requested a new guide', detail: title };
+      return res.json({ ok: true, pending: true, change: changeView(reqd.change) });
+    }
     const result = existing
       ? await guides.editGuide(req.guild, String(req.body.slug), { title, tags, body, messages, inIndex }, userId, s)
       : await guides.createGuide(req.guild, { title, tags, body, messages: messages || [], inIndex, authorId: userId, createdBy: userId }, s);
@@ -97,10 +113,40 @@ router.post('/:guildId/guides/save', requireAuth, requireGuildAccess, requirePag
 // Delete a guide (editors).
 router.post('/:guildId/guides/delete', requireAuth, requireGuildAccess, requirePage('guides'), auditTrail, async (req, res) => {
   const s = await settingsOf(req.guild);
+  if (approvals.needsApproval(s, 'delete', isAdmin(req))) {
+    const reqd = await approvals.requestChange(req.guild, { type: 'delete', slug: String(req.body.slug || '') }, byOf(req), s);
+    if (reqd.error) return res.status(400).json({ ok: false, error: reqd.error });
+    res.locals.audit = { section: 'Guides', action: 'Requested a guide deletion', detail: reqd.change.title };
+    return res.json({ ok: true, pending: true, change: changeView(reqd.change) });
+  }
   const result = await guides.deleteGuide(req.guild, String(req.body.slug || ''), s);
   if (result.error) return res.status(400).json({ ok: false, error: result.error });
   res.locals.audit = { section: 'Guides', action: 'Deleted a guide', detail: result.title };
   res.json({ ok: true });
+});
+
+// Change requests from guide editors: list (everyone on the page), approve/reject (admins), cancel (requester/admin).
+router.get('/:guildId/guides/changes', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
+  const list = await approvals.listChanges(req.guild.id).catch(() => null);
+  if (!list) return res.status(500).json({ ok: false, error: 'Failed to load requests.' });
+  res.json({ ok: true, changes: list.map(changeView) });
+});
+router.post('/:guildId/guides/changes/:id/decide', requireAuth, requireGuildAccess, requirePage('guides'), adminOnly, auditTrail, async (req, res) => {
+  try {
+    const approve = !!req.body?.approve;
+    const result = await approvals.decideChange(req.guild, req.params.id, { approve, by: byOf(req), note: req.body?.note || null }, await settingsOf(req.guild));
+    if (result.error) return res.status(400).json({ ok: false, error: result.error });
+    res.locals.audit = { section: 'Guides', action: `${approve ? 'Approved' : 'Rejected'} a guide change`, detail: `${result.change.type}: ${result.change.title}` };
+    res.json({ ok: true, change: changeView(result.change) });
+  } catch (err) {
+    console.error('Guide change decision failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to save the decision.' });
+  }
+});
+router.post('/:guildId/guides/changes/:id/cancel', requireAuth, requireGuildAccess, requirePage('guides'), async (req, res) => {
+  const result = await approvals.cancelChange(req.guild, req.params.id, req.session.user.id, isAdmin(req)).catch(() => ({ error: 'Failed to cancel.' }));
+  if (result.error) return res.status(400).json({ ok: false, error: result.error });
+  res.json({ ok: true, change: changeView(result.change) });
 });
 
 // Reorder guides (editors). Body: { slugs: [...] } in the desired order.
@@ -167,7 +213,9 @@ router.post('/:guildId/guides/settings', requireAuth, requireGuildAccess, requir
     const input = {
       enabled: true,
       forumChannelId: req.body.forumChannelId || null,
-      editorRoleIds: Array.isArray(req.body.editorRoleIds) ? req.body.editorRoleIds : []
+      editorRoleIds: Array.isArray(req.body.editorRoleIds) ? req.body.editorRoleIds : [],
+      ...(req.body.approval ? { approval: req.body.approval } : {}),
+      ...(req.body.approvalChannelId !== undefined ? { approvalChannelId: req.body.approvalChannelId || null } : {})
     };
     const saved = await guides.saveSettings(req.guild, input);
     if (saved.error) return res.status(400).json({ ok: false, error: saved.error });

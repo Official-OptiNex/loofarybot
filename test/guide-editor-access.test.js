@@ -6,7 +6,7 @@ const express=require(root+'node_modules/express');
 const { Collection, ChannelType } = require(root+'node_modules/discord.js');
 const { store } = require('./helpers/memstore');
 const GuildConfig=require(root+'src/database/models/GuildConfig'); const Guide=require(root+'src/database/models/Guide');
-store(GuildConfig); store(Guide);
+store(GuildConfig); store(Guide); store(require(root+'src/database/models/GuideChange'));
 const { guidesOnly, homeFor } = require(root+'src/web/utils/authMiddleware');
 
 // ---- unit: who counts as guides-only
