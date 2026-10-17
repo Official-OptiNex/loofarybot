@@ -23,7 +23,10 @@ function guidesSettings(config) {
     editorChannelId: g.editorChannelId || null,
     legendThreadId: g.legendThreadId || null,
     legendMessageId: g.legendMessageId || null,
-    index: cleanIndex(g.index)
+    index: cleanIndex(g.index),
+    // Guide editors' adds and deletes wait for an admin by default; edits go live unless switched on.
+    approval: { create: g.approval?.create !== false, edit: !!g.approval?.edit, delete: g.approval?.delete !== false },
+    approvalChannelId: g.approvalChannelId || null
   };
 }
 
@@ -527,6 +530,15 @@ function cleanSettings(guild, input) {
     patch['guides.editorRoleIds'] = [...new Set(ids)].slice(0, 10);
   }
   if (input.editorChannelId !== undefined) patch['guides.editorChannelId'] = input.editorChannelId ? String(input.editorChannelId) : null;
+  if (input.approval !== undefined) {
+    const a = input.approval || {};
+    patch['guides.approval'] = { create: !!a.create, edit: !!a.edit, delete: !!a.delete };
+  }
+  if (input.approvalChannelId !== undefined) {
+    const id = input.approvalChannelId ? String(input.approvalChannelId) : null;
+    if (id && !guild.channels.cache.get(id)?.isTextBased?.()) return { error: 'Pick a text channel for approval requests.' };
+    patch['guides.approvalChannelId'] = id;
+  }
   return { patch };
 }
 

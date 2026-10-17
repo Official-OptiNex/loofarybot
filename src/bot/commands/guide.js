@@ -113,9 +113,15 @@ async function execute(interaction) {
     if (!guides.isEditor(interaction.member, settings)) return reply('🔒 Only guide editors can do that.');
     if (!settings.forumChannelId) return reply('❌ Guides aren’t set up yet — an admin needs to run `/guide setup`.');
 
+    const approvals = require('../cogs/modules/guideApprovals');
+    const by = { id: interaction.user.id, tag: interaction.user.tag || interaction.user.username };
     if (sub === 'create') {
       await interaction.deferReply({ ephemeral: true });
       const tag = o.getString('tag');
+      if (approvals.needsApproval(settings, 'create', isAdmin(interaction))) {
+        const req = await approvals.requestChange(guild, { type: 'create', payload: { title: o.getString('title'), tags: tag ? [tag] : [], body: { embeds: [] } } }, by, settings);
+        return interaction.editReply({ content: req.error ? `❌ ${req.error}` : `⏳ Sent to an admin for approval — you'll get a DM when it's decided. Once it's approved, fill it in on the dashboard.` });
+      }
       const res = await guides.createGuide(
         guild,
         { title: o.getString('title'), tags: tag ? [tag] : [], authorId: interaction.user.id, createdBy: interaction.user.id },
@@ -132,6 +138,10 @@ async function execute(interaction) {
 
     if (sub === 'delete') {
       await interaction.deferReply({ ephemeral: true });
+      if (approvals.needsApproval(settings, 'delete', isAdmin(interaction))) {
+        const req = await approvals.requestChange(guild, { type: 'delete', slug: g.slug }, by, settings);
+        return interaction.editReply({ content: req.error ? `❌ ${req.error}` : `⏳ Asked an admin to delete **${g.title}** — you'll get a DM when it's decided.` });
+      }
       const res = await guides.deleteGuide(guild, g.slug, settings);
       return interaction.editReply({ content: res.error ? `❌ ${res.error}` : `🗑️ Deleted **${res.title}**.` });
     }

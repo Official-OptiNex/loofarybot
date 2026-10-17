@@ -101,6 +101,14 @@
     .gd-ac-item img{width:22px;height:22px;object-fit:contain;}
     .gd-ac-item small{margin-left:auto;opacity:.7;font-size:0.74rem;}
     @media (max-width:600px){ .gd-ac-item{padding:0.6rem;font-size:1rem;} }
+.gd-changes .gd-ch{display:flex;flex-wrap:wrap;align-items:center;gap:0.4rem 0.6rem;padding:0.5rem 0;border-top:1px solid var(--border-card,#26293a);}
+    .gd-changes .gd-ch:first-child{border-top:0;}
+    .gd-ch-type{font-size:0.72rem;font-weight:700;padding:0.12rem 0.5rem;border-radius:999px;background:rgba(88,101,242,.18);color:#8ea1ff;}
+    .gd-ch-type.delete{background:rgba(237,66,69,.15);color:var(--accent-red,#ff5c6c);}
+    .gd-ch-type.edit{background:rgba(254,231,92,.15);color:#fee75c;}
+    .gd-ch-btns{margin-left:auto;display:flex;gap:0.3rem;flex-wrap:wrap;}
+    .gd-overlay{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto;}
+    .gd-overlay-box{width:min(760px,100%);}
     .gd-count{font-size:0.78rem;color:var(--text-muted,#9aa0b4);}
     .gd-count.over{color:var(--accent-red,#ff5c6c);font-weight:700;}
     .gd-msg{border-top:2px dashed #4e5058;margin-top:0.9rem;padding-top:0.6rem;}
@@ -193,6 +201,24 @@
 
       <!-- RIGHT: editor -->
       <div>
+        <!-- Guide editors' add / edit / delete requests waiting for an admin -->
+        <div class="card gd-changes" id="changesCard" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <h3 style="margin:0;">⏳ Waiting for approval <span class="muted" id="changesCount" style="font-weight:400;"></span></h3>
+            <span class="muted" style="font-size:0.78rem;"><%= isAdmin ? 'Guide editors’ changes go live once you approve them.' : 'An admin approves these before they go live — you’ll get a DM.' %></span>
+          </div>
+          <div id="changesList" style="margin-top:0.5rem;"></div>
+        </div>
+        <div class="gd-overlay" id="changePreview" style="display:none;" onclick="if(event.target===this) closePreview()">
+          <div class="card gd-overlay-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+              <h3 style="margin:0;" id="cpTitle">Preview</h3>
+              <button class="btn secondary small" type="button" onclick="closePreview()">✕ Close</button>
+            </div>
+            <div class="discord-chat gd-canvas" id="cpBody" style="margin-top:0.6rem;"></div>
+            <div style="display:flex; gap:0.4rem; margin-top:0.6rem; flex-wrap:wrap;" id="cpActions"></div>
+          </div>
+        </div>
         <div class="card" id="editorCard">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
             <h3 style="margin:0;" id="editorTitle">New guide</h3>
@@ -350,6 +376,19 @@
               <label class="chip"><input type="checkbox" id="createEditorChannel"> Create #guide-editors</label>
             </div>
           </div>
+          <div class="field"><span>Guide editors need an admin to approve <span class="muted" style="font-weight:400;">(admins’ own changes always go live)</span></span>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <label class="chip"><input type="checkbox" id="apCreate" <%= settings.approval.create ? 'checked' : '' %>> Adding guides</label>
+              <label class="chip"><input type="checkbox" id="apEdit" <%= settings.approval.edit ? 'checked' : '' %>> Editing guides</label>
+              <label class="chip"><input type="checkbox" id="apDelete" <%= settings.approval.delete ? 'checked' : '' %>> Deleting guides</label>
+            </div>
+          </div>
+          <label class="field"><span>Post approval requests in <span class="muted" style="font-weight:400;">(with Approve / Reject buttons)</span></span>
+            <select id="approvalChannelId" style="max-width:280px;">
+              <option value="">— the editor channel —</option>
+              <% textChannels.forEach((c) => { %><option value="<%= c.id %>" <%= settings.approvalChannelId === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+            </select>
+          </label>
           <div class="field-row" style="align-items:center; gap:0.5rem;">
             <button class="btn" type="button" onclick="saveSettings()">Save settings</button>
             <span class="muted" id="settingsStatus" style="margin-left:auto; font-size:0.82rem;"></span>
@@ -369,6 +408,8 @@
   <script id="guidesData" type="application/json"><%- JSON.stringify(guides).replace(/</g, '\\u003c') %></script>
   <script id="forumTagsData" type="application/json"><%- JSON.stringify(forumTags).replace(/</g, '\\u003c') %></script>
   <script id="editorData" type="application/json"><%- JSON.stringify(editorData).replace(/</g, '\\u003c') %></script>
+  <script id="changesData" type="application/json"><%- JSON.stringify(changes).replace(/</g, '\\u003c') %></script>
+  <script id="approvalData" type="application/json"><%- JSON.stringify({ approval: settings.approval, isAdmin, me }).replace(/</g, '\\u003c') %></script>
   <script id="indexData" type="application/json"><%- JSON.stringify(settings.index || {}).replace(/</g, '\\u003c') %></script>
   <script>
     // Shows a script failure on the page instead of leaving a half-working editor.
@@ -389,6 +430,10 @@
     const FORUM_TAGS = readJson('forumTagsData');
     const EDITOR_DATA = readJson('editorData');
     let INDEX = readJson('indexData');
+    let CHANGES = readJson('changesData');
+    let { approval: APPROVAL, isAdmin: IS_ADMIN, me: ME } = readJson('approvalData');
+    // Does this action by me wait for an admin?
+    const waits = (type) => !IS_ADMIN && !!APPROVAL?.[type];
     V.setData(EDITOR_DATA);
     GuideAutofill.setData(EDITOR_DATA);
     // Members for @-mentions (the same list the Embed Builder's autofill uses).
@@ -945,10 +990,17 @@
     async function save() { return editing === 'index' ? saveIndex() : saveGuide(); }
     async function saveGuide() {
       const title = $('title').value.trim(); if (!title) { $('editorStatus').textContent = '⚠️ Post title required.'; $('title').focus(); return; }
-      $('editorStatus').textContent = 'Saving…';
+      $('editorStatus').textContent = waits($('slug').value ? 'edit' : 'create') ? 'Sending for approval…' : 'Saving…';
       const res = await post('save', { slug: $('slug').value || undefined, title, tags: state.tags, inIndex: $('inIndex').checked, body: stateToBody(), messages: stateToMessages() });
       if (!res.ok) { $('editorStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
       isDirty = false;
+      if (res.pending) {
+        CHANGES.unshift(res.change); renderChanges();
+        const wasNew = !$('slug').value;
+        if (wasNew) newGuide(true);
+        $('editorStatus').textContent = `⏳ Sent to an admin for approval — it goes live once approved (you'll get a DM).`;
+        return;
+      }
       $('editorStatus').textContent = '✅ Saved — the forum post is updated.'; $('slug').value = res.guide.slug; $('listCurrent').textContent = res.guide.title; $('editorTitle').textContent = 'Editing: ' + res.guide.title; $('deleteBtn').style.display = '';
       await refresh();
       const g = GUIDES.find((x) => x.slug === res.guide.slug);
@@ -971,10 +1023,62 @@
     }
     async function deleteCurrent() { const slug = $('slug').value; if (slug) deleteGuide(slug, $('title').value); }
     async function deleteGuide(slug, title) {
-      if (!confirm('Delete “' + title + '”? This removes the forum post too.')) return;
+      if (!confirm(waits('delete') ? `Ask an admin to delete “${title}”? It's removed (with its forum post) once they approve.` : 'Delete “' + title + '”? This removes the forum post too.')) return;
       const res = await post('delete', { slug }); if (!res.ok) { alert(res.error || 'Failed.'); return; }
+      if (res.pending) { CHANGES.unshift(res.change); renderChanges(); flash('⏳ Delete request sent to an admin.'); return; }
       if ($('slug').value === slug) { isDirty = false; newGuide(true); }
       await refresh();
+    }
+    // ---- change requests (guide editors' adds / edits / deletes waiting for an admin)
+    const TYPE_LABEL = { create: 'New guide', edit: 'Edit', delete: 'Delete' };
+    function renderChanges() {
+      const pending = CHANGES.filter((c) => c.status === 'PENDING');
+      // Editors also see their own recently decided requests.
+      const mine = IS_ADMIN ? [] : CHANGES.filter((c) => c.status !== 'PENDING' && c.status !== 'CANCELLED' && c.requestedBy === ME).slice(0, 5);
+      const shown = [...pending, ...mine];
+      $('changesCard').style.display = shown.length ? '' : 'none';
+      $('changesCount').textContent = pending.length ? `(${pending.length})` : '';
+      $('changesList').innerHTML = shown.map((c) => {
+        const own = c.requestedBy === ME;
+        const done = c.status !== 'PENDING';
+        const btns = done ? `<span class="muted" style="font-size:0.8rem;">${c.status === 'APPROVED' ? '✅ Approved' : '❌ Rejected'}${c.note ? ' — ' + esc(c.note) : ''}</span>`
+          : `${c.type !== 'delete' ? `<button class="btn secondary small" type="button" onclick="previewChange('${c.id}')">👁 Preview</button>` : ''}
+             ${IS_ADMIN ? `<button class="btn small" type="button" onclick="decideChange('${c.id}',true)">✅ Approve</button><button class="btn danger small" type="button" onclick="decideChange('${c.id}',false)">❌ Reject</button>` : ''}
+             ${own && !IS_ADMIN ? `<button class="btn secondary small" type="button" onclick="cancelChange('${c.id}')">Cancel</button>` : ''}`;
+        return `<div class="gd-ch">
+          <span class="gd-ch-type ${c.type}">${TYPE_LABEL[c.type]}</span>
+          <strong>${esc(c.title || c.slug)}</strong>
+          <span class="muted" style="font-size:0.78rem;">by ${esc(c.requestedByTag || 'an editor')} · ${new Date(c.createdAt).toLocaleString()}</span>
+          ${c.error ? `<span style="color:var(--accent-red,#ff5c6c); font-size:0.78rem;">⚠️ ${esc(c.error)}</span>` : ''}
+          <div class="gd-ch-btns">${btns}</div></div>`;
+      }).join('');
+    }
+    function previewChange(id) {
+      const c = CHANGES.find((x) => x.id === id); if (!c) return;
+      const p = c.payload || {};
+      const msg = (body) => `${body?.content ? `<div class="gd-content">${V.toHtml(body.content)}</div>` : ''}${(body?.embeds || []).map(previewEmbedHtml).join('')}`;
+      $('cpTitle').textContent = `${TYPE_LABEL[c.type]}: ${c.title}`;
+      $('cpBody').innerHTML = `<div class="muted" style="font-size:0.8rem; margin-bottom:0.4rem;">Tags: ${esc((p.tags || []).join(', ') || '—')}${p.inIndex ? ' · 📌 in the index post' : ''}</div>`
+        + msg(p.body) + (p.messages || []).map((m, i) => `<div class="gd-msg-sep">💬 Message ${i + 2} · #${esc(m.key || '')}</div>${msg(m.body)}`).join('');
+      $('cpActions').innerHTML = c.status === 'PENDING' && IS_ADMIN
+        ? `<button class="btn small" type="button" onclick="decideChange('${c.id}',true)">✅ Approve</button><button class="btn danger small" type="button" onclick="decideChange('${c.id}',false)">❌ Reject</button>` : '';
+      $('changePreview').style.display = '';
+    }
+    function closePreview() { $('changePreview').style.display = 'none'; }
+    async function decideChange(id, approve) {
+      const note = approve ? '' : prompt('Reject — optional note for the editor:', '');
+      if (note === null) return;
+      const res = await post(`changes/${id}/decide`, { approve, note });
+      if (!res.ok) { alert(res.error || 'Failed.'); return; }
+      const i = CHANGES.findIndex((c) => c.id === id); if (i >= 0) CHANGES[i] = res.change;
+      closePreview(); renderChanges(); await refresh();
+      flash(approve ? '✅ Approved — the change is live.' : '❌ Rejected — the editor was told.');
+    }
+    async function cancelChange(id) {
+      if (!confirm('Cancel this request?')) return;
+      const res = await post(`changes/${id}/cancel`, {});
+      if (!res.ok) { alert(res.error || 'Failed.'); return; }
+      const i = CHANGES.findIndex((c) => c.id === id); if (i >= 0) CHANGES[i] = res.change; renderChanges();
     }
     async function refresh() { const r = await fetch(`/dashboard/${GUILD}/guides/data`).then((x) => x.json()).catch(() => null); if (r && r.ok) { GUIDES = r.guides; renderList(); if (editing === 'index') renderEditor(); } }
 
@@ -987,13 +1091,18 @@
     async function saveSettings(){
       const editorRoleIds=[...document.querySelectorAll('#editorRoles input[type=checkbox]:checked')].map((c)=>c.value);
       $('settingsStatus').textContent='Saving…';
-      const res=await post('settings',{ forumChannelId:$('forumChannelId').value||null, editorRoleIds, editorChannelId:$('editorChannelId').value||null, createEditorChannel:$('createEditorChannel').checked });
+      const res=await post('settings',{ forumChannelId:$('forumChannelId').value||null, editorRoleIds, editorChannelId:$('editorChannelId').value||null, createEditorChannel:$('createEditorChannel').checked,
+        approval:{ create:$('apCreate').checked, edit:$('apEdit').checked, delete:$('apDelete').checked }, approvalChannelId:$('approvalChannelId').value||null });
+      if(res.ok) APPROVAL=res.settings?.approval||APPROVAL;
       if(!res.ok){ $('settingsStatus').textContent='❌ '+(res.error||'Failed.'); return; }
       $('settingsStatus').textContent='✅ Saved.'+(res.warning?' ⚠️ '+res.warning:''); if($('createEditorChannel')) $('createEditorChannel').checked=false;
     }
 
     const params=new URLSearchParams(location.search);
     if(params.get('edit')==='index') editIndex(); else if(params.get('edit')) editGuide(params.get('edit')); else newGuide(true);
+    renderChanges();
+    if(params.get('change')) previewChange(params.get('change'));
+    if(waits('create')||waits('delete')) $('editorStatus').textContent = `ℹ️ ${[waits('create')&&'adding',waits('edit')&&'editing',waits('delete')&&'deleting'].filter(Boolean).join(', ')} guides needs an admin's approval.`;
   </script>
 </body>
 </html>

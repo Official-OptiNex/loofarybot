@@ -189,6 +189,9 @@ const GuildConfigSchema = new mongoose.Schema(
       forumChannelId: { type: String, default: null }, // the forum channel guides are posted in
       editorRoleIds: { type: [String], default: [] }, // roles that can create/edit guides (+ see the dashboard page)
       editorChannelId: { type: String, default: null }, // private channel for guide editors
+      // Which guide-editor actions need an admin's OK first: { create, edit, delete } (see guides.guidesSettings).
+      approval: { type: mongoose.Schema.Types.Mixed, default: null },
+      approvalChannelId: { type: String, default: null }, // where approval requests are posted (default: the editor channel)
       legendThreadId: { type: String, default: null }, // the pinned "📖 Guides Index" post
       legendMessageId: { type: String, default: null },
       // How the pinned index post looks: { name, title, color, intro, footer } (see guides.cleanIndex).
