@@ -1,9 +1,13 @@
 # 🎁 LoofaryBot v2
 
-A modular Discord.js v14 bot with persistent giveaways, an anti-raid honeypot, a leveling
-system, and a web dashboard with Discord OAuth2 login and a Discohook-style embed builder.
-Built for 24/7 free hosting on Render, kept alive with UptimeRobot, and backed by a free
-MongoDB Atlas cluster so nothing is lost on redeploy.
+A modular Discord.js v14 bot plus a full web dashboard (Discord OAuth2 login). It covers:
+- **Community:** giveaways and drops, welcome / goodbye messages with a private "New here?" intro, tickets, polls, reminders, reaction roles and Lofi radio.
+- **Economy and games:** leveling with role rewards, XP gambling, a daily XP pot, an idle game, an XP shop, booster perks, chat XP drops, daily streaks, and a counting game with secret XP goals.
+- **Content:** birthdays, a starboard, a forum-based guide library with a visual editor and admin approvals, apply-for-a-role applications, and pet / gun / fish upgrade calculators.
+- **Safety:** auto-mod, link safety, an anti-raid honeypot, cases with escalation, lockdowns, media-only channels and full server logs.
+- **Admin tools:** server-stat channels, a Discohook-style embed builder, Bot Chat and backups.
+
+Built for 24/7 free hosting on Render, kept alive with UptimeRobot, and backed by a free MongoDB Atlas cluster so nothing is lost on redeploy. Every feature works from slash commands **and** the dashboard.
 
 ---
 
@@ -16,20 +20,38 @@ LoofaryBot/
 │   ├── config.js                # Loads & validates all environment variables
 │   ├── bot/
 │   │   ├── client.js             # Discord.js Client + intents
-│   │   ├── commands/             # one file per slash command (/loof, /levels, /gamble, /logs, …)
-│   │   ├── events/                # ready, interactionCreate, messageCreate
-│   │   ├── cogs/modules/          # core logic: giveaways, leveling, honeypot, gambling, logging,
-│   │   │                          #   lockdown, reactionRoles, polls, reminders, welcome, joinTracking
-│   │   └── utils/                 # permissions.js, duration.js
+│   │   ├── commandReference.js   # every command, for /loof help, the dashboard Commands page and the home page
+│   │   ├── commands/             # one file per slash command: alerts, automod, autorole, avatar, birthday,
+│   │   │                         #   calculate, cases, counting, daily, gamble, greetings (/welcome, /goodbye),
+│   │   │                         #   guide, honeypot, idle, levels, lockdown, logs, loof, mediaonly, modActions
+│   │   │                         #   (/warn /timeout /kick /ban …), music, perks, poll, pot, purge, reactionrole,
+│   │   │                         #   remind, serverinfo, serverstats, shop, starboard, ticket, unlockdown,
+│   │   │                         #   userinfo, xpdrop
+│   │   ├── events/               # ready, interactionCreate, messageCreate, guildMemberAdd/Remove, …
+│   │   ├── cogs/modules/         # core logic, one file per feature: applications, automod, backups,
+│   │   │                         #   birthdays, boosterPerks, calculator, chatDrops, counting, daily, gambling,
+│   │   │                         #   giveawayForm, giveaways, guideApprovals, guides, help, honeypot, idleGame,
+│   │   │                         #   joinTracking, levelColors, leveling, linkSafety, lockdown, logging,
+│   │   │                         #   mediaOnly, modCases, music, newMember, polls, reactionRoles, reminders,
+│   │   │                         #   serverLogs, serverStats, shop, socialAlerts, starboard, storage,
+│   │   │                         #   tickets, welcome, xpPot
+│   │   └── utils/                # permissions, durations, autocomplete, error reporting
 │   ├── database/
-│   │   ├── db.js                  # Mongoose connection
-│   │   └── models/                # Giveaway, GuildConfig, UserLevel, Poll, Reminder, ReactionRolePanel,
-│   │                              #   MemberJoin, WelcomeConfig
+│   │   ├── db.js                 # Mongoose connection
+│   │   └── models/               # GuildConfig (most settings), UserLevel, Giveaway, Guide, GuideChange,
+│   │                             #   Application, ApplicationForm, CalcProfile, WelcomeConfig, Ticket,
+│   │                             #   TicketConfig, ShopItem, ShopOwnership, IdleFactory, XpPot, ModCase,
+│   │                             #   LogEntry, AuditEntry, ConfigBackup, Poll, Reminder, …
 │   └── web/
-│       ├── server.js               # Express app, sessions, route mounting, /health
-│       ├── routes/                 # auth.js (OAuth2), dashboard.js, api.js, manage.js, embedBuilder.js
-│       ├── views/                  # EJS templates
-│       └── static/                 # CSS
+│       ├── server.js              # Express app, sessions, route mounting, /health
+│       ├── routes/                # auth (OAuth2), dashboard, api, manage, embedBuilder, guides,
+│       │                          #   applications, botChat
+│       ├── views/                 # EJS templates (home, server picker, dashboard + tab partials,
+│       │                          #   guides, applications, embed builder, bot chat)
+│       └── static/                # CSS + browser JS (dashboard, embed builder, visual editor,
+│                                  #   @/#/: autofill, JSON helpers)
+├── docs/                          # ready-to-import data (guides-import.json, new-member-message.json)
+└── test/                          # one test file per feature (npm test)
 ```
 
 ## 2. Environment Variables
@@ -99,6 +121,22 @@ No manual schema setup needed — Mongoose creates collections automatically on 
    on a 5-minute interval to keep the free instance awake.
 
 ## 6. Features
+
+| Area | Features |
+| --- | --- |
+| 🎁 Giveaways | Timed giveaways & first-to-click drops, entry requirements, bonus entries, reroll |
+| 📈 Leveling & XP | Chat XP, role rewards, name-color roles, multipliers, rank cards, `/daily` streaks, chat XP drops, booster perks |
+| 🎰 XP games | Gambling (coinflip, dice, limbo, blackjack, mines, high-low), Daily XP Pot, 🫧 Bubble Factory idle game |
+| 🛍️ XP Shop | Auto-react, boosts, extra gambles, nickname tag/change, custom badges, roles, collectibles |
+| ✨ Engagement | Birthdays, counting (full maths, grief protection, **secret XP goals**), starboard |
+| 🧮 Calculator | `/calculate` pets / guns / fish upgrade costs — every number configurable per server |
+| 📖 Guides | Forum guide library, visual editor, index post, multi-message guides, guide links, admin approvals |
+| 🗂️ Applications | Apply-for-a-role forms with requirements and a review channel |
+| 👋 Welcome | Welcome / goodbye messages, **"New here?" private intro button** |
+| 🎫 Tickets | Panel button, private channels, claim, transcripts, DM on close |
+| 🛡️ Safety | Auto-mod, link safety, honeypot, cases + escalation, lockdown, purge, media-only, server logs |
+| 💬 Community | Polls, reminders, reaction roles, Lofi radio, creator (Twitch / YouTube) alerts, server-stat channels |
+| 🖥️ Dashboard | Every setting + Embed Builder, Bot Chat, backups, change history, moderator access |
 
 ### Giveaways (`/loof ...`)
 Same subcommands as before (`start`, `create`, `end`, `reroll`, `delete`, `list`, `edit`, `ping`,
@@ -486,6 +524,22 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
   form using you as the new member. **Design in Embed Builder** opens the full Embed Builder
   with the welcome message loaded; its **Use as Welcome Message** button saves it back.
 
+#### "New here?" button (dashboard **Welcome → 🧭 New members**, `/welcome newmember`)
+- Puts a button (default **👋 New here? Click me**) under the welcome ping. A new member who presses it
+  gets your intro as a private **"Only you can see this"** message — commands, channels, how things work.
+  (Discord only allows private messages as a reply to a click or command, so it's a button rather than
+  something sent on join — and nobody gets an unexpected DM.)
+- The message is Discord JSON with **up to 10 embeds** and the welcome placeholders (`{user}`, `{username}`,
+  `{server}`, `{membercount}`, `{avatar}` as an image / thumbnail). Design it in the dashboard's JSON box
+  (live preview), or in the Embed Builder with **🧭 Use as "New here?" message**. **↺ Starter message**
+  loads a ready-made intro; **📨 DM me a test** sends it to you.
+- Fully customizable: on/off, whether it sits on the welcome message, button text / emoji / color.
+- **Panel:** post the same button in any channel (e.g. #start-here) so anyone can open it again later —
+  posting again in the same channel updates it in place (`/welcome newmember_panel`).
+- `/welcome newmember_preview` shows the private message as a new member would see it.
+- `docs/new-member-message.json` is a ready message for the Loofary server (guide forum, guide index,
+  counting, giveaways role, tickets, XP drops) to paste into the JSON box.
+
 ### Join Analytics (dashboard **Overview** tab)
 - Every join and leave is recorded automatically. The Overview's **Member curve** shows joins,
   leaves and net change per day or week over 7 days to 1 year. Stat cards show week-over-week and
@@ -581,6 +635,19 @@ Members spend XP on fun extras. The shop is open by default and comes with start
 - **`67+67` easter egg** (needs sums on): if someone writes `67+67` (= 134) as their count, it still
   counts, but their message is swapped for a bot post that @-mentions them, states the real count, and
   gently roasts the "6-7" meme. 67 is cringe.
+- **🎯 Secret goals** (`/counting goals` or dashboard **Engagement → Counting → Secret goals**, off by
+  default): every **15** numbers (configurable), **everyone who has counted in the current run** gets XP.
+  - The XP climbs per goal within a run: the first pays the **base** (100), each later one the **step**
+    more (+50 → 100, 150, 200…), with an optional cap.
+  - **Bonus numbers** are goals too and pay the ladder **plus** a bonus — by default every **100 → +250** and
+    every **1000 → +2,500** (add, remove or change them).
+  - A wrong number resets the run, who's in it, and the ladder. Members aren't told where goals are — it's a
+    surprise. The announcement is customizable (`{number}` `{xp}` `{base}` `{bonus}` `{bonusText}` `{people}`
+    `{s}` `{goal}` `{mentions}`), optionally pinging the winners. A goal never pays twice.
+  - The dashboard shows a preview of what each goal pays; `/counting status` shows staff the next goal.
+- Long maths is read in full (up to Discord's 4,000-character limit) — never cut off and counted as a
+  partial result. If the same message is delivered twice (e.g. two bot instances overlapping during a
+  deploy), it's counted once and never judged wrong.
 - `/counting set` (or the dashboard) fixes the count after an unfair reset.
 - **`/counting ban user [duration]`** blocks a member from the counting channel — automatically: the bot
   makes a **🔇 Counting Banned** role (once), denies it **Send Messages** in the counting channel, and
@@ -605,18 +672,71 @@ editor can update it later and the live post edits itself in place — no deleti
 - **Auto-updating index:** the pinned legend lists every guide grouped by tag with jump-links, rebuilt
   automatically whenever a guide is added, edited or removed.
 - **Browse (everyone):** `/guide view <name>`, `/guide list [tag]`, `/guide search <text>`.
-- **Edit (editors):** the dashboard Guides page has a **visual editor with a live preview** — title, click-to-toggle
-  **tag chips**, and per-embed fields (title, description, colour, image, thumbnail, fields) with add/reorder/remove,
-  plus a raw-JSON escape hatch for pasting from an AI or Discohook. `/guide create` and `/guide edit` open it on a
-  private link (`?edit=<slug>`); `/guide delete` removes a guide and its post. `/guide view` shows an inline preview
-  with an **Open full guide** button.
+- **Edit (editors):** the dashboard Guides page has a **visual (what-you-see-is-what-you-get) editor** that
+  looks like the Discord post: click any text to edit it, select text and use the toolbar (bold, italic,
+  underline, strike, H1–H3 headings, small grey text, bullet / numbered lists, quotes, code, links,
+  spoilers, and an emoji picker with the server's emojis). Click-to-toggle **tag chips**,
+  per-embed colour / image / thumbnail / fields with add, reorder and remove, and a raw-JSON escape hatch for
+  pasting from an AI or Discohook. It's **phone-friendly** (stacked layout, big tap targets, sticky toolbar).
+  `/guide create` and `/guide edit` open it on a private link (`?edit=<slug>`); `/guide delete` removes a guide
+  and its post. `/guide view` shows an inline preview with an **Open full guide** button.
+- **Autofill:** type `:` for the server's emojis, `@` for members and roles, `#` for
+  channels — in the guide editor and every dashboard text field. `:name:` shortcodes are turned into the
+  server's custom emojis when a guide is saved.
+- **Multi-message guides:** a guide can be several messages in one post (**+ Add message**, up to 20) — e.g.
+  all the FAQs in one post with one message per section. Each message is edited in place, in order.
+- **Guide links:** write `guide:slug` (a guide's post) or `guide:slug#key` (one message in it) as a link and
+  it becomes a real Discord jump link when published — links update themselves when guides move.
+- **Index post:** the pinned index can be edited like a guide (name, title, colour, intro, footer with
+  `{count}`). Guides marked **Include in index** (or tagged "Start Here") are shown at the top of the index
+  post instead of getting their own post, so there's one pinned "start here". The post name never changes
+  on its own (Discord logs every rename), and **Repost** re-creates it if needed.
+- **Approvals:** guide editors' new guides and deletions wait for an admin (edits too, if switched on in
+  Settings). Requests post in the editors channel with **Approve / Reject** (with a note) and a preview link,
+  admins can decide on the dashboard too, and the editor is DMed the result. Admins never wait.
+- **Fast saves:** only what changed is sent to Discord (unchanged messages, tags and titles are skipped), so
+  big guides save quickly instead of waiting on Discord's rate limits. The editor reports errors and never
+  hangs on "Saving…".
 - **Organise:** the page lists guides with a **filter** box and **▲ ▼ reordering** — the order you set is the order the
   pinned index uses.
 - **Roles & access:** editors are a role you choose (plus Manage Server). On the dashboard, guide-editor
   roles can open **only** the Guides page — nothing else. Admins additionally get **Settings** and a
   bulk **Import** (paste a JSON array of guides — ideal for porting an existing guide set; each entry
-  takes a title, tags, a body and optional image URLs).
+  takes a title, tags, a body, optional extra messages, image URLs and "include in index"). Importing a
+  title that already exists updates that guide in place. `docs/guides-import.json` is the full Loofary
+  guide set (PureMiracle's guide + FAQs). Guide editors who open the dashboard go **straight to the Guides
+  page**.
 - `/guide editor_add`/`editor_remove` manage editor roles; `/guide legend` rebuilds the index.
+
+### Applications (dashboard **🗂️ Applications** page)
+Apply-for-a-role forms — e.g. "Apply for Guide Editor" — similar to tickets but fully customizable.
+- **Panel:** a message with an **Apply** button in any channel. Text, title, description, colour, image,
+  thumbnail, footer and button label / emoji / colour are all yours; saving updates it in place.
+- **Questions:** up to 5 per form (Discord's pop-up limit), each short or paragraph, required or optional,
+  with a placeholder and min / max length.
+- **Requirements:** minimum **level**, **account age**, **days in the server**, a required **role**, no
+  applying for a role you already have, one pending application at a time, and a **re-apply cooldown** after
+  a denial (default 72h). Members who don't qualify are told exactly why.
+- **Review:** applications post in a review channel (optionally pinging roles) with **Approve / Deny**.
+  Reviewers are roles you pick (plus Manage Server). Approving can give a role; denying asks for an optional
+  reason. The applicant is DMed the decision (customizable approve / deny messages with `{form}` / `{server}`).
+- Up to 25 forms per server, each open or closed; the dashboard lists every application with its answers.
+
+### Calculator (`/calculate`, settings on dashboard **Engagement → 🧮 Calculator**)
+- `/calculate` opens a private panel: pick **🐾 Pets**, **🔫 Guns** or **🐟 Fish**, press a rarity button
+  (**D → C → B → A → S → SS → SSS → X → XX → XXX → Z → ZZ → ZZZ**) and type how many you **own**, switch to
+  **🎯 Goal** and type how many you **want**, then press **🧮 Calculate**. Numbers are saved per member.
+- 2 of a rarity merge into 1 of the next (a rarity is worth 2× the one below). Owned exact matches count
+  first, spare higher ones cover lower goals, and lower ones are merged before buying the rest as D.
+- **Pets / guns:** the D summons needed and what they cost (default **100 Pet Gems or Diamonds** per D).
+- **Fish** come from draws: **5 free draws a day** (D 60% · C 30% · B 10%) and **epic draws for 200
+  Diamonds** (C 60% · B 30% · A 10%). Results show **best / average / worst luck** in epic draws and
+  Diamonds, or days of free draws.
+- The result is shown in the panel and **DMed** to the member.
+- **Everything is configurable per server:** each calculator's on/off, emoji, name and plural; the cost of
+  one D and the currencies (pets / guns); free draws per day, epic draw cost and currency, and the % odds of
+  every rarity for both draws (fish, checked to total 100%, with a live average-value summary).
+  **↺ Defaults** resets it.
 
 ### Server Stats channels (`/serverstats …` or dashboard **Overview → Server Stats**)
 - View-only **voice channels** pinned at the top of the server (under a 📊 Server Stats category) whose
@@ -690,6 +810,9 @@ amount, the announcement channel, or turns them off.
   - **Leaderboard → Adjust a member's XP:** give, take or reset XP (`/levels givexp · takexp · resetxp`).
   - Each of these can be given to dashboard moderators under Server Settings, and every action is
     recorded in the change history.
+- **Tools** in the sidebar open the separate pages: **Embed Builder, Guides, Applications, Bot Chat**.
+- **Commands page:** every command (and the buttons members press, e.g. Apply), filterable by everyone /
+  staff, click to copy, with **Open page →** links. `/loof help` in Discord uses the same list.
 - **Home page:** open to everyone without logging in. It lists the features, live bot stats, an
   **Add to Discord** button and every command members can use (searchable, click to copy).
 - **Server picker:** a searchable card grid of your servers with admin/moderator badges. It also
