@@ -147,6 +147,19 @@ router.post('/:guildId/guides/index', requireAuth, requireGuildAccess, requirePa
   }
 });
 
+// Repost the pinned index post (editors): a fresh post without old 'changed the post title' lines.
+router.post('/:guildId/guides/index/repost', requireAuth, requireGuildAccess, requirePage('guides'), auditTrail, async (req, res) => {
+  try {
+    const result = await guides.repostIndex(req.guild, await settingsOf(req.guild));
+    if (result.error) return res.status(400).json({ ok: false, error: result.error });
+    res.locals.audit = { section: 'Guides', action: 'Reposted the index post', detail: '' };
+    res.json({ ok: true, threadId: result.threadId });
+  } catch (err) {
+    console.error('Guide index repost failed:', err);
+    res.status(500).json({ ok: false, error: 'Failed to repost the index post.' });
+  }
+});
+
 // Settings (admins): forum channel, editor roles, editor channel.
 router.post('/:guildId/guides/settings', requireAuth, requireGuildAccess, requirePage('guides'), adminOnly, auditTrail, async (req, res) => {
   try {

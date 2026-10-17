@@ -217,7 +217,11 @@
           <!-- index post fields -->
           <div id="indexMeta" style="display:none;">
             <p class="muted" style="font-size:0.84rem; margin:0.3rem 0 0.6rem;">This is the pinned post at the top of the forum. Guides marked <strong>📌 Include in index</strong> show first (edit those in their own entry), then this box with the list of every other guide — the list updates itself.</p>
-            <label class="field"><span>Post title <span class="muted" style="font-weight:400;">(blank = “📖 Guides Index”, or “📖 Start Here — Guides Index” when guides are included)</span></span><input id="indexName" maxlength="100" placeholder="📖 Start Here — Guides Index" oninput="dirty()"></label>
+            <label class="field"><span>Post title <span class="muted" style="font-weight:400;">(blank = “📖 Guides Index”)</span></span><input id="indexName" maxlength="100" placeholder="📖 Guides Index" oninput="dirty()"></label>
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin:-0.2rem 0 0.4rem;">
+              <button class="btn secondary small" type="button" onclick="repostIndex()">♻️ Repost index post</button>
+              <span class="muted" style="font-size:0.78rem;">Deletes the pinned post and posts a fresh one — clears old “changed the post title” lines. Links to it update automatically.</span>
+            </div>
           </div>
 
           <!-- format toolbar (both modes) -->
@@ -942,6 +946,13 @@
       if (!res.ok) { $('editorStatus').textContent = '❌ ' + (res.error || 'Failed.'); return; }
       INDEX = res.index; isDirty = false;
       $('editorStatus').textContent = '✅ Saved — the pinned index post is updated.';
+    }
+    async function repostIndex() {
+      if (!confirm('Delete the pinned index post and post a fresh one? Reactions and replies on the old post are lost.')) return;
+      $('editorStatus').textContent = 'Reposting…';
+      const res = await post('index/repost', {});
+      $('editorStatus').textContent = res.ok ? '✅ Reposted — the new index post is pinned.' : '❌ ' + (res.error || 'Failed.');
+      if (res.ok) await refresh();
     }
     async function deleteCurrent() { const slug = $('slug').value; if (slug) deleteGuide(slug, $('title').value); }
     async function deleteGuide(slug, title) {

@@ -9,7 +9,6 @@ const Guide = require('../../../database/models/Guide');
 const EmbedJson = require('../../../web/static/js/embed-json');
 
 const LEGEND_TITLE = '📖 Guides Index';
-const START_TITLE = '📖 Start Here — Guides Index';
 // A guide marked "include in index" (or tagged "Start Here") isn't posted on its own: its body is
 // shown at the top of the pinned index post instead, so the forum has one pinned "start here" post.
 const START_TAG = 'start here';
@@ -43,6 +42,24 @@ function cleanIndex(raw) {
     intro: str(r.intro, 3000),
     footer: str(r.footer, 200)
   };
+}
+
+/**
+ * Deletes the pinned index post and posts a fresh one (e.g. to clear old 'changed the post title' lines),
+ * then points everything that links to it at the new post.
+ */
+async function repostIndex(guild, settings) {
+  const forum = getForum(guild, settings);
+  if (!forum) return { error: 'Set a **forum channel** for guides first (`/guide setup`).' };
+  const { legendThreadId } = guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
+  const old = await fetchThread(forum, legendThreadId);
+  if (old) await old.delete('Index post reposted').catch(() => null);
+  await GuildConfig.updateOne({ guildId: guild.id }, { $set: { 'guides.legendThreadId': null, 'guides.legendMessageId': null } }, { upsert: true });
+  await rebuildLegend(guild, settings);
+  const fresh = guidesSettings(await GuildConfig.findOne({ guildId: guild.id }, { guides: 1 }).lean());
+  if (!fresh.legendThreadId) return { error: "I couldn't post the new index post — check my permissions in the forum." };
+  await refreshLinkingGuides(guild, settings, ['index']);
+  return { threadId: fresh.legendThreadId };
 }
 
 /** Saves the index post's look (dashboard) and rebuilds it. */
@@ -364,7 +381,8 @@ async function rebuildLegend(guild, settings) {
   const description = ((look.intro ? `${look.intro}\n\n` : '') + list).slice(0, Math.max(0, Math.min(4096, room)));
   const embed = { title, description, color: look.color ?? 0x5865f2, footer: { text: footer } };
   const payload = { content: introContent || null, embeds: [...introEmbeds, embed] };
-  const name = look.name || (included.length ? START_TITLE : LEGEND_TITLE);
+  // A fixed name: Discord logs every rename as a 'changed the post title' line nobody can delete.
+  const name = look.name || LEGEND_TITLE;
 
   const linkStart = async (id) => {
     const stale = included.filter((g) => g.threadId !== id).map((g) => g.slug);
@@ -542,6 +560,7 @@ module.exports = {
   importGuides,
   cleanIndex,
   saveIndex,
+  repostIndex,
   resolveEmojis,
   ensureEditorChannel,
   syncEditorChannel,
