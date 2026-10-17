@@ -10,8 +10,43 @@ const MAX_COUNT = 1000; // per rarity, to keep typos from producing silly number
 // What one D summon costs, per calculator.
 const KINDS = {
   pets: { name: 'Pet', plural: 'pets', emoji: '🐾', color: 0xf1c40f, costPerD: 100, currencies: ['Pet Gems', 'Diamonds'] },
-  guns: { name: 'Gun', plural: 'guns', emoji: '🔫', color: 0xed4245, costPerD: 100, currencies: ['Diamonds'] }
+  guns: { name: 'Gun', plural: 'guns', emoji: '🔫', color: 0xed4245, costPerD: 100, currencies: ['Diamonds'] },
+  // Fish come from random draws instead of D summons: odds per rarity (index 0 = D).
+  fish: {
+    name: 'Fish', plural: 'fish', emoji: '🐟', color: 0x1abc9c,
+    draws: {
+      free: { perDay: 5, odds: [0.6, 0.3, 0.1] },
+      epic: { cost: 200, odds: [0, 0.6, 0.3, 0.1] }
+    }
+  }
 };
+
+/** The average value of one draw, in D (a rarity-t fish is worth 2^t D). */
+const drawValue = (odds) => odds.reduce((sum, p, t) => sum + p * 2 ** t, 0);
+
+// The smallest / biggest a single draw can be worth, in D.
+const drawMin = (odds) => 2 ** odds.findIndex((p) => p > 0);
+const drawMax = (odds) => 2 ** (odds.length - 1 - [...odds].reverse().findIndex((p) => p > 0));
+
+/**
+ * For draw-based kinds: how many epic draws (and Diamonds) or days of free draws cover `needD` —
+ * on average, with the best luck (every draw the top rarity) and the worst (every draw the lowest).
+ */
+function drawPlan(kind, needD) {
+  const { free, epic } = kind.draws;
+  const epicD = drawValue(epic.odds); // 3.2 D per epic draw
+  const dayD = drawValue(free.odds) * free.perDay; // 8 D per day of free draws
+  const epicDraws = Math.ceil(needD / epicD);
+  const best = Math.ceil(needD / drawMax(epic.odds));
+  const worst = Math.ceil(needD / drawMin(epic.odds));
+  return {
+    epicD, dayD, epicDraws, diamonds: epicDraws * epic.cost, perD: epic.cost / epicD,
+    epicBest: best, diamondsBest: best * epic.cost, epicWorst: worst, diamondsWorst: worst * epic.cost,
+    freeDays: Math.ceil(needD / dayD),
+    freeDaysBest: Math.ceil(needD / (drawMax(free.odds) * free.perDay)),
+    freeDaysWorst: Math.ceil(needD / (drawMin(free.odds) * free.perDay))
+  };
+}
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
 const countsText = (counts) =>
@@ -107,24 +142,39 @@ function resultEmbed(kindKey, have, want, result, user = null) {
       { name: `📦 Your ${k.plural}`, value: countsText(have) || `*No ${k.plural} yet*`, inline: false },
       { name: '🎯 Goal', value: countsText(want) || '*Nothing*', inline: false }
     );
+  const newD = k.draws ? 'D-worth from draws' : 'new D';
   for (const g of result.goals) {
     const lines = [];
     if (g.owned) lines.push(`✅ ${fmt(g.owned)} already owned`);
     if (g.upgraded.length) lines.push(`✅ ${g.upgraded.length} covered by your higher ${g.upgraded.map(label).join(', ')}`);
     if (g.builds) {
       const used = countsText(g.used);
-      lines.push(`🔨 ${fmt(g.builds)} to make${used ? ` — merges your ${used}` : ''}${g.buyD ? ` + **${fmt(g.buyD)}** new D` : ''}`);
+      lines.push(`🔨 ${fmt(g.builds)} to make${used ? ` — merges your ${used}` : ''}${g.buyD ? ` + **${fmt(g.buyD)}** ${newD}` : ''}`);
     }
     embed.addFields({ name: `${label(g.tier)} ×${fmt(g.count)}`, value: lines.join('\n') || '—', inline: false });
   }
-  const total = result.buyD
-    ? `Summon **${fmt(result.buyD)}** D ${k.plural}\n` + k.currencies.map((c) => `💎 **${fmt(cost)}** ${c}`).join('\n**or** ')
-    : '🎉 **Nothing!** You already have everything you need.';
+  let total;
+  if (!result.buyD) total = '🎉 **Nothing!** You already have everything you need.';
+  else if (k.draws) {
+    const d = drawPlan(k, result.buyD);
+    total =
+      `**${fmt(result.buyD)}** D-worth of ${k.plural}.\n` +
+      `💎 **Epic draws:**\n` +
+      `🍀 Best luck: **${fmt(d.epicBest)}** draws = **${fmt(d.diamondsBest)}** Diamonds\n` +
+      `📊 Average: **${fmt(d.epicDraws)}** draws ≈ **${fmt(d.diamonds)}** Diamonds\n` +
+      `💀 Worst luck: **${fmt(d.epicWorst)}** draws = **${fmt(d.diamondsWorst)}** Diamonds\n` +
+      `**or** 🎣 **Free daily draws only:** ~**${fmt(d.freeDays)}** days (best ${fmt(d.freeDaysBest)} · worst ${fmt(d.freeDaysWorst)})\n` +
+      `-# Every day of free draws saves ~${fmt(Math.round(d.dayD * d.perD))} Diamonds of epic draws.`;
+  } else total = `Summon **${fmt(result.buyD)}** D ${k.plural}\n` + k.currencies.map((c) => `💎 **${fmt(cost)}** ${c}`).join('\n**or** ');
   embed.addFields({ name: '💰 You need', value: total, inline: false });
   const spare = countsText(result.leftover);
   if (spare && result.goals.length) embed.addFields({ name: `🧺 ${k.name}s left over`, value: spare, inline: false });
-  embed.setFooter({ text: `1 D summon = ${k.costPerD} ${k.currencies.join(' / ')} · 2 of a rarity merge into 1 of the next (D → C → … → ZZZ)` });
+  embed.setFooter({
+    text: k.draws
+      ? `Epic draw ${k.draws.epic.cost} 💎: C 60% · B 30% · A 10% (avg ${drawValue(k.draws.epic.odds)} D) · Free: ${k.draws.free.perDay}/day, D 60% · C 30% · B 10% (avg ${drawValue(k.draws.free.odds)} D) · Luck varies — these are averages`
+      : `1 D summon = ${k.costPerD} ${k.currencies.join(' / ')} · 2 of a rarity merge into 1 of the next (D → C → … → ZZZ)`
+  });
   return embed;
 }
 
-module.exports = { TIERS, KINDS, parseCounts, plan, resultEmbed, countsText, label };
+module.exports = { TIERS, KINDS, parseCounts, plan, resultEmbed, countsText, label, drawValue, drawMin, drawMax, drawPlan };

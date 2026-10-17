@@ -50,7 +50,16 @@ assert.match(all,/merges your \*\*SSS\*\* ×2 · \*\*B\*\* ×2/);
 const gun=JSON.stringify(C.resultEmbed('guns',at({}),at({zzz:1}),C.plan(at({}),at({zzz:1}))).toJSON());
 assert.match(gun,/409,600\*\* Diamonds/); assert.doesNotMatch(gun,/Pet Gems/,'guns cost diamonds only');
 assert.match(JSON.stringify(C.resultEmbed('pets',at({zzz:1}),at({zzz:1}),C.plan(at({zzz:1}),at({zzz:1}))).toJSON()),/already have everything/);
-console.log('✓ result embed');
+// fish: random draws instead of D summons — averages from the draw odds
+assert.equal(C.drawValue(C.KINDS.fish.draws.free.odds),1.6,'free draw: D60/C30/B10 → 1.6 D'); assert.equal(C.drawValue(C.KINDS.fish.draws.epic.odds),3.2,'epic draw: C60/B30/A10 → 3.2 D');
+let dp=C.drawPlan(C.KINDS.fish,2); assert.equal(dp.perD*2,125,'a C fish ≈ 125 Diamonds (as the guide says)');
+dp=C.drawPlan(C.KINDS.fish,4096); assert.equal(dp.diamonds,256000,'ZZZ fish ≈ 256,000 Diamonds (as the guide says)'); assert.equal(dp.freeDays,512,'or ~512 days of free draws (the guide: 500+ days)');
+const fishE=JSON.stringify(C.resultEmbed('fish',at({ss:1}),at({zzz:1}),C.plan(at({ss:1}),at({zzz:1}))).toJSON());
+assert.match(fishE,/4,064\*\* D-worth of fish/); assert.match(fishE,/Average: \*\*1,270\*\* draws ≈ \*\*254,000\*\* Diamonds/);
+assert.match(fishE,/Best luck: \*\*508\*\* draws = \*\*101,600\*\* Diamonds/,'every draw an A (8 D)'); assert.match(fishE,/Worst luck: \*\*2,032\*\* draws = \*\*406,400\*\* Diamonds/,'every draw a C (2 D)');
+assert.match(fishE,/best 204 · worst 813/,'free-draw days range'); assert.match(fishE,/~\*\*508\*\* days/);
+assert.match(fishE,/saves ~500 Diamonds/); assert.doesNotMatch(fishE,/Pet Gems/);
+console.log('✓ result embed (pets, guns, fish)');
 
 // ---- /calculate panel: menu → pets/guns → 13 rarity buttons for inventory + goal → calculate (+ DM)
 const mkUser=(dmOk=true)=>({id:'u1',dms:[],send:async function(p){ if(!dmOk) throw new Error('closed'); this.dms.push(p); }});
@@ -61,7 +70,7 @@ const labels=(view)=>view.components.flatMap((row)=>row.toJSON().components.map(
 (async()=>{
   const u=mkUser();
   let r={user:u,reply:async(o)=>{r.out=o;}}; await cmd.execute(r);
-  assert.equal(r.out.ephemeral,true); assert.deepEqual(ids(r.out),['calc:pets:have','calc:guns:have'],'step 1: pick pets or guns');
+  assert.equal(r.out.ephemeral,true); assert.deepEqual(ids(r.out),['calc:pets:have','calc:guns:have','calc:fish:have'],'step 1: pick pets or guns');
   // pets → inventory panel with a button per rarity
   let i=btn('calc:pets:have',u); await cmd.handleCalcButton(i);
   const tierIds=ids(i.out).filter((x)=>x.includes(':set:'));
@@ -90,7 +99,9 @@ const labels=(view)=>view.components.flatMap((row)=>row.toJSON().components.map(
   i=btn('calc:pets:reset:have',u); await cmd.handleCalcButton(i); assert.ok(!labels(i.out).some((l)=>/· [1-9]/.test(l)),'inventory cleared');
   const shy=mkUser(false); await cmd.handleCalcModal(sub('calcm:guns:want:12',shy,'1'));
   i=btn('calc:guns:calc',shy); await cmd.handleCalcButton(i); assert.match(i.out.content,/Couldn't DM you/); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/409,600\*\* Diamonds/);
-  i=btn('calc:menu',u); await cmd.handleCalcButton(i); assert.deepEqual(ids(i.out),['calc:pets:have','calc:guns:have'],'back to the start');
+  await cmd.handleCalcModal(sub('calcm:fish:want:12',u,'1'));
+  i=btn('calc:fish:calc',u); await cmd.handleCalcButton(i); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/Average: \*\*1,280\*\* draws ≈ \*\*256,000\*\* Diamonds/,'fish calculator works through the panel');
+  i=btn('calc:menu',u); await cmd.handleCalcButton(i); assert.deepEqual(ids(i.out),['calc:pets:have','calc:guns:have','calc:fish:have'],'back to the start');
   console.log('✓ /calculate panel: pick, 13 rarity buttons for inventory + goal, calculate + DM, saved');
   process.exit(0);
 })().catch((e)=>{console.error(e);process.exit(1);});
