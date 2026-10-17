@@ -135,6 +135,16 @@
       </div>
     <% }) %>
 
+    <% const TOOL_PAGES = [['embed', 'brush', 'Embed Builder'], ['guides', 'file', 'Guides'], ['applications', 'userplus', 'Applications'], ['botchat', 'chat', 'Bot Chat']].filter(([p]) => can(p)); %>
+    <% if (TOOL_PAGES.length) { %>
+      <div class="nav-section">
+        <div class="nav-heading"><span class="ring-dot"></span>Tools</div>
+        <% TOOL_PAGES.forEach(([p, ic, label]) => { %>
+          <a class="nav-item" href="/dashboard/<%= guild.id %>/<%= p %>"><%- icon(ic) %><span><%= label %></span><span class="muted" style="margin-left:auto; font-size:0.75rem;">↗</span></a>
+        <% }) %>
+      </div>
+    <% } %>
+
     <div class="nav-section">
       <div class="nav-heading"><span class="ring-dot green"></span>Modules</div>
       <% MODULES.forEach(([tab, label, on]) => { %>
@@ -400,6 +410,7 @@
           <h3>🖌️ Quick Links</h3>
           <% if (can('embed')) { %><p class="muted"><a href="/dashboard/<%= guild.id %>/embed">🖌️ Open the Embed Builder →</a></p><% } %>
           <% if (can('guides')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/guides">📖 Open Guides →</a></p><% } %>
+          <% if (can('applications')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/applications">🗂️ Open Applications (apply buttons & reviews) →</a></p><% } %>
           <% if (can('botchat')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/botchat">💬 Open Bot Chat (talk through the bot) →</a></p><% } %>
           <p class="muted" style="margin-top:0.4rem;">Use the tabs above to configure everything else.</p>
         </div>
@@ -1599,7 +1610,7 @@
         <div class="hero-icon">⌨️</div>
         <div>
           <h1>Commands</h1>
-          <p><%= commandReference.reduce((n, g) => n + g.commands.length, 0) %> slash commands in <%= commandReference.length %> categories. Click a command to copy it.</p>
+          <p><%= commandReference.reduce((n, g) => n + g.commands.filter((c) => c.usage.startsWith('/')).length, 0) %> slash commands (plus the buttons members press) in <%= commandReference.length %> categories. Click a command to copy it.</p>
         </div>
       </div>
       <div class="cmd-toolbar">
@@ -1616,12 +1627,12 @@
             <div class="cmd-card-head">
               <div class="hero-icon"><%= g.icon %></div>
               <div><h3><%= g.group %></h3><p><%= g.blurb %></p></div>
-              <% if (g.tab && can(g.tab)) { %><a href="#<%= g.tab %>" data-tab="<%= g.tab %>">Open page →</a><% } %>
+              <% if (g.tab && can(g.tab)) { %><a href="#<%= g.tab %>" data-tab="<%= g.tab %>">Open page →</a><% } else if (g.page && can(g.page)) { %><a href="/dashboard/<%= guild.id %>/<%= g.page %>">Open page →</a><% } %>
             </div>
             <div class="cmd-list">
               <% g.commands.forEach(c => { %>
                 <div class="cmd-item" data-perm="<%= c.perm ? 'staff' : 'everyone' %>" data-text="<%= (c.usage + ' ' + c.description).toLowerCase() %>">
-                  <code title="Click to copy" data-copy="<%= c.usage.split(' · ')[0].split(' ')[0] + (c.usage.split(' ')[1] ? ' ' + c.usage.split(' ')[1] : '') %>"><%= c.usage %></code>
+                  <% if (c.usage.startsWith('/')) { %><code title="Click to copy" data-copy="<%= c.usage.split(' · ')[0].split(' ')[0] + (c.usage.split(' ')[1] ? ' ' + c.usage.split(' ')[1] : '') %>"><%= c.usage %></code><% } else { %><code title="A button, not a command"><%= c.usage %></code><% } %>
                   <span class="desc"><%= c.description %></span>
                   <span class="perm-badge <%= c.perm ? '' : 'everyone' %>"><%= c.perm || 'Everyone' %></span>
                 </div>
@@ -1757,7 +1768,7 @@
     // --- Global search: jump to a settings page or a command ---
     const commandIndex = <%- JSON.stringify(commandReference.flatMap((g) => g.commands.map((c) => ({ label: c.usage, detail: c.description, group: g.group })))).replace(/</g, '\\u003c') %>;
     const searchIndex = [
-      ...[...document.querySelectorAll('.nav-item')].map((b) => ({ label: b.textContent.trim(), kind: 'Page', tab: b.dataset.tab })),
+      ...[...document.querySelectorAll('.nav-item')].map((b) => ({ label: b.textContent.replace('↗', '').trim(), kind: 'Page', tab: b.dataset.tab, href: b.getAttribute('href') })),
       ...commandIndex.map((c) => ({ label: c.label, kind: c.group, tab: 'commands', detail: c.detail })),
       // Features that live on a sub-tab or card of a page.
       ...[
@@ -1778,9 +1789,11 @@
         ['Log storage & retention', 'Logs', 'logs', 'lg-settings', 'logRetention', 'database memory free tier cleanup'],
         ['Log settings', 'Logs', 'logs', 'lg-settings', null, 'events channel'],
         ['Server Stats channels', 'Overview', 'overview', null, 'statsCard', 'member online boost top xp count channels top of server'],
-        ['Tickets', 'Tickets', 'tickets', null, null, 'support panel claim transcript']
+        ['Tickets', 'Tickets', 'tickets', null, null, 'support panel claim transcript'],
+        ['“New here?” button', 'Welcome', 'welcome', 'w-newmember', null, 'new member start here intro private ephemeral only you can see onboarding'],
+        ['Goodbye messages', 'Welcome', 'welcome', 'w-goodbye', null, 'leave left farewell']
       ].map(([label, kind, tab, sub, scroll, detail]) => ({ label, kind, tab, sub, scroll, detail }))
-    ].filter((i) => i.tab === 'commands' || document.getElementById(`tab-${i.tab}`));
+    ].filter((i) => i.href || i.tab === 'commands' || document.getElementById(`tab-${i.tab}`));
     const searchInput = document.getElementById('globalSearch');
     const searchResults = document.getElementById('searchResults');
     let searchMatches = [];
@@ -1814,6 +1827,7 @@
       if (!m) return;
       searchInput.value = '';
       searchResults.classList.remove('visible');
+      if (m.href) return void (location.href = m.href); // a separate page (Guides, Applications, …)
       showTab(m.tab);
       openSub(m.tab, m.sub);
       if (m.scroll) document.getElementById(m.scroll)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
