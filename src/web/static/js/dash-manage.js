@@ -1664,6 +1664,7 @@ function fillEngagementForms(d) {
   const v = (id, val) => (document.getElementById(id).value = val ?? '');
   const c = (id, val) => (document.getElementById(id).checked = !!val);
   if (d.calculator) fillCalculator(d.calculator.settings);
+  if (d.counting?.settings?.goals) fillCountingGoals(d.counting.settings.goals);
   const b = d.birthdays.settings;
   c('bdEnabled', b.enabled);
   v('bdChannel', b.channelId || '');
@@ -1849,6 +1850,68 @@ async function resetCalculator() {
   if (data) fillCalculator(data.settings);
 }
 document.querySelectorAll('.calc-odds, #calc-fish-epicCost, #calc-fish-epicCurrency, #calc-fish-freePerDay').forEach((el) => el.addEventListener('input', renderCalcOdds));
+
+// ---- Counting: secret goals
+function goalBonusRow(b = { every: '', xp: '' }) {
+  const row = document.createElement('div');
+  row.className = 'field-row';
+  row.style.cssText = 'margin:0; align-items:center; gap:0.4rem;';
+  row.innerHTML = `<span class="muted" style="font-size:0.8rem;">Every</span><input type="number" class="cg-every" min="1" style="width:100px;" value="${esc(b.every)}"><span class="muted" style="font-size:0.8rem;">→ +</span><input type="number" class="cg-xp" min="1" style="width:100px;" value="${esc(b.xp)}"><span class="muted" style="font-size:0.8rem;">XP</span><button type="button" class="btn secondary small" title="Remove">✕</button>`;
+  row.querySelector('button').addEventListener('click', () => { row.remove(); renderGoalPreview(); });
+  row.querySelectorAll('input').forEach((el) => el.addEventListener('input', renderGoalPreview));
+  document.getElementById('cgBonuses').append(row);
+}
+function addGoalBonus() { goalBonusRow(); }
+function fillCountingGoals(g) {
+  if (!document.getElementById('cgEnabled')) return;
+  document.getElementById('cgEnabled').checked = !!g.enabled;
+  document.getElementById('cgEvery').value = g.every;
+  document.getElementById('cgBase').value = g.baseXp;
+  document.getElementById('cgStep').value = g.stepXp;
+  document.getElementById('cgMax').value = g.maxXp || 0;
+  document.getElementById('cgMessage').value = g.message || '';
+  document.getElementById('cgPing').checked = !!g.ping;
+  document.getElementById('cgBonuses').innerHTML = '';
+  (g.bonuses || []).forEach(goalBonusRow);
+  renderGoalPreview();
+}
+function readCountingGoals() {
+  const v = (id) => document.getElementById(id).value;
+  return {
+    enabled: document.getElementById('cgEnabled').checked,
+    every: v('cgEvery'),
+    baseXp: v('cgBase'),
+    stepXp: v('cgStep'),
+    maxXp: v('cgMax') || 0,
+    message: v('cgMessage'),
+    ping: document.getElementById('cgPing').checked,
+    bonuses: [...document.querySelectorAll('#cgBonuses .field-row')].map((r) => ({ every: r.querySelector('.cg-every').value, xp: r.querySelector('.cg-xp').value })).filter((b) => b.every !== '' || b.xp !== '')
+  };
+}
+// The first goals of a run and what each pays (same maths as the bot's goalReward).
+function renderGoalPreview() {
+  const g = readCountingGoals();
+  const every = Math.max(1, Number(g.every) || 15), base = Number(g.baseXp) || 0, step = Number(g.stepXp) || 0, cap = Number(g.maxXp) || 0;
+  const bonuses = g.bonuses.map((b) => ({ every: Number(b.every), xp: Number(b.xp) })).filter((b) => b.every >= 1 && b.xp > 0);
+  const rows = [];
+  const isGoal = (n) => n % every === 0 || bonuses.some((b) => n % b.every === 0);
+  // The first goals of a run (to 120 or 8 goals), plus the first time each bonus number comes up.
+  const goalsAt = [];
+  for (let n = 1; n < 1e6 && (goalsAt.length < 8 || (bonuses.length && !bonuses.every((b) => goalsAt.some((x) => x % b.every === 0)) && goalsAt.length < 40)); n++) if (isGoal(n)) goalsAt.push(n);
+  for (const [i, n] of goalsAt.entries()) {
+    if (i >= 8 && !bonuses.some((b) => n % b.every === 0)) continue;
+    let xp = base + step * i;
+    if (cap > 0) xp = Math.min(xp, cap);
+    const bonus = bonuses.filter((b) => n % b.every === 0).reduce((t, b) => t + b.xp, 0);
+    rows.push(`<strong>${fmt(n)}</strong> → ${fmt(xp + bonus)} XP${bonus ? ` <span style="color:var(--accent-gold, #f1c40f);">(+${fmt(bonus)} bonus)</span>` : ''}`);
+  }
+  document.getElementById('cgPreview').innerHTML = `Each person in the run gets: ${rows.join(' · ')} …`;
+}
+async function saveCountingGoals() {
+  const data = await withButton(document.getElementById('cgSave'), () => manageApi('POST', 'engagement/counting', { goals: readCountingGoals() }), '🎯 Secret goals saved.');
+  if (data) fillCountingGoals(data.settings.goals);
+}
+['cgEvery', 'cgBase', 'cgStep', 'cgMax'].forEach((id) => document.getElementById(id)?.addEventListener('input', renderGoalPreview));
 
 async function setCount() {
   const input = document.getElementById('ctSetTo');

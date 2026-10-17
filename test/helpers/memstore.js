@@ -23,12 +23,13 @@ function store(Model){
   const clone=(x)=>x&&JSON.parse(JSON.stringify(x));
   const hydrate=(r)=>{ if(!r) return null; const d=new Model(clone(r)); d._id=r._id; d.save=async function(){ const o=this.toObject(); Object.assign(r,clone({...o,_id:r._id})); return this; }; return d; };
   const setPath=(r,k,v)=>{ const parts=k.split('.'); let o=r; while(parts.length>1){const p=parts.shift(); o[p]=o[p]||{}; o=o[p];} o[parts[0]]=v instanceof Date?v.toISOString():v; };
-  const apply=(r,u,inserted=false)=>{ if(Array.isArray(u)){ require('mingo/init/system'); const { Aggregator }=require('mingo'); const out=new Aggregator(u).run([clone(r)])[0]; for(const k of Object.keys(r)) delete r[k]; Object.assign(r,clone(out)); return; } const ops=['$set','$inc','$push','$pull','$max','$setOnInsert']; const set=u.$set||(!ops.some(o=>u[o])?u:{}); for(const [k,v] of Object.entries(set)) setPath(r,k,v);
+  const apply=(r,u,inserted=false)=>{ if(Array.isArray(u)){ require('mingo/init/system'); const { Aggregator }=require('mingo'); const out=new Aggregator(u).run([clone(r)])[0]; for(const k of Object.keys(r)) delete r[k]; Object.assign(r,clone(out)); return; } const ops=['$set','$inc','$push','$pull','$max','$setOnInsert','$addToSet']; const set=u.$set||(!ops.some(o=>u[o])?u:{}); for(const [k,v] of Object.entries(set)) setPath(r,k,v);
     if(u.$inc) for(const [k,v] of Object.entries(u.$inc)) setPath(r,k,(get(r,k)||0)+v);
     if(u.$max) for(const [k,v] of Object.entries(u.$max)) if(!(get(r,k)>=v)) setPath(r,k,v);
     if(inserted&&u.$setOnInsert) for(const [k,v] of Object.entries(u.$setOnInsert)) setPath(r,k,v);
     // $push / $pull support dotted paths (e.g. 'counting.bans'); $pull matches array elements by field subset.
     if(u.$push) for(const [k,v] of Object.entries(u.$push)){ const a=get(r,k)||[]; a.push(v instanceof Date?v.toISOString():clone(v)); setPath(r,k,a); }
+    if(u.$addToSet) for(const [k,v] of Object.entries(u.$addToSet)){ const a=get(r,k)||[]; if(!a.some(x=>eq(x,v))) a.push(clone(v)); setPath(r,k,a); }
     if(u.$pull) for(const [k,cond] of Object.entries(u.$pull)){ const a=get(r,k)||[]; const keep=a.filter(el=>!(el&&typeof el==='object'&&typeof cond==='object'?Object.entries(cond).every(([ck,cv])=>eq(el[ck],cv)):eq(el,cond))); setPath(r,k,keep); } };
   const query=(arr)=>{ const o={ sort(s){ const [[k,d]]=Object.entries(s); arr=[...arr].sort((a,b)=>(get(a,k)>get(b,k)?1:-1)*d); return o; }, skip(n){arr=arr.slice(n);return o;}, limit(n){arr=arr.slice(0,n);return o;}, lean:async()=>clone(arr), catch(){return o;}, then:(a,b)=>Promise.resolve(arr.map(hydrate)).then(a,b)}; return o; };
   const newId=()=> (id++).toString(16).padStart(24,'0');

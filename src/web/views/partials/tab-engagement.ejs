@@ -110,6 +110,43 @@
 
             <div class="card settings-card" style="margin-top:1rem;">
               <div class="setting-row">
+                <div><div class="setting-title">🎯 Secret goals</div><div class="setting-help">Every few numbers, everyone who has counted in the current run gets XP. Members aren't told where the goals are — it's a surprise when one hits. A wrong number resets the run, who's in it, and the XP ladder. Same as <code>/counting goals</code>.</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="cgEnabled"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">A goal every</div><div class="setting-help">e.g. 15 → goals at 15, 30, 45…</div></div>
+                <div class="setting-control"><input type="number" id="cgEvery" min="1" max="100000"><span class="muted">numbers</span></div>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">XP ladder</div><div class="setting-help">The first goal of a run pays the base; each later goal in the same run pays the step more (100, 150, 200…). Optional cap (0 = none) before bonuses.</div></div>
+                <div class="setting-control">
+                  <label class="muted" style="font-size:0.78rem;">Base <input type="number" id="cgBase" min="0" style="width:90px;"></label>
+                  <label class="muted" style="font-size:0.78rem;">+ per goal <input type="number" id="cgStep" min="0" style="width:90px;"></label>
+                  <label class="muted" style="font-size:0.78rem;">Cap <input type="number" id="cgMax" min="0" style="width:90px;"></label>
+                </div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Bonuses for big numbers</div><div class="setting-help">Big numbers are goals too, paying the ladder + a bonus — e.g. every 100 → +250, so 100, 200, 300… each pay the next ladder step plus 250 (on top of the regular goals every few numbers).</div></div>
+                <div id="cgBonuses" style="display:flex; flex-direction:column; gap:0.4rem;"></div>
+                <div><button type="button" class="btn secondary small" onclick="addGoalBonus()">+ Add bonus</button></div>
+              </div>
+              <div class="setting-row stack">
+                <div><div class="setting-title">Announcement</div><div class="setting-help">Leave empty for the default. Placeholders: <code>{number}</code> <code>{xp}</code> <code>{base}</code> <code>{bonus}</code> <code>{bonusText}</code> <code>{people}</code> <code>{s}</code> <code>{goal}</code> (goal # this run) <code>{mentions}</code>.</div></div>
+                <textarea id="cgMessage" rows="2" maxlength="1500" placeholder="🎯 **Secret goal reached at {number}!** {people} counter{s} this run just got **+{xp} XP** each{bonusText}. Keep going… the next one’s a surprise 🤫"></textarea>
+              </div>
+              <div class="setting-row">
+                <div><div class="setting-title">Ping the winners</div><div class="setting-help">@mention everyone rewarded (otherwise names show without a ping).</div></div>
+                <div class="setting-control"><label class="switch"><input type="checkbox" id="cgPing"><span class="track"></span></label></div>
+              </div>
+              <div class="setting-row stack">
+                <div class="setting-title">Ladder preview</div>
+                <div class="muted" id="cgPreview" style="font-size:0.82rem;"></div>
+              </div>
+            </div>
+            <div class="savebar" style="position:static;"><button class="btn" id="cgSave" onclick="saveCountingGoals()">Save goals</button></div>
+
+            <div class="card settings-card" style="margin-top:1rem;">
+              <div class="setting-row">
                 <div><div class="setting-title">Set the count</div><div class="setting-help">Undo an unfair reset. Enter the last number counted; the channel is told the next one.</div></div>
                 <div class="setting-control"><input type="number" id="ctSetTo" min="0" placeholder="e.g. 250"><button class="btn secondary" id="ctSetBtn" onclick="setCount()">Set</button></div>
               </div>

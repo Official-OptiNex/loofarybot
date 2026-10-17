@@ -26,8 +26,86 @@ function countingSettings(config) {
     allowSameUser: !!c.allowSameUser,
     mathAllowed: c.mathAllowed !== false,
     numbersOnly: c.numbersOnly !== false,
-    slowmodeSeconds: Number.isFinite(c.slowmodeSeconds) ? Math.max(0, Math.min(21600, c.slowmodeSeconds)) : 1200
+    slowmodeSeconds: Number.isFinite(c.slowmodeSeconds) ? Math.max(0, Math.min(21600, c.slowmodeSeconds)) : 1200,
+    participants: Array.isArray(c.participants) ? c.participants : [],
+    goalsHit: Math.max(0, c.goalsHit || 0),
+    goals: goalSettings(c.goals)
   };
+}
+
+// ---------------------------------------------------------------- Hidden goals
+//
+// Every `every` numbers (15 by default) everyone who has counted in the current run gets XP: the first
+// goal of a run pays baseXp, each later one stepXp more (100, 150, 200…, optionally capped). Bonus
+// numbers (multiples of a bonus's `every`, e.g. 100) are goals too and pay the ladder + the bonus. A wrong number resets the run, the
+// participants and the goal ladder. Nothing tells members where the goals are.
+
+const GOAL_MESSAGE =
+  '🎯 **Secret goal reached at {number}!** {people} counter{s} this run just got **+{xp} XP** each{bonusText}. Keep going… the next one’s a surprise 🤫';
+
+function goalSettings(g = {}) {
+  const num = (v, d) => (Number.isFinite(v) && v >= 0 ? v : d);
+  return {
+    enabled: !!g.enabled,
+    every: Math.max(1, Math.floor(num(g.every, 15)) || 15),
+    baseXp: num(g.baseXp, 100),
+    stepXp: num(g.stepXp, 50),
+    maxXp: num(g.maxXp, 0),
+    bonuses: (Array.isArray(g.bonuses) ? g.bonuses : [{ every: 100, xp: 250 }, { every: 1000, xp: 2500 }])
+      .map((b) => ({ every: Math.floor(Number(b?.every)), xp: Math.floor(Number(b?.xp)) }))
+      .filter((b) => b.every >= 1 && b.xp > 0),
+    message: g.message || null,
+    ping: !!g.ping
+  };
+}
+
+const isGoal = (goals, n) => n > 0 && (n % goals.every === 0 || goals.bonuses.some((b) => n % b.every === 0));
+/** The next goal number after `current`. */
+function nextGoal(goals, current) {
+  for (let n = current + 1; n <= current + goals.every; n++) if (isGoal(goals, n)) return n;
+  return current + goals.every;
+}
+
+/** The XP a goal at `n` pays (the `hit`-th goal of the run, 0-based). Returns { xp, base, bonus }. */
+function goalReward(goals, n, hit) {
+  let base = goals.baseXp + goals.stepXp * hit;
+  if (goals.maxXp > 0) base = Math.min(base, goals.maxXp);
+  const bonus = goals.bonuses.filter((b) => n % b.every === 0).reduce((t, b) => t + b.xp, 0);
+  return { xp: base + bonus, base, bonus };
+}
+
+/** After an accepted count `n`: pays out a hidden goal if `n` is one (once — atomically claimed). */
+async function maybeRewardGoal(message, n, goals) {
+  if (!goals.enabled || !isGoal(goals, n)) return null;
+  const before = await GuildConfig.findOneAndUpdate(
+    { guildId: message.guild.id, 'counting.lastGoalAt': { $ne: n } },
+    { $set: { 'counting.lastGoalAt': n }, $inc: { 'counting.goalsHit': 1 } },
+    { new: false, projection: { counting: 1, levelingEnabled: 1 } }
+  ).lean();
+  if (!before) return null; // already paid (e.g. the same message seen twice)
+  const people = [...new Set(before.counting?.participants || [])];
+  if (!people.length || before.levelingEnabled === false) return null;
+  const { xp, base, bonus } = goalReward(goals, n, Math.max(0, before.counting?.goalsHit || 0));
+  if (xp <= 0) return null;
+  const { adjustXp } = require('./leveling');
+  for (const id of people) await adjustXp(message.guild, id, xp).catch(() => null);
+  const fmt = (v) => v.toLocaleString('en-US');
+  const mentions = people.map((id) => `<@${id}>`).join(' ');
+  const text = (goals.message || GOAL_MESSAGE)
+    .replace(/\{number\}/gi, fmt(n))
+    .replace(/\{xp\}/gi, fmt(xp))
+    .replace(/\{base\}/gi, fmt(base))
+    .replace(/\{bonus\}/gi, fmt(bonus))
+    .replace(/\{bonusText\}/gi, bonus ? ` (incl. a **+${fmt(bonus)}** bonus for ${fmt(n)}!)` : '')
+    .replace(/\{people\}/gi, fmt(people.length))
+    .replace(/\{s\}/gi, people.length === 1 ? '' : 's')
+    .replace(/\{goal\}/gi, fmt((before.counting?.goalsHit || 0) + 1))
+    .replace(/\{mentions\}/gi, mentions)
+    .slice(0, 2000);
+  await message.channel
+    .send({ content: text, allowedMentions: goals.ping ? { users: people.slice(0, 100) } : { parse: [] } })
+    .catch(() => null);
+  return { xp, base, bonus, people };
 }
 
 // ---------------------------------------------------------------- Parsing (no eval)
@@ -326,7 +404,8 @@ async function handleCounting(message, config) {
     filter,
     {
       $set: { 'counting.current': n, 'counting.lastUserId': userId, 'counting.lastMessageId': message.id, 'counting.lastCountAt': new Date() },
-      $max: { 'counting.record': n }
+      $max: { 'counting.record': n },
+      $addToSet: { 'counting.participants': userId } // counted this run → shares the hidden goals
     },
     { new: false, projection: { counting: 1 } }
   ).lean();
@@ -349,6 +428,7 @@ async function handleCounting(message, config) {
         ).catch(() => null);
       }
       if (message.deletable !== false) await message.delete().catch(() => null);
+      await maybeRewardGoal(message, n, s.goals);
       return true;
     }
     // The best run from before this one started — passing it earns a 🏆 (once, on the number that beats it).
@@ -357,6 +437,7 @@ async function handleCounting(message, config) {
     else if (n % 100 === 0) await react(message, '💯');
     else await react(message, '✅');
     if (bestBefore > 0 && n === bestBefore + 1) await react(message, '🏆');
+    await maybeRewardGoal(message, n, s.goals);
     return true;
   }
 
@@ -399,7 +480,11 @@ async function handleCounting(message, config) {
         'counting.lastUserId': null,
         'counting.lastMessageId': null,
         'counting.lastResetBy': userId,
-        'counting.bestBefore': Math.max(fresh.record, fresh.current)
+        'counting.bestBefore': Math.max(fresh.record, fresh.current),
+        // A new run: nobody has counted in it yet, and the goal ladder starts over.
+        'counting.participants': [],
+        'counting.goalsHit': 0,
+        'counting.lastGoalAt': 0
       },
       $inc: { 'counting.resets': 1 }
     }
@@ -478,6 +563,32 @@ function cleanSettings(guild, input) {
     const sm = Number.parseInt(input.slowmodeSeconds, 10);
     if (!(sm >= 0 && sm <= 21600)) return { error: 'Slowmode must be 0–21600 seconds (up to 6 hours).' };
     patch['counting.slowmodeSeconds'] = sm;
+  }
+  if (input.goals !== undefined && input.goals !== null) {
+    const g = input.goals;
+    const int = (v, min, max, what) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${what} must be a whole number from ${min} to ${max.toLocaleString('en-US')}.`);
+      return n;
+    };
+    try {
+      if (g.enabled !== undefined) patch['counting.goals.enabled'] = !!g.enabled;
+      if (g.every !== undefined) patch['counting.goals.every'] = int(g.every, 1, 100000, 'Goal spacing');
+      if (g.baseXp !== undefined) patch['counting.goals.baseXp'] = int(g.baseXp, 0, 1e6, 'Base XP');
+      if (g.stepXp !== undefined) patch['counting.goals.stepXp'] = int(g.stepXp, 0, 1e6, 'XP added per goal');
+      if (g.maxXp !== undefined) patch['counting.goals.maxXp'] = int(g.maxXp || 0, 0, 1e7, 'XP cap');
+      if (g.bonuses !== undefined) {
+        if (!Array.isArray(g.bonuses)) throw new Error('Bonuses must be a list.');
+        patch['counting.goals.bonuses'] = g.bonuses
+          .filter((b) => b && (b.every !== '' || b.xp !== ''))
+          .slice(0, 10)
+          .map((b) => ({ every: int(b.every, 1, 1e9, 'A bonus’s “every”'), xp: int(b.xp, 1, 1e7, 'A bonus’s XP') }));
+      }
+      if (g.message !== undefined) patch['counting.goals.message'] = String(g.message || '').trim().slice(0, 1500) || null;
+      if (g.ping !== undefined) patch['counting.goals.ping'] = !!g.ping;
+    } catch (err) {
+      return { error: err.message };
+    }
   }
   if (input.current !== undefined && input.current !== null && input.current !== '') {
     const n = Number.parseInt(input.current, 10);
@@ -609,6 +720,11 @@ module.exports = {
   evaluate,
   parseCount,
   countingSettings,
+  goalSettings,
+  goalReward,
+  isGoal,
+  nextGoal,
+  maybeRewardGoal,
   handleCounting,
   handleCountDeleted,
   handleCountEdited,

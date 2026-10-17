@@ -207,6 +207,35 @@ const cfg=()=>cfgRows.find(r=>r.guildId==='g');
   assert.equal(cfg().counting.bans.length,0,'no bans remain after the sweep');
   console.log('✓ counting bans: auto role + channel block, permanent/timed, role reuse, unban, sweeper lifts expired');
 
+  // Secret goals: every N numbers everyone in the run gets XP; the ladder climbs per goal; bonus numbers
+  // are goals too; a wrong number resets participants + ladder; a goal never pays twice.
+  r=await C.saveSettings(guild,{goals:{enabled:true,every:3,baseXp:100,stepXp:50,maxXp:0,bonuses:[{every:5,xp:1000}],message:'GOAL {number}: +{xp} for {people} ({mentions}) #{goal}'}});
+  assert.ok(!r.error,r.error); assert.equal(r.settings.goals.every,3);
+  assert.match((await C.saveSettings(guild,{goals:{every:0}})).error,/Goal spacing/);
+  const savedCount={...cfg().counting};
+  Object.assign(cfg().counting,{current:0,lastUserId:null,lastMessageId:null,participants:[],goalsHit:0,lastGoalAt:0});
+  for (const k of Object.keys(xp)) delete xp[k];
+  const sentBeforeGoals=sent.length;
+  await count('ann','1'); await count('ben','2');
+  assert.deepEqual(cfg().counting.participants,['ann','ben'],'who counted this run');
+  const g3=await count('ann','3'); assert.deepEqual(g3.m.reacts,['✅']);
+  assert.deepEqual(xp,{ann:100,ben:100},'first goal pays the base to everyone in the run');
+  assert.equal(sent.at(-1).m.payload.content,'GOAL 3: +100 for 2 (<@ann> <@ben>) #1'); assert.deepEqual(sent.at(-1).m.payload.allowedMentions,{parse:[]},'no pings unless switched on');
+  await count('cat','4');
+  await count('ben','5'); assert.equal(xp.cat,150+1000,'5 is a bonus number: ladder (150) + bonus (1000)'); assert.equal(xp.ann,100+1150);
+  await count('ann','6'); assert.equal(xp.cat,1150+200,'next ladder step: 200');
+  // the same goal message delivered twice (deploy overlap) pays once
+  const goalDupe=msg('ben','6'); cfg().counting.current=5; cfg().counting.lastUserId='cat'; await C.handleCounting(goalDupe,cfg());
+  assert.equal(xp.cat,1350,'a goal never pays twice'); cfg().counting.current=6; cfg().counting.lastUserId='ann';
+  // wrong number → new run: participants + ladder reset
+  await count('cat','99'); assert.deepEqual(cfg().counting.participants,[]); assert.equal(cfg().counting.goalsHit,0);
+  await count('ben','1'); await count('cat','2'); await count('ben','3');
+  assert.equal(xp.ann,1250+200,'ann (not in the new run) gets nothing more'); assert.equal(xp.ben,1250+200+100,'ladder restarts at the base');
+  assert.ok(sent.length>sentBeforeGoals);
+  await C.saveSettings(guild,{goals:{enabled:false}});
+  Object.assign(cfg().counting,{current:savedCount.current,lastUserId:savedCount.lastUserId,lastMessageId:savedCount.lastMessageId,record:savedCount.record,resets:savedCount.resets,bestBefore:savedCount.bestBefore});
+  console.log('✓ secret goals: XP to everyone in the run, ladder + bonus numbers, pays once, resets with the run');
+
   // ================================================================ Starboard
   r=await S.saveSettings(guild,{enabled:true}); assert.match(r.error,/channel/);
   r=await S.saveSettings(guild,{emoji:'hello'}); assert.match(r.error,/single emoji/);
