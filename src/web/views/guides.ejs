@@ -291,11 +291,11 @@
               <div id="vIncluded"></div>
               <div class="gd-content-wrap" id="vContentWrap"><div id="vContent" class="gd-content"></div></div>
               <div id="vEmbeds"></div>
+              <button class="btn secondary small" type="button" onclick="addEmbed()" id="vAddEmbed" style="margin-top:0.4rem;">+ Add embed</button>
               <div id="vExtra"></div>
               <div id="vIndexList"></div>
             </div>
             <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.5rem;" id="vAddRow">
-              <button class="btn secondary small" type="button" onclick="addEmbed()" id="vAddEmbed">+ Add embed</button>
               <button class="btn secondary small" type="button" onclick="addMsg()" title="Another message in the same post — other guides can link straight to it">+ Add message</button>
               <span class="muted" style="font-size:0.78rem; align-self:center;">Tip: click any text to edit it. Select text, then use the toolbar. Type <code>:</code> for server emojis, <code>@</code> for members &amp; roles, <code>#</code> for channels.</span>
             </div>
@@ -662,7 +662,7 @@
       box.appendChild(msgHead(mi));
       box.appendChild(editable('gd-content', m.content, { placeholder: 'Message text above the embeds (optional)', onChange: (v) => { m.content = v; dirty(); } }));
       m.embeds.forEach((_, i) => box.appendChild(visualEmbed(mi, i)));
-      if (m.embeds.length < 10) { const add = el('button', 'btn secondary small', '+ Add embed'); add.type = 'button'; add.addEventListener('click', () => addEmbed(mi)); box.appendChild(add); }
+      if (m.embeds.length < 10) { const add = el('button', 'btn secondary small', `+ Add embed to message ${mi + 1}`); add.type = 'button'; add.style.marginTop = '0.4rem'; add.addEventListener('click', () => addEmbed(mi)); box.appendChild(add); }
       return box;
     }
 
@@ -690,11 +690,14 @@
       $('vIncluded').innerHTML = idx ? includedHtml() : '';
       $('vContentWrap').style.display = idx ? 'none' : '';
       $('vAddRow').style.display = idx ? 'none' : '';
+      $('vAddEmbed').style.display = idx ? 'none' : '';
       const ve = $('vEmbeds'); ve.innerHTML = '';
       if (idx) ve.appendChild(visualIndexEmbed());
       else {
         $('vContentWrap').replaceChildren(editable('gd-content', state.content, { placeholder: 'Message text above the embeds (optional)', onChange: (v) => { state.content = v; $('content').value = v; dirty(); } }));
         state.embeds.forEach((_, i) => ve.appendChild(visualEmbed(0, i)));
+        // Under the first message's own embeds (not at the bottom, where it read as the last message's).
+        $('vAddEmbed').textContent = state.extra.length ? '+ Add embed to message 1' : '+ Add embed';
         $('vAddEmbed').style.display = state.embeds.length >= 10 ? 'none' : '';
       }
       $('vExtra').replaceChildren(...(idx ? [] : state.extra.map((_, k) => visualMessage(k + 1))));
@@ -745,7 +748,7 @@
             <button class="gd-tbtn" type="button" onclick="if(confirm('Remove message ${mi + 1} from this post?')) removeMsg(${mi})">🗑</button></div>
           <label class="field"><span>Message text above the embeds <span class="muted" style="font-weight:400;">(optional)</span></span><textarea class="md-in ac-on" rows="2" maxlength="2000" oninput="msgAt(${mi}).content=this.value; dirty(); syncPreview()">${esc(m.content)}</textarea></label>
           ${m.embeds.map((e, i) => codeEmbedHtml(mi, e, i, m.embeds.length)).join('')}
-          ${m.embeds.length < 10 ? `<button class="btn secondary small" type="button" onclick="addEmbed(${mi})">+ Add embed</button>` : ''}
+          ${m.embeds.length < 10 ? `<button class="btn secondary small" type="button" onclick="addEmbed(${mi})">+ Add embed to message ${mi + 1}</button>` : ''}
         </div>`;
       }).join('');
     }
