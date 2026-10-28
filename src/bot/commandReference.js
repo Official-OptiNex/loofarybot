@@ -21,7 +21,8 @@ module.exports = [
       { usage: '/loof reroll', perm: 'Admin', description: 'Draw a new winner for an ended giveaway.' },
       { usage: '/loof delete', perm: 'Admin', description: 'Delete a giveaway and its message.' },
       { usage: '/loof entries', perm: 'Admin', description: 'See who entered a giveaway, with bonus entries and winners.' },
-      { usage: '/loof list', perm: 'Admin', description: 'Running giveaways (with entries and jump links) and recently ended ones.' }
+      { usage: '/loof list', perm: 'Admin', description: 'Running giveaways (with entries and jump links) and recently ended ones.' },
+      { usage: '/loof servers · leave', perm: 'Bot owner', description: 'List every server the bot is in (name, ID, members, owner) to spot one you didn’t add, and leave a server by ID.' }
     ]
   },
   {
