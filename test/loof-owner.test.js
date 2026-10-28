@@ -20,9 +20,19 @@ function fakeInteraction(sub, { userId, serverId } = {}) {
 }
 
 (async () => {
+  const { ChannelType, PermissionFlagsBits, Collection } = require(root + 'node_modules/discord.js');
   const left = [];
-  const guild = (id, name, n) => ({ id, name, memberCount: n, fetchOwner: async () => ({ user: { tag: 'owner#1' } }), leave: async () => { left.push(id); } });
-  const client = { guilds: { cache: new Map([['s1', guild('s1', 'Alpha', 10)], ['s2', guild('s2', 'Beta', 5)]]) } };
+  // A guild whose first text channel can mint invites; `canInvite:false` → no invitable channel.
+  const guild = (id, name, n, canInvite = true) => {
+    const me = { id: 'bot' };
+    const chan = {
+      id: id + 'c', type: ChannelType.GuildText,
+      permissionsFor: () => ({ has: (p) => canInvite && p === PermissionFlagsBits.CreateInstantInvite }),
+      createInvite: async () => ({ code: 'inv' + id })
+    };
+    return { id, name, memberCount: n, members: { me }, channels: { cache: new Collection([[chan.id, chan]]) }, fetchOwner: async () => ({ user: { tag: 'owner#1' } }), leave: async () => { left.push(id); } };
+  };
+  const client = { guilds: { cache: new Map([['s1', guild('s1', 'Alpha', 10)], ['s2', guild('s2', 'Beta', 5, false)]]) } };
 
   // Non-owner is rejected for both.
   let i = fakeInteraction('servers', { userId: 'someone' });
@@ -52,6 +62,23 @@ function fakeInteraction(sub, { userId, serverId } = {}) {
   assert.match(i._calls.edit.content, /not in a server/i);
   assert.deepEqual(left, ['s2'], 'an unknown id leaves nothing else');
   console.log('✓ /loof leave: owner-only, leaves by id, handles an unknown id');
+
+  // Owner invite (all servers): a 1-use link where possible, a warning where not.
+  i = fakeInteraction('invite', { userId: OWNER });
+  await loof.execute(i, client);
+  const inv = i._calls.edit.embeds[0].data;
+  assert.match(inv.title, /One-time invites/);
+  assert.match(inv.description, /discord\.gg\/invs1/, 'Alpha gets a one-time invite link');
+  assert.match(inv.description, /Beta.*⚠️/s, 'Beta (no invite permission) is flagged, not linked');
+  // Non-owner cannot.
+  i = fakeInteraction('invite', { userId: 'someone' });
+  await loof.execute(i, client);
+  assert.match(i._calls.reply.content, /bot-owner/, 'a non-owner cannot make invites');
+  // A specific unknown id.
+  i = fakeInteraction('invite', { userId: OWNER, serverId: 'nope' });
+  await loof.execute(i, client);
+  assert.match(i._calls.edit.content, /not in a server/i);
+  console.log('✓ /loof invite: owner-only, 1-use links, flags servers it can’t invite from');
 
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

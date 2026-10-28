@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ChannelType, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const Giveaway = require('../../database/models/Giveaway');
 const { isAuthorized } = require('../utils/permissions');
 const { LOOFARY_USER_ID } = require('../../config');
@@ -133,6 +133,12 @@ const data = new SlashCommandBuilder()
       .setDescription('Bot owner: make LoofaryBot leave a server by ID')
       .addStringOption((opt) => opt.setName('server_id').setDescription('The server ID (copy it from /loof servers)').setRequired(true))
   )
+  .addSubcommand((sub) =>
+    sub
+      .setName('invite')
+      .setDescription('Bot owner: make a one-time (1 use · 1h) invite to a server — or all of them')
+      .addStringOption((opt) => opt.setName('server_id').setDescription('A specific server ID (leave empty for every server)'))
+  )
   .addSubcommand((sub) => sub.setName('help').setDescription('Browse every LoofaryBot command by category'));
 
 // Subcommands that do a Discord API call plus a database round trip before replying — defer so
@@ -155,13 +161,28 @@ function pingFromOptions(interaction) {
 
 const findGiveaway = (interaction, messageId) => Giveaway.findOne({ messageId: String(messageId).trim(), guildId: interaction.guildId });
 
+// Makes a single-use, 1-hour invite to a guild in the first channel the bot can create one in.
+const INVITABLE_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildVoice];
+async function makeOneTimeInvite(guild) {
+  const me = guild.members.me;
+  if (!me) return { error: 'not ready in that server' };
+  const channel = guild.channels.cache.find(
+    (c) => INVITABLE_TYPES.includes(c.type) && typeof c.createInvite === 'function' && c.permissionsFor(me)?.has(PermissionFlagsBits.CreateInstantInvite)
+  );
+  if (!channel) return { error: 'no channel I can invite from' };
+  const invite = await channel.createInvite({ maxAge: 3600, maxUses: 1, unique: true, reason: 'Owner audit — one-time invite' }).catch((e) => ({ error: e.message }));
+  if (!invite || invite.error) return { error: invite?.error || 'invite failed' };
+  return { url: `https://discord.gg/${invite.code}` };
+}
+
 async function execute(interaction, client) {
   const sub = interaction.options.getSubcommand();
   if (sub === 'help') {
     return interaction.reply({ ...buildHelpMessage(client, interaction.guildId), ephemeral: true });
   }
-  // Bot-owner-only: list / leave the servers the bot is in (a global capability, not per-server).
-  if (sub === 'servers' || sub === 'leave') {
+  // Bot-owner-only: list / leave / make a one-time invite to the servers the bot is in (a global
+  // capability, not per-server).
+  if (sub === 'servers' || sub === 'leave' || sub === 'invite') {
     if (interaction.user.id !== LOOFARY_USER_ID) {
       return interaction.reply({ content: '❌ That’s a bot-owner command.', ephemeral: true });
     }
@@ -178,7 +199,23 @@ async function execute(interaction, client) {
         .setColor('#5865f2')
         .setTitle(`🤖 In ${guilds.length} server${guilds.length === 1 ? '' : 's'}`)
         .setDescription((lines.join('\n') || 'Not in any servers.').slice(0, 4096))
-        .setFooter({ text: 'Leave one with /loof leave server_id:<id>' });
+        .setFooter({ text: 'Invite: /loof invite · Leave: /loof leave server_id:<id>' });
+      return interaction.editReply({ embeds: [embed] });
+    }
+    if (sub === 'invite') {
+      const id = interaction.options.getString('server_id')?.trim();
+      const targets = id ? [client.guilds.cache.get(id)].filter(Boolean) : [...client.guilds.cache.values()];
+      if (id && !targets.length) return interaction.editReply({ content: `❌ I'm not in a server with ID \`${id}\`. Run \`/loof servers\` to see the list.` });
+      const lines = [];
+      for (const g of targets) {
+        const r = await makeOneTimeInvite(g);
+        lines.push(`• **${g.name}** (\`${g.id}\`): ${r.url ? `<${r.url}>` : `⚠️ ${r.error}`}`);
+      }
+      const embed = new EmbedBuilder()
+        .setColor('#5865f2')
+        .setTitle('🔗 One-time invites · 1 use · expires in 1 hour')
+        .setDescription((lines.join('\n') || 'Not in any servers.').slice(0, 4096))
+        .setFooter({ text: 'Each link works once. ⚠️ means I lack Create Invite in any channel there.' });
       return interaction.editReply({ embeds: [embed] });
     }
     // leave
