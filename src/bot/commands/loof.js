@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, EmbedBuilder } = require('discord.js');
 const Giveaway = require('../../database/models/Giveaway');
 const { isAuthorized } = require('../utils/permissions');
+const { LOOFARY_USER_ID } = require('../../config');
 const { buildHelpMessage } = require('../cogs/modules/help');
 const { formatDuration } = require('../utils/duration');
 const giveawayForm = require('../cogs/modules/giveawayForm');
@@ -125,6 +126,13 @@ const data = new SlashCommandBuilder()
   .addSubcommand((sub) => sub.setName('delete').setDescription('Delete a giveaway and its message').addStringOption((opt) => messageIdOption(opt)))
   .addSubcommand((sub) => sub.setName('list').setDescription('Running giveaways and recently ended ones'))
   .addSubcommand((sub) => sub.setName('ping').setDescription('Check bot websocket and API latency'))
+  .addSubcommand((sub) => sub.setName('servers').setDescription('Bot owner: list every server LoofaryBot is in'))
+  .addSubcommand((sub) =>
+    sub
+      .setName('leave')
+      .setDescription('Bot owner: make LoofaryBot leave a server by ID')
+      .addStringOption((opt) => opt.setName('server_id').setDescription('The server ID (copy it from /loof servers)').setRequired(true))
+  )
   .addSubcommand((sub) => sub.setName('help').setDescription('Browse every LoofaryBot command by category'));
 
 // Subcommands that do a Discord API call plus a database round trip before replying — defer so
@@ -152,6 +160,40 @@ async function execute(interaction, client) {
   if (sub === 'help') {
     return interaction.reply({ ...buildHelpMessage(client, interaction.guildId), ephemeral: true });
   }
+  // Bot-owner-only: list / leave the servers the bot is in (a global capability, not per-server).
+  if (sub === 'servers' || sub === 'leave') {
+    if (interaction.user.id !== LOOFARY_USER_ID) {
+      return interaction.reply({ content: '❌ That’s a bot-owner command.', ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    if (sub === 'servers') {
+      const guilds = [...client.guilds.cache.values()].sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
+      const lines = await Promise.all(
+        guilds.map(async (g) => {
+          const owner = await g.fetchOwner().then((o) => o.user.tag).catch(() => 'unknown');
+          return `• **${g.name}** — \`${g.id}\` · ${(g.memberCount || 0).toLocaleString('en-US')} members · owner ${owner}`;
+        })
+      );
+      const embed = new EmbedBuilder()
+        .setColor('#5865f2')
+        .setTitle(`🤖 In ${guilds.length} server${guilds.length === 1 ? '' : 's'}`)
+        .setDescription((lines.join('\n') || 'Not in any servers.').slice(0, 4096))
+        .setFooter({ text: 'Leave one with /loof leave server_id:<id>' });
+      return interaction.editReply({ embeds: [embed] });
+    }
+    // leave
+    const id = String(interaction.options.getString('server_id')).trim();
+    const guild = client.guilds.cache.get(id);
+    if (!guild) return interaction.editReply({ content: `❌ I'm not in a server with ID \`${id}\`. Run \`/loof servers\` to see the list.` });
+    const name = guild.name;
+    try {
+      await guild.leave();
+    } catch (err) {
+      return interaction.editReply({ content: `❌ Couldn't leave **${name}**: ${err.message}` });
+    }
+    return interaction.editReply({ content: `✅ Left **${name}** (\`${id}\`).` });
+  }
+
   if (sub !== 'ping' && !isAuthorized(interaction)) {
     return interaction.reply({ content: '❌ Only Administrators or @loofary can use LoofaryBot giveaway commands.', ephemeral: true });
   }
