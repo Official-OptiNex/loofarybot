@@ -7,16 +7,29 @@
   <link rel="stylesheet" href="/css/style.css">
   <script src="/js/theme.js"></script>
   <style>
-    .ar-list .row{display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid var(--border,#2a2d31);}
+    .ar-list .row{display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0;border-top:1px solid var(--border,#2a2d31);}
     .ar-list .row:first-child{border-top:none;}
-    .ar-multi{display:flex;flex-wrap:wrap;gap:0.35rem;max-height:140px;overflow:auto;}
-    .ar-multi .chip{cursor:pointer;user-select:none;}
-    .ar-multi .chip input{margin-right:0.25rem;}
+    .ar-list .row.active{background:rgba(88,101,242,0.08);border-radius:8px;}
+    .ar-ex{display:inline-flex;align-items:center;gap:0.25rem;}
+    /* token / searchable multi-select */
+    .ar-picker{border:1px solid var(--border,#2a2d31);border-radius:8px;padding:0.3rem;background:var(--input-bg,rgba(255,255,255,0.03));position:relative;}
+    .ar-picker .tokens{display:flex;flex-wrap:wrap;gap:0.3rem;align-items:center;}
+    .ar-token{display:inline-flex;align-items:center;gap:0.3rem;background:var(--accent,#5865f2);color:#fff;border-radius:12px;padding:0.12rem 0.55rem;font-size:0.78rem;line-height:1.4;}
+    .ar-token.role{background:#4e5d94;}
+    .ar-token button{background:none;border:none;color:#fff;cursor:pointer;font-size:0.9rem;line-height:1;padding:0;opacity:0.8;}
+    .ar-token button:hover{opacity:1;}
+    .ar-picker input.search{border:none;background:none;outline:none;flex:1;min-width:110px;color:inherit;font-size:0.85rem;padding:0.25rem;}
+    .ar-drop{position:absolute;left:0;right:0;top:100%;z-index:30;max-height:230px;overflow:auto;background:var(--card,#1e1f24);border:1px solid var(--border,#2a2d31);border-radius:8px;margin-top:3px;box-shadow:0 8px 24px rgba(0,0,0,0.35);display:none;}
+    .ar-drop.open{display:block;}
+    .ar-opt{padding:0.42rem 0.65rem;cursor:pointer;font-size:0.85rem;display:flex;align-items:center;gap:0.4rem;}
+    .ar-opt.active,.ar-opt:hover{background:var(--accent,#5865f2);color:#fff;}
+    .ar-opt.none{cursor:default;opacity:0.6;}
+    .ar-hash{opacity:0.6;}
   </style>
 </head>
 <body class="site">
   <%- include('partials/site-bar') %>
-  <main class="site-main" style="max-width:900px; margin:0 auto; padding:1.2rem 16px;">
+  <main class="site-main" style="max-width:920px; margin:0 auto; padding:1.2rem 16px;">
     <div class="page-heading">
       <div>
         <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
@@ -26,17 +39,17 @@
     </div>
 
     <div class="card">
-      <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:1.2rem; flex-wrap:wrap;">
         <label class="switch-row" style="display:flex; align-items:center; gap:0.5rem;">
           <span><strong>Auto-replies</strong></span>
           <label class="switch"><input type="checkbox" id="enabled" <%= settings.enabled ? 'checked' : '' %> onchange="saveSettings()"><span class="track"></span></label>
           <span class="muted" id="enabledLabel"><%= settings.enabled ? 'on' : 'off' %></span>
         </label>
-        <label class="field" style="margin:0;"><span>Cooldown (seconds, per channel)</span>
-          <input id="cooldown" type="number" min="0" max="3600" value="<%= settings.cooldownSeconds %>" style="max-width:120px;" onchange="saveSettings()">
+        <label class="field" style="margin:0;"><span>Cooldown <span class="muted" style="font-weight:400;">(s, per channel)</span></span>
+          <input id="cooldown" type="number" min="0" max="3600" value="<%= settings.cooldownSeconds %>" style="max-width:110px;" onchange="saveSettings()">
         </label>
-        <label class="field" style="margin:0;"><span>Only reply under level <span class="muted" style="font-weight:400;">(0 = everyone)</span></span>
-          <input id="maxLevel" type="number" min="0" max="1000" value="<%= settings.maxLevel %>" style="max-width:120px;" onchange="saveSettings()">
+        <label class="field" style="margin:0;"><span>Only reply under level <span class="muted" style="font-weight:400;">(0 = all)</span></span>
+          <input id="maxLevel" type="number" min="0" max="1000" value="<%= settings.maxLevel %>" style="max-width:110px;" onchange="saveSettings()">
         </label>
         <span class="muted" id="settingsStatus" style="margin-left:auto; font-size:0.82rem;"></span>
       </div>
@@ -70,8 +83,8 @@
       </div>
 
       <div style="display:flex; gap:1rem; flex-wrap:wrap;">
-        <div class="field" style="flex:1; min-width:220px;"><span>Exclude channels</span><div class="ar-multi" id="exChannels"><% channels.forEach((c) => { %><label class="chip"><input type="checkbox" value="<%= c.id %>"> #<%= c.name %></label><% }) %></div></div>
-        <div class="field" style="flex:1; min-width:220px;"><span>Exclude roles</span><div class="ar-multi" id="exRoles"><% roles.forEach((r) => { %><label class="chip"><input type="checkbox" value="<%= r.id %>"> <%= r.name %></label><% }) %></div></div>
+        <div class="field" style="flex:1; min-width:250px;"><span>Exclude channels <span class="muted" style="font-weight:400;">— won’t fire here</span></span><div class="ar-picker" id="exChannels"></div></div>
+        <div class="field" style="flex:1; min-width:250px;"><span>Exclude roles <span class="muted" style="font-weight:400;">— these members won’t trigger it</span></span><div class="ar-picker" id="exRoles"></div></div>
       </div>
 
       <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.6rem;">
@@ -83,33 +96,79 @@
   </main>
 
   <script id="data" type="application/json"><%- JSON.stringify(settings).replace(/</g, '\\u003c') %></script>
+  <script id="channelsData" type="application/json"><%- JSON.stringify(channels).replace(/</g, '\\u003c') %></script>
+  <script id="rolesData" type="application/json"><%- JSON.stringify(roles).replace(/</g, '\\u003c') %></script>
   <script>
     const GUILD = '<%= guild.id %>';
     let S = JSON.parse(document.getElementById('data').textContent);
+    const CHANNELS = JSON.parse(document.getElementById('channelsData').textContent);
+    const ROLES = JSON.parse(document.getElementById('rolesData').textContent);
+    const CH = new Map(CHANNELS.map((c)=>[c.id,c.name]));
+    const RO = new Map(ROLES.map((r)=>[r.id,r.name]));
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, (c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const post = async (p, body) => { const r = await fetch(`/dashboard/${GUILD}/autoreplies/${p}`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body) }); return { status:r.status, ...(await r.json().catch(()=>({}))) }; };
-    const setMulti = (containerId, ids) => document.querySelectorAll(`#${containerId} input`).forEach((c)=>{ c.checked = (ids||[]).includes(c.value); });
-    const getMulti = (containerId) => [...document.querySelectorAll(`#${containerId} input:checked`)].map((c)=>c.value);
+
+    // ---- searchable token picker (chips + filter dropdown)
+    function makePicker(el, items, kind){
+      const label = (i)=> kind==='channel' ? '#'+i.name : i.name;
+      let selected = [];
+      el.innerHTML = `<div class="tokens"></div><div class="ar-drop"></div>`;
+      const tokens = el.querySelector('.tokens');
+      const drop = el.querySelector('.ar-drop');
+      const input = document.createElement('input');
+      input.className='search'; input.placeholder=`Add a ${kind}…`;
+      function renderTokens(){
+        tokens.innerHTML = selected.map((id)=>{ const n = (kind==='channel'?CH:RO).get(id); return `<span class="ar-token ${kind==='role'?'role':''}">${kind==='channel'?'<span class="ar-hash">#</span>':''}${esc(n||id)}<button type="button" data-id="${esc(id)}" aria-label="Remove">×</button></span>`; }).join('');
+        tokens.appendChild(input);
+      }
+      function renderDrop(){
+        const q = input.value.trim().toLowerCase();
+        const opts = items.filter((i)=>!selected.includes(i.id) && (!q || i.name.toLowerCase().includes(q))).slice(0,60);
+        drop.innerHTML = opts.length ? opts.map((i,idx)=>`<div class="ar-opt ${idx===0?'active':''}" data-id="${esc(i.id)}">${kind==='channel'?'<span class="ar-hash">#</span>':''}${esc(i.name)}</div>`).join('')
+          : `<div class="ar-opt none">${items.length?'No matches':'None available'}</div>`;
+      }
+      const open = ()=>{ renderDrop(); drop.classList.add('open'); };
+      const close = ()=> drop.classList.remove('open');
+      function add(id){ if(id && !selected.includes(id)){ selected.push(id); renderTokens(); } input.value=''; input.focus(); renderDrop(); }
+      tokens.addEventListener('click', (e)=>{ const b=e.target.closest('button[data-id]'); if(b){ selected=selected.filter((x)=>x!==b.dataset.id); renderTokens(); renderDrop(); input.focus(); } });
+      input.addEventListener('focus', open);
+      input.addEventListener('input', open);
+      input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); const a=drop.querySelector('.ar-opt[data-id]'); if(a) add(a.dataset.id); } else if(e.key==='Escape'){ close(); } else if(e.key==='Backspace' && !input.value && selected.length){ selected.pop(); renderTokens(); renderDrop(); } });
+      drop.addEventListener('mousedown', (e)=>{ const o=e.target.closest('.ar-opt[data-id]'); if(o){ e.preventDefault(); add(o.dataset.id); } });
+      document.addEventListener('click', (e)=>{ if(!el.contains(e.target)) close(); });
+      renderTokens();
+      return { get:()=>selected.slice(), set:(ids)=>{ selected=(ids||[]).filter((id)=>(kind==='channel'?CH:RO).has(id)||true); renderTokens(); renderDrop(); } };
+    }
+    const chPicker = makePicker($('exChannels'), CHANNELS, 'channel');
+    const rolePicker = makePicker($('exRoles'), ROLES, 'role');
+
+    const exLabel = (t)=>{
+      const parts = [];
+      if (t.ignoreChannelIds.length) parts.push('🚫 ' + t.ignoreChannelIds.slice(0,3).map((id)=>'#'+(CH.get(id)||'?')).join(' ') + (t.ignoreChannelIds.length>3?` +${t.ignoreChannelIds.length-3}`:''));
+      if (t.ignoreRoleIds.length) parts.push('🛡️ ' + t.ignoreRoleIds.slice(0,3).map((id)=>'@'+(RO.get(id)||'?')).join(' ') + (t.ignoreRoleIds.length>3?` +${t.ignoreRoleIds.length-3}`:''));
+      return parts.join(' · ');
+    };
 
     function renderList() {
       $('count').textContent = S.triggers.length;
       if (!S.triggers.length) { $('list').innerHTML = '<p class="muted" style="font-size:0.85rem;">No auto-replies yet — press + New.</p>'; return; }
+      const cur = $('id').value;
       $('list').innerHTML = S.triggers.map((t)=>`
-        <div class="row">
+        <div class="row ${t.id===cur?'active':''}">
           <label class="switch"><input type="checkbox" ${t.enabled?'checked':''} onchange="toggle('${esc(t.id)}',this.checked)"><span class="track"></span></label>
           <div style="flex:1; min-width:0; cursor:pointer;" onclick="edit('${esc(t.id)}')">
-            <div style="font-weight:600;">${esc(t.name)} <span class="muted" style="font-weight:400; font-size:0.78rem;">· ${esc(t.match)}</span></div>
-            <div class="muted" style="font-size:0.78rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${(t.keywords||[]).map(esc).join(', ')}${t.ignoreChannelIds.length||t.ignoreRoleIds.length?` · excludes ${t.ignoreChannelIds.length} ch / ${t.ignoreRoleIds.length} role`:''}</div>
+            <div style="font-weight:600;">${esc(t.name)} <span class="muted" style="font-weight:400; font-size:0.78rem;">· ${esc(t.match)}${t.requireAll?' (all)':''}</span></div>
+            <div class="muted" style="font-size:0.78rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${(t.keywords||[]).map(esc).join(', ')}${exLabel(t)?' · '+exLabel(t):''}</div>
           </div>
           <button class="btn small secondary" onclick="edit('${esc(t.id)}')">Edit</button>
           <button class="btn small danger" onclick="del('${esc(t.id)}','${esc(t.name).replace(/'/g,"\\'")}')">✕</button>
         </div>`).join('');
     }
-    function newTrigger(){ $('id').value=''; $('name').value=''; $('keywords').value=''; $('response').value=''; $('responseJson').value=''; $('match').value='word'; $('requireAll').checked=false; $('asReply').checked=true; $('caseSensitive').checked=false; $('deleteTrigger').checked=false; setMulti('exChannels',[]); setMulti('exRoles',[]); $('editorTitle').textContent='New auto-reply'; $('editorStatus').textContent=''; }
+    function newTrigger(){ $('id').value=''; $('name').value=''; $('keywords').value=''; $('response').value=''; $('responseJson').value=''; $('match').value='word'; $('requireAll').checked=false; $('asReply').checked=true; $('caseSensitive').checked=false; $('deleteTrigger').checked=false; chPicker.set([]); rolePicker.set([]); $('editorTitle').textContent='New auto-reply'; $('editorStatus').textContent=''; renderList(); }
     function edit(id){ const t=S.triggers.find((x)=>x.id===id); if(!t) return; $('id').value=t.id; $('name').value=t.name; $('keywords').value=(t.keywords||[]).join(', '); $('match').value=t.match; $('requireAll').checked=!!t.requireAll; $('asReply').checked=t.reply!==false; $('caseSensitive').checked=!!t.caseSensitive; $('deleteTrigger').checked=!!t.deleteTrigger;
       if (t.response && typeof t.response==='object'){ $('response').value=t.response.content||''; $('responseJson').value=JSON.stringify(t.response,null,2); } else { $('response').value=t.response||''; $('responseJson').value=''; }
-      setMulti('exChannels',t.ignoreChannelIds); setMulti('exRoles',t.ignoreRoleIds); $('editorTitle').textContent='Editing: '+t.name; $('editorStatus').textContent=''; window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); }
+      chPicker.set(t.ignoreChannelIds); rolePicker.set(t.ignoreRoleIds); $('editorTitle').textContent='Editing: '+t.name; $('editorStatus').textContent=''; renderList(); window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); }
 
     async function saveTrigger(){
       let response = $('response').value.trim();
@@ -117,15 +176,16 @@
       if (rj) { try { response = JSON.parse(rj); } catch(e){ $('editorStatus').textContent='⚠️ Embed JSON invalid: '+e.message; return; } }
       const body = { id: $('id').value||undefined, name:$('name').value.trim(), match:$('match').value, keywords:$('keywords').value, response,
         reply:$('asReply').checked, caseSensitive:$('caseSensitive').checked, deleteTrigger:$('deleteTrigger').checked, requireAll:$('requireAll').checked,
-        ignoreChannelIds:getMulti('exChannels'), ignoreRoleIds:getMulti('exRoles') };
+        ignoreChannelIds:chPicker.get(), ignoreRoleIds:rolePicker.get() };
       $('editorStatus').textContent='Saving…';
       const r = await post('save', body);
       if (!r.ok){ $('editorStatus').textContent='❌ '+(r.error||'Failed.'); return; }
-      S = r.settings; renderList(); $('editorStatus').textContent='✅ Saved.';
-      const match = S.triggers.find((t)=>t.keywords.join(',')===$('keywords').value.split(',').map(s=>s.trim()).filter(Boolean).join(',') && t.name===body.name);
+      S = r.settings;
+      const match = S.triggers.find((t)=>t.keywords.join(',')===$('keywords').value.split(',').map((s)=>s.trim()).filter(Boolean).join(',') && t.name===body.name);
       if (match) $('id').value = match.id;
+      renderList(); $('editorStatus').textContent='✅ Saved.';
     }
-    async function del(id,name){ if(!confirm('Delete “'+name+'”?')) return; const r=await post('delete',{id}); if(!r.ok){ alert(r.error||'Failed.'); return; } S=r.settings; renderList(); if($('id').value===id) newTrigger(); }
+    async function del(id,name){ if(!confirm('Delete “'+name+'”?')) return; const r=await post('delete',{id}); if(!r.ok){ alert(r.error||'Failed.'); return; } S=r.settings; if($('id').value===id) newTrigger(); else renderList(); }
     async function toggle(id,on){ const r=await post('toggle',{id,on}); if(r.ok){ S=r.settings; } }
     async function saveSettings(){ $('settingsStatus').textContent='Saving…'; const r=await post('settings',{enabled:$('enabled').checked, cooldownSeconds:$('cooldown').value, maxLevel:$('maxLevel').value}); if(!r.ok){ $('settingsStatus').textContent='❌ '+(r.error||'Failed.'); return; } $('settingsStatus').textContent='✅ Saved.'; $('enabledLabel').textContent=r.settings.enabled?'on':'off'; }
 
