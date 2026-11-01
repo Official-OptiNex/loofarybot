@@ -5,6 +5,7 @@ const { noteActivity } = require('../cogs/modules/chatDrops');
 const { handleCounting } = require('../cogs/modules/counting');
 const { handleAutomod } = require('../cogs/modules/automod');
 const { handleShopMessage } = require('../cogs/modules/shop');
+const { handleAutoReply } = require('../cogs/modules/autoReplies');
 const { noteChat } = require('../cogs/modules/xpPot');
 const { getCachedConfig } = require('../../database/configCache');
 const { reportError } = require('../utils/errorReporter');
@@ -27,6 +28,7 @@ module.exports = function registerMessageCreateEvent(client) {
         noteChat(message); // Daily XP Pot: who's been chatting before the draw
         await handleCounting(message, guildConfig); // counting game channel (still earns normal XP)
         handleShopMessage(message, guildConfig).catch(() => null); // auto-react bought in the XP shop
+        handleAutoReply(message, guildConfig).catch(() => null); // keyword auto-replies (all channels)
       }
       await handleMessageXp(message);
     } catch (err) {

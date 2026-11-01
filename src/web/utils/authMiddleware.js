@@ -26,6 +26,7 @@ const MOD_PAGES = {
   embed: 'Embed Builder',
   botchat: 'Bot Chat (speak as the bot)',
   guides: 'Guides',
+  autoreplies: 'Auto-Replies',
   applications: 'Applications'
 };
 const DEFAULT_MOD_PAGES = ['leaderboard', 'commands', 'logviewer'];

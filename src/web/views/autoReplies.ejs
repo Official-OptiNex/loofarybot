@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto-Replies | <%= guild.name %></title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
+  <style>
+    .ar-list .row{display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-top:1px solid var(--border,#2a2d31);}
+    .ar-list .row:first-child{border-top:none;}
+    .ar-multi{display:flex;flex-wrap:wrap;gap:0.35rem;max-height:140px;overflow:auto;}
+    .ar-multi .chip{cursor:pointer;user-select:none;}
+    .ar-multi .chip input{margin-right:0.25rem;}
+  </style>
+</head>
+<body class="site">
+  <%- include('partials/site-bar') %>
+  <main class="site-main" style="max-width:900px; margin:0 auto; padding:1.2rem 16px;">
+    <div class="page-heading">
+      <div>
+        <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
+        <h1 style="font-size:1.45rem; margin-top:0.2rem;">💬 Auto-Replies</h1>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">The bot watches <strong>every channel</strong> for your keywords and replies. Use <code>{user}</code>, <code>{username}</code>, <code>{server}</code>, <code>{channel}</code> in the response.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+        <label class="switch-row" style="display:flex; align-items:center; gap:0.5rem;">
+          <span><strong>Auto-replies</strong></span>
+          <label class="switch"><input type="checkbox" id="enabled" <%= settings.enabled ? 'checked' : '' %> onchange="saveSettings()"><span class="track"></span></label>
+          <span class="muted" id="enabledLabel"><%= settings.enabled ? 'on' : 'off' %></span>
+        </label>
+        <label class="field" style="margin:0;"><span>Cooldown (seconds, per channel)</span>
+          <input id="cooldown" type="number" min="0" max="3600" value="<%= settings.cooldownSeconds %>" style="max-width:120px;" onchange="saveSettings()">
+        </label>
+        <span class="muted" id="settingsStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;"><h3 style="margin:0;">Triggers (<span id="count"><%= settings.triggers.length %></span>)</h3><button class="btn small" type="button" onclick="newTrigger()">+ New</button></div>
+      <div class="ar-list" id="list"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;" id="editorTitle">New auto-reply</h3>
+      <input type="hidden" id="id">
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <label class="field" style="flex:1; min-width:180px;"><span>Name</span><input id="name" maxlength="80" placeholder="e.g. Greeting"></label>
+        <label class="field" style="flex:1; min-width:160px;"><span>Match</span>
+          <select id="match"><% matchModes.forEach((m) => { %><option value="<%= m %>"><%= m %></option><% }) %></select>
+        </label>
+      </div>
+      <label class="field"><span>Keywords <span class="muted" style="font-weight:400;">(comma-separated)</span></span><input id="keywords" placeholder="hello, hi, hey"></label>
+      <label class="field"><span>Response</span><textarea id="response" rows="3" maxlength="2000" placeholder="Hey {user}, welcome! 👋"></textarea></label>
+      <details><summary class="muted" style="cursor:pointer; font-size:0.85rem;">Advanced: rich embed JSON (overrides the text above)</summary>
+        <textarea id="responseJson" rows="6" spellcheck="false" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre; margin-top:0.4rem;" placeholder='{ "content": "", "embeds": [ { "description": "…" } ] }'></textarea>
+      </details>
+
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin:0.5rem 0;">
+        <label class="chip"><input type="checkbox" id="asReply" checked> Reply to the message</label>
+        <label class="chip"><input type="checkbox" id="caseSensitive"> Case-sensitive</label>
+        <label class="chip"><input type="checkbox" id="deleteTrigger"> Delete the triggering message</label>
+      </div>
+
+      <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+        <div class="field" style="flex:1; min-width:220px;"><span>Exclude channels</span><div class="ar-multi" id="exChannels"><% channels.forEach((c) => { %><label class="chip"><input type="checkbox" value="<%= c.id %>"> #<%= c.name %></label><% }) %></div></div>
+        <div class="field" style="flex:1; min-width:220px;"><span>Exclude roles</span><div class="ar-multi" id="exRoles"><% roles.forEach((r) => { %><label class="chip"><input type="checkbox" value="<%= r.id %>"> <%= r.name %></label><% }) %></div></div>
+      </div>
+
+      <div class="field-row" style="align-items:center; gap:0.5rem; margin-top:0.6rem;">
+        <button class="btn" type="button" onclick="saveTrigger()">💾 Save auto-reply</button>
+        <button class="btn secondary small" type="button" onclick="newTrigger()">Clear</button>
+        <span class="muted" id="editorStatus" style="margin-left:auto; font-size:0.82rem;"></span>
+      </div>
+    </div>
+  </main>
+
+  <script id="data" type="application/json"><%- JSON.stringify(settings).replace(/</g, '\\u003c') %></script>
+  <script>
+    const GUILD = '<%= guild.id %>';
+    let S = JSON.parse(document.getElementById('data').textContent);
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, (c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const post = async (p, body) => { const r = await fetch(`/dashboard/${GUILD}/autoreplies/${p}`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body) }); return { status:r.status, ...(await r.json().catch(()=>({}))) }; };
+    const setMulti = (containerId, ids) => document.querySelectorAll(`#${containerId} input`).forEach((c)=>{ c.checked = (ids||[]).includes(c.value); });
+    const getMulti = (containerId) => [...document.querySelectorAll(`#${containerId} input:checked`)].map((c)=>c.value);
+
+    function renderList() {
+      $('count').textContent = S.triggers.length;
+      if (!S.triggers.length) { $('list').innerHTML = '<p class="muted" style="font-size:0.85rem;">No auto-replies yet — press + New.</p>'; return; }
+      $('list').innerHTML = S.triggers.map((t)=>`
+        <div class="row">
+          <label class="switch"><input type="checkbox" ${t.enabled?'checked':''} onchange="toggle('${esc(t.id)}',this.checked)"><span class="track"></span></label>
+          <div style="flex:1; min-width:0; cursor:pointer;" onclick="edit('${esc(t.id)}')">
+            <div style="font-weight:600;">${esc(t.name)} <span class="muted" style="font-weight:400; font-size:0.78rem;">· ${esc(t.match)}</span></div>
+            <div class="muted" style="font-size:0.78rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${(t.keywords||[]).map(esc).join(', ')}${t.ignoreChannelIds.length||t.ignoreRoleIds.length?` · excludes ${t.ignoreChannelIds.length} ch / ${t.ignoreRoleIds.length} role`:''}</div>
+          </div>
+          <button class="btn small secondary" onclick="edit('${esc(t.id)}')">Edit</button>
+          <button class="btn small danger" onclick="del('${esc(t.id)}','${esc(t.name).replace(/'/g,"\\'")}')">✕</button>
+        </div>`).join('');
+    }
+    function newTrigger(){ $('id').value=''; $('name').value=''; $('keywords').value=''; $('response').value=''; $('responseJson').value=''; $('match').value='word'; $('asReply').checked=true; $('caseSensitive').checked=false; $('deleteTrigger').checked=false; setMulti('exChannels',[]); setMulti('exRoles',[]); $('editorTitle').textContent='New auto-reply'; $('editorStatus').textContent=''; }
+    function edit(id){ const t=S.triggers.find((x)=>x.id===id); if(!t) return; $('id').value=t.id; $('name').value=t.name; $('keywords').value=(t.keywords||[]).join(', '); $('match').value=t.match; $('asReply').checked=t.reply!==false; $('caseSensitive').checked=!!t.caseSensitive; $('deleteTrigger').checked=!!t.deleteTrigger;
+      if (t.response && typeof t.response==='object'){ $('response').value=t.response.content||''; $('responseJson').value=JSON.stringify(t.response,null,2); } else { $('response').value=t.response||''; $('responseJson').value=''; }
+      setMulti('exChannels',t.ignoreChannelIds); setMulti('exRoles',t.ignoreRoleIds); $('editorTitle').textContent='Editing: '+t.name; $('editorStatus').textContent=''; window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); }
+
+    async function saveTrigger(){
+      let response = $('response').value.trim();
+      const rj = $('responseJson').value.trim();
+      if (rj) { try { response = JSON.parse(rj); } catch(e){ $('editorStatus').textContent='⚠️ Embed JSON invalid: '+e.message; return; } }
+      const body = { id: $('id').value||undefined, name:$('name').value.trim(), match:$('match').value, keywords:$('keywords').value, response,
+        reply:$('asReply').checked, caseSensitive:$('caseSensitive').checked, deleteTrigger:$('deleteTrigger').checked,
+        ignoreChannelIds:getMulti('exChannels'), ignoreRoleIds:getMulti('exRoles') };
+      $('editorStatus').textContent='Saving…';
+      const r = await post('save', body);
+      if (!r.ok){ $('editorStatus').textContent='❌ '+(r.error||'Failed.'); return; }
+      S = r.settings; renderList(); $('editorStatus').textContent='✅ Saved.';
+      const match = S.triggers.find((t)=>t.keywords.join(',')===$('keywords').value.split(',').map(s=>s.trim()).filter(Boolean).join(',') && t.name===body.name);
+      if (match) $('id').value = match.id;
+    }
+    async function del(id,name){ if(!confirm('Delete “'+name+'”?')) return; const r=await post('delete',{id}); if(!r.ok){ alert(r.error||'Failed.'); return; } S=r.settings; renderList(); if($('id').value===id) newTrigger(); }
+    async function toggle(id,on){ const r=await post('toggle',{id,on}); if(r.ok){ S=r.settings; } }
+    async function saveSettings(){ $('settingsStatus').textContent='Saving…'; const r=await post('settings',{enabled:$('enabled').checked, cooldownSeconds:$('cooldown').value}); if(!r.ok){ $('settingsStatus').textContent='❌ '+(r.error||'Failed.'); return; } $('settingsStatus').textContent='✅ Saved.'; $('enabledLabel').textContent=r.settings.enabled?'on':'off'; }
+
+    renderList(); newTrigger();
+  </script>
+</body>
+</html>

@@ -403,6 +403,33 @@ const GuildConfigSchema = new mongoose.Schema(
       default: []
     },
 
+    // --- Auto-replies: watch every channel for keywords and reply (/autoreply, dashboard Auto-Replies) ---
+    autoReplies: {
+      enabled: { type: Boolean, default: false },
+      cooldownSeconds: { type: Number, default: 3 }, // per trigger, per channel — stops a reply storm
+      triggers: {
+        type: [
+          new mongoose.Schema(
+            {
+              id: { type: String, required: true }, // short stable id
+              name: { type: String, default: '' },
+              keywords: { type: [String], default: [] },
+              match: { type: String, default: 'word' }, // word | contains | exact | starts | regex
+              caseSensitive: { type: Boolean, default: false },
+              reply: { type: Boolean, default: true }, // reply to the message vs a plain send
+              deleteTrigger: { type: Boolean, default: false }, // delete the message that triggered it
+              response: { type: mongoose.Schema.Types.Mixed, default: null }, // a string, or { content, embeds }
+              ignoreChannelIds: { type: [String], default: [] }, // channels this trigger ignores
+              ignoreRoleIds: { type: [String], default: [] }, // members with any of these roles don't trigger it
+              enabled: { type: Boolean, default: true }
+            },
+            { _id: false }
+          )
+        ],
+        default: []
+      }
+    },
+
     // --- Auto-Role ---
     autoRoleId: { type: String, default: null },
     autoRoleEnabled: { type: Boolean, default: true }
