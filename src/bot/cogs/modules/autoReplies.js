@@ -3,7 +3,9 @@
 // Config lives on GuildConfig.autoReplies, so the message handler reads it from the cached config with
 // no extra database hit. See /autoreply and the dashboard Auto-Replies page.
 const GuildConfig = require('../../../database/models/GuildConfig');
+const UserLevel = require('../../../database/models/UserLevel');
 const EmbedJson = require('../../../web/static/js/embed-json');
+const { levelForXp } = require('./leveling');
 
 const MATCH_MODES = ['word', 'contains', 'exact', 'starts', 'regex'];
 const MAX_TRIGGERS = 50;
@@ -13,6 +15,7 @@ function autoRepliesSettings(config) {
   return {
     enabled: !!a.enabled,
     cooldownSeconds: Number.isFinite(a.cooldownSeconds) ? Math.max(0, Math.min(3600, a.cooldownSeconds)) : 3,
+    maxLevel: Number.isFinite(a.maxLevel) ? Math.max(0, Math.min(1000, a.maxLevel)) : 0, // only reply under this level (0 = everyone)
     triggers: (Array.isArray(a.triggers) ? a.triggers : []).map((t) => ({
       id: t.id,
       name: t.name || '',
@@ -106,6 +109,14 @@ function onCooldown(guildId, triggerId, channelId, seconds) {
   return false;
 }
 
+// True when the message author's XP level is below `maxLevel` (so auto-replies target newcomers).
+async function memberUnderLevel(message, config, maxLevel) {
+  if (!maxLevel) return true;
+  const rec = await UserLevel.findOne({ guildId: message.guild.id, userId: message.author.id }, { xp: 1, level: 1 }).lean().catch(() => null);
+  const level = rec ? (typeof rec.level === 'number' ? rec.level : levelForXp(rec.xp || 0, config?.levelXpBase)) : 0;
+  return level < maxLevel;
+}
+
 /**
  * Checks a message against the guild's auto-reply triggers and replies to the first match.
  * Returns true when it replied. Never throws into the message handler.
@@ -122,6 +133,8 @@ async function handleAutoReply(message, config) {
     if (trigger.ignoreChannelIds.includes(message.channelId)) continue;
     if (trigger.ignoreRoleIds.length && message.member?.roles?.cache?.some((r) => trigger.ignoreRoleIds.includes(r.id))) continue;
     if (!matchesTrigger(trigger, content)) continue;
+    // Optional: only reply to members under a level (newcomers). Checked once, only after a match.
+    if (s.maxLevel && !(await memberUnderLevel(message, config, s.maxLevel))) return false;
     if (onCooldown(message.guild.id, trigger.id, message.channelId, s.cooldownSeconds)) return false;
 
     const payload = buildPayload(trigger, message);
@@ -206,6 +219,11 @@ async function saveSettings(guild, input) {
     const c = Number.parseInt(input.cooldownSeconds, 10);
     if (!(c >= 0 && c <= 3600)) return { error: 'Cooldown must be 0–3600 seconds.' };
     patch['autoReplies.cooldownSeconds'] = c;
+  }
+  if (input.maxLevel !== undefined && input.maxLevel !== null && input.maxLevel !== '') {
+    const m = Number.parseInt(input.maxLevel, 10);
+    if (!(m >= 0 && m <= 1000)) return { error: 'Max level must be 0–1000 (0 = reply to everyone).' };
+    patch['autoReplies.maxLevel'] = m;
   }
   await GuildConfig.updateOne({ guildId: guild.id }, { $set: patch }, { upsert: true });
   const fresh = await GuildConfig.findOne({ guildId: guild.id }, { autoReplies: 1 }).lean();

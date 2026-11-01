@@ -5,7 +5,8 @@ const root=require('path').join(__dirname,'..')+'/'; const assert=require('asser
 const { Collection } = require(root+'node_modules/discord.js');
 const { store } = require('./helpers/memstore');
 const GuildConfig=require(root+'src/database/models/GuildConfig');
-store(GuildConfig);
+const UserLevel=require(root+'src/database/models/UserLevel');
+store(GuildConfig); store(UserLevel);
 const A=require(root+'src/bot/cogs/modules/autoReplies');
 
 // ---- fake message
@@ -62,6 +63,16 @@ const cfg=()=>GuildConfig.findOne({guildId:'g'}).lean();
   assert.equal(await A.handleAutoReply(message('hi', { channelId:'c2' }), await cfg()), false, 'excluded channel is ignored');
   assert.equal(await A.handleAutoReply(message('hi', { roleIds:['vip'] }), await cfg()), false, 'excluded role is ignored');
   assert.equal(await A.handleAutoReply(message('hi', { channelId:'c1' }), await cfg()), true, 'still fires elsewhere');
+
+  // ---- maxLevel: only reply to members under the level (targets newcomers)
+  await A.saveSettings(guild,{ maxLevel:3 });
+  await UserLevel.updateOne({ guildId:'g', userId:'u1' },{ $set:{ level:5 } },{ upsert:true });
+  assert.equal(await A.handleAutoReply(message('hi'), await cfg()), false, 'level 5 ≥ maxLevel 3 → no reply');
+  await UserLevel.updateOne({ guildId:'g', userId:'u1' },{ $set:{ level:1 } });
+  assert.equal(await A.handleAutoReply(message('hi'), await cfg()), true, 'level 1 < 3 → replies');
+  assert.match((await A.saveSettings(guild,{ maxLevel:9999 })).error, /Max level/, 'maxLevel bounds');
+  await A.saveSettings(guild,{ maxLevel:0 }); // back to everyone for the rest
+  assert.equal(await A.handleAutoReply(message('hi'), await cfg()), true, 'maxLevel 0 → replies to everyone');
 
   // ---- bots never trigger it
   assert.equal(await A.handleAutoReply(message('hi', { bot:true }), await cfg()), false, 'bot messages are ignored');

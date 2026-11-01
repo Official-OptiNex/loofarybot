@@ -63,7 +63,7 @@ router.post('/:guildId/autoreplies/toggle', requireAuth, requireGuildAccess, req
 });
 
 router.post('/:guildId/autoreplies/settings', requireAuth, requireGuildAccess, requirePage('autoreplies'), auditTrail, async (req, res) => {
-  const r = await autoReplies.saveSettings(req.guild, { enabled: req.body.enabled, cooldownSeconds: req.body.cooldownSeconds });
+  const r = await autoReplies.saveSettings(req.guild, { enabled: req.body.enabled, cooldownSeconds: req.body.cooldownSeconds, maxLevel: req.body.maxLevel });
   if (r.error) return res.status(400).json({ ok: false, error: r.error });
   res.locals.audit = { section: 'Auto-Replies', action: 'Updated auto-reply settings', detail: '' };
   res.json({ ok: true, settings: r.settings });

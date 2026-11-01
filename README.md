@@ -677,6 +677,8 @@ Watch **every channel** for keywords and reply automatically — a lightweight "
 - **Exclusions:** each trigger can **ignore specific channels** and **ignore members with chosen roles**.
 - **Anti-spam:** a per-channel cooldown (default 3s) stops a reply storm, and only the first matching
   trigger fires per message. Bots never trigger it, and responses never ping `@everyone`/roles.
+- **Target newcomers (optional):** set a **max level** so auto-replies only fire for members *under* it
+  (e.g. 3 → only levels 0–2) — keeps the FAQ replies aimed at new members, not veterans. 0 = everyone.
 - **Set up anywhere:** `/autoreply add keywords:… response:…` (with `match`, `as_reply`,
   `delete_trigger`, `ignore_channel`, `ignore_role`), `/autoreply exclude`, `/autoreply list/toggle/remove`,
   and `/autoreply settings` (master switch + cooldown). The dashboard page adds rich-embed responses and

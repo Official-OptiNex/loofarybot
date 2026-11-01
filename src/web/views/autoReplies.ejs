@@ -35,6 +35,9 @@
         <label class="field" style="margin:0;"><span>Cooldown (seconds, per channel)</span>
           <input id="cooldown" type="number" min="0" max="3600" value="<%= settings.cooldownSeconds %>" style="max-width:120px;" onchange="saveSettings()">
         </label>
+        <label class="field" style="margin:0;"><span>Only reply under level <span class="muted" style="font-weight:400;">(0 = everyone)</span></span>
+          <input id="maxLevel" type="number" min="0" max="1000" value="<%= settings.maxLevel %>" style="max-width:120px;" onchange="saveSettings()">
+        </label>
         <span class="muted" id="settingsStatus" style="margin-left:auto; font-size:0.82rem;"></span>
       </div>
     </div>
@@ -124,7 +127,7 @@
     }
     async function del(id,name){ if(!confirm('Delete “'+name+'”?')) return; const r=await post('delete',{id}); if(!r.ok){ alert(r.error||'Failed.'); return; } S=r.settings; renderList(); if($('id').value===id) newTrigger(); }
     async function toggle(id,on){ const r=await post('toggle',{id,on}); if(r.ok){ S=r.settings; } }
-    async function saveSettings(){ $('settingsStatus').textContent='Saving…'; const r=await post('settings',{enabled:$('enabled').checked, cooldownSeconds:$('cooldown').value}); if(!r.ok){ $('settingsStatus').textContent='❌ '+(r.error||'Failed.'); return; } $('settingsStatus').textContent='✅ Saved.'; $('enabledLabel').textContent=r.settings.enabled?'on':'off'; }
+    async function saveSettings(){ $('settingsStatus').textContent='Saving…'; const r=await post('settings',{enabled:$('enabled').checked, cooldownSeconds:$('cooldown').value, maxLevel:$('maxLevel').value}); if(!r.ok){ $('settingsStatus').textContent='❌ '+(r.error||'Failed.'); return; } $('settingsStatus').textContent='✅ Saved.'; $('enabledLabel').textContent=r.settings.enabled?'on':'off'; }
 
     renderList(); newTrigger();
   </script>

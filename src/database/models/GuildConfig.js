@@ -407,6 +407,7 @@ const GuildConfigSchema = new mongoose.Schema(
     autoReplies: {
       enabled: { type: Boolean, default: false },
       cooldownSeconds: { type: Number, default: 3 }, // per trigger, per channel — stops a reply storm
+      maxLevel: { type: Number, default: 0 }, // only reply to members under this XP level (0 = everyone)
       triggers: {
         type: [
           new mongoose.Schema(
