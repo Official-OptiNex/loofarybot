@@ -213,6 +213,19 @@ module.exports = [
     ]
   },
   {
+    id: 'autoreplies',
+    group: 'Auto-Replies',
+    icon: '💬',
+    blurb: 'Watch every channel for keywords and reply automatically — text or a rich embed, with channel/role exclusions.',
+    page: 'autoreplies',
+    commands: [
+      { usage: '/autoreply add', perm: 'Manage Server', description: 'Add a keyword → response trigger (watches all channels). Match whole word / contains / exact / starts-with / regex; options for case, reply-vs-send, delete-the-message, and {user}/{server}/{channel} placeholders.' },
+      { usage: '/autoreply exclude', perm: 'Manage Server', description: 'Add or remove a channel or role exclusion on a trigger (members with an excluded role, or messages in an excluded channel, don’t trigger it).' },
+      { usage: '/autoreply list · toggle · remove', perm: 'Manage Server', description: 'See all triggers, turn one on/off, or delete it.' },
+      { usage: '/autoreply settings', perm: 'Manage Server', description: 'Master on/off switch and the per-channel anti-spam cooldown. Rich embed responses are edited on the dashboard Auto-Replies page.' }
+    ]
+  },
+  {
     id: 'applications',
     group: 'Applications',
     icon: '🗂️',

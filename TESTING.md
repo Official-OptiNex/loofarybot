@@ -350,6 +350,20 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] A moderator **without** the Bot Chat page doesn't see the 💬 icon and can't open the page; give
       them "Bot Chat" in **Server settings → Dashboard access** and they can.
 
+## 8d. Auto-Replies (`/autoreply`, dashboard **💬 Auto-Replies**)
+- [ ] `/autoreply add keywords:hi, hello response:Hey {user}!` → saying "well hello" in **any** channel
+      gets a reply that pings you. Saying "shellout" does **not** (whole-word match by default).
+- [ ] `match:contains` catches a substring; `match:exact` only fires on the exact message; `regex` works.
+- [ ] Post the keyword twice quickly → the second is skipped (per-channel cooldown; tune it in
+      `/autoreply settings cooldown:`).
+- [ ] `/autoreply exclude id:<id> channel:#spam` → the trigger no longer fires in #spam. `ignore_role`
+      (or `/autoreply exclude … role:@Muted`) → members with that role don't trigger it.
+- [ ] `delete_trigger:true` → the message that matched is deleted and the bot posts the response.
+- [ ] `/autoreply toggle` turns one off; `/autoreply settings enabled:false` turns the whole system off.
+- [ ] Dashboard **💬 Auto-Replies**: add/edit a trigger with a **rich embed** response and multi-channel
+      / multi-role exclusions; the on/off switches and list match what `/autoreply list` shows.
+- [ ] A response with `@everyone` in it does **not** ping everyone.
+
 ## 9. Free-tier health (check every week or two)
 - [ ] Logs → Settings → Storage: **Database** well under 75% of 512 MB, **Bot memory** under ~80% of
       512 MB.

@@ -664,6 +664,21 @@ Members spend XP on fun extras. The shop is open by default and comes with start
   it lifts itself. `/counting unban user` removes it; `/counting status` lists who's blocked. (The bot
   needs **Manage Roles**, and its own role above the ban role.)
 
+### Auto-Replies (`/autoreply …` or dashboard **💬 Auto-Replies**)
+Watch **every channel** for keywords and reply automatically — a lightweight "custom commands" / FAQ bot.
+- **Triggers:** each has its own **keywords**, a **match mode** (whole word, contains, exact message,
+  starts-with, or regex), and a **response** — plain text or a rich embed. Text supports `{user}`,
+  `{username}`, `{server}` and `{channel}`.
+- **Options per trigger:** reply to the message (or send a plain message), case-sensitive matching, and
+  optionally **delete the message** that triggered it.
+- **Exclusions:** each trigger can **ignore specific channels** and **ignore members with chosen roles**.
+- **Anti-spam:** a per-channel cooldown (default 3s) stops a reply storm, and only the first matching
+  trigger fires per message. Bots never trigger it, and responses never ping `@everyone`/roles.
+- **Set up anywhere:** `/autoreply add keywords:… response:…` (with `match`, `as_reply`,
+  `delete_trigger`, `ignore_channel`, `ignore_role`), `/autoreply exclude`, `/autoreply list/toggle/remove`,
+  and `/autoreply settings` (master switch + cooldown). The dashboard page adds rich-embed responses and
+  multi-channel/role exclusions.
+
 ### Starboard (`/starboard …` or dashboard **Engagement → Starboard**)
 - Messages with enough ⭐ (default 3, or your own emoji) are reposted in the starboard channel with
   the text, the first image and a jump link.
