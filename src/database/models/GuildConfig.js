@@ -418,6 +418,7 @@ const GuildConfigSchema = new mongoose.Schema(
               caseSensitive: { type: Boolean, default: false },
               reply: { type: Boolean, default: true }, // reply to the message vs a plain send
               deleteTrigger: { type: Boolean, default: false }, // delete the message that triggered it
+              requireAll: { type: Boolean, default: false }, // all keywords must appear (vs any one)
               response: { type: mongoose.Schema.Types.Mixed, default: null }, // a string, or { content, embeds }
               ignoreChannelIds: { type: [String], default: [] }, // channels this trigger ignores
               ignoreRoleIds: { type: [String], default: [] }, // members with any of these roles don't trigger it

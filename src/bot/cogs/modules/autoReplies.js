@@ -22,6 +22,7 @@ function autoRepliesSettings(config) {
       reply: t.reply !== false,
       deleteTrigger: !!t.deleteTrigger,
       response: t.response ?? null,
+      requireAll: !!t.requireAll, // all keywords must appear (great for question phrasings), vs any one
       ignoreChannelIds: Array.isArray(t.ignoreChannelIds) ? t.ignoreChannelIds : [],
       ignoreRoleIds: Array.isArray(t.ignoreRoleIds) ? t.ignoreRoleIds : [],
       enabled: t.enabled !== false
@@ -31,40 +32,44 @@ function autoRepliesSettings(config) {
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Does `content` match this trigger's keywords under its match mode? */
+// Does one keyword hit the content, under the trigger's match mode?
+function keywordHits(trigger, raw, text, content, flags) {
+  const kw = trigger.caseSensitive ? raw : raw.toLowerCase();
+  if (!kw) return false;
+  switch (trigger.match) {
+    case 'exact':
+      return text.trim() === kw.trim();
+    case 'starts':
+      return text.trimStart().startsWith(kw);
+    case 'contains':
+      return text.includes(kw);
+    case 'regex':
+      try {
+        return new RegExp(raw.slice(0, 200), flags).test(content.slice(0, 2000));
+      } catch {
+        return false; // invalid regex — ignore this keyword
+      }
+    case 'word':
+    default: {
+      // Whole-word match when the keyword is word-ish; otherwise fall back to substring.
+      const re = /^[\w]+$/.test(kw) ? new RegExp(`\\b${escapeRe(kw)}\\b`, flags) : null;
+      return re ? re.test(content.slice(0, 2000)) : text.includes(kw);
+    }
+  }
+}
+
+/**
+ * Does `content` match this trigger? By default any one keyword hits; with `requireAll` every keyword
+ * must appear (order-independent) — handy for question phrasings like "what are the codes to redeem?"
+ * (keywords: codes, redeem). `requireAll` only applies to word/contains/regex (not exact/starts).
+ */
 function matchesTrigger(trigger, content) {
   if (!trigger.enabled || !trigger.keywords.length) return false;
   const text = trigger.caseSensitive ? content : content.toLowerCase();
   const flags = trigger.caseSensitive ? '' : 'i';
-  for (const raw of trigger.keywords) {
-    const kw = trigger.caseSensitive ? raw : raw.toLowerCase();
-    if (!kw) continue;
-    switch (trigger.match) {
-      case 'exact':
-        if (text.trim() === kw.trim()) return true;
-        break;
-      case 'starts':
-        if (text.trimStart().startsWith(kw)) return true;
-        break;
-      case 'contains':
-        if (text.includes(kw)) return true;
-        break;
-      case 'regex':
-        try {
-          if (new RegExp(raw.slice(0, 200), flags).test(content.slice(0, 2000))) return true;
-        } catch {
-          /* invalid regex — ignore this keyword */
-        }
-        break;
-      case 'word':
-      default: {
-        // Whole-word match when the keyword is word-ish; otherwise fall back to substring.
-        const re = /^[\w]+$/.test(kw) ? new RegExp(`\\b${escapeRe(kw)}\\b`, flags) : null;
-        if (re ? re.test(content.slice(0, 2000)) : text.includes(kw)) return true;
-      }
-    }
-  }
-  return false;
+  const hit = (raw) => keywordHits(trigger, raw, text, content, flags);
+  const all = trigger.requireAll && ['word', 'contains', 'regex'].includes(trigger.match);
+  return all ? trigger.keywords.every(hit) : trigger.keywords.some(hit);
 }
 
 /** Fills {user} {username} {server} {channel} {count} in a response string. */
@@ -157,6 +162,7 @@ function cleanTrigger(input, guild) {
       caseSensitive: !!input.caseSensitive,
       reply: input.reply !== false,
       deleteTrigger: !!input.deleteTrigger,
+      requireAll: !!input.requireAll,
       response: typeof response === 'string' ? response.slice(0, 2000) : EmbedJson.normalizeMessage(response),
       ignoreChannelIds: valid(input.ignoreChannelIds),
       ignoreRoleIds: valid(input.ignoreRoleIds),

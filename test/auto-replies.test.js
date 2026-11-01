@@ -32,7 +32,13 @@ const cfg=()=>GuildConfig.findOne({guildId:'g'}).lean();
   assert.equal(A.matchesTrigger({...base,match:'starts',keywords:['!help']},'!help me'),true,'starts hit');
   assert.equal(A.matchesTrigger({...base,match:'regex',keywords:['h+i']},'hhhi'),true,'regex hit');
   assert.equal(A.matchesTrigger({...base,match:'word',keywords:['HI'],caseSensitive:true},'hi'),false,'case-sensitive respects case');
-  console.log('✓ matching: word/contains/exact/starts/regex + case sensitivity');
+  // requireAll: every keyword must appear (question phrasings) — order-independent
+  const codes={...base,match:'contains',keywords:['codes','redeem'],requireAll:true};
+  assert.equal(A.matchesTrigger(codes,'what are the codes we can redeem?'),true,'requireAll: both words present → hit');
+  assert.equal(A.matchesTrigger(codes,'redeem the codes please'),true,'requireAll is order-independent');
+  assert.equal(A.matchesTrigger(codes,'nice codes'),false,'requireAll: missing a keyword → no hit');
+  assert.equal(A.matchesTrigger({...codes,requireAll:false},'nice codes'),true,'default (any) still fires on one keyword');
+  console.log('✓ matching: word/contains/exact/starts/regex, case sensitivity, requireAll (all keywords)');
 
   // ---- add a trigger (enables the system)
   let r=await A.addTrigger(guild,{ name:'Greet', keywords:'hi, hello', response:'Hey {user} in {channel}!' });

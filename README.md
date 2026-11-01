@@ -669,6 +669,9 @@ Watch **every channel** for keywords and reply automatically — a lightweight "
 - **Triggers:** each has its own **keywords**, a **match mode** (whole word, contains, exact message,
   starts-with, or regex), and a **response** — plain text or a rich embed. Text supports `{user}`,
   `{username}`, `{server}` and `{channel}`.
+- **Match ALL keywords** (optional): fire only when *every* keyword is in the message, in any order —
+  perfect for question phrasings. e.g. keywords `codes, redeem` catches "what are the codes we can
+  redeem?" and "redeem codes?" but not a stray mention of "codes".
 - **Options per trigger:** reply to the message (or send a plain message), case-sensitive matching, and
   optionally **delete the message** that triggered it.
 - **Exclusions:** each trigger can **ignore specific channels** and **ignore members with chosen roles**.

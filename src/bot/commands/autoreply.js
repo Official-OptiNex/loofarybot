@@ -24,6 +24,7 @@ const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName('response').setDescription('What the bot replies — {user} {username} {server} {channel} work').setRequired(true).setMaxLength(2000))
       .addStringOption((o) => o.setName('name').setDescription('A label for this auto-reply (default: first keyword)'))
       .addStringOption((o) => o.setName('match').setDescription('How to match (default: whole word)').addChoices(...MATCH_CHOICES))
+      .addBooleanOption((o) => o.setName('require_all').setDescription('Require ALL keywords in the message, not just one (great for questions)'))
       .addBooleanOption((o) => o.setName('as_reply').setDescription('Reply to the message (default) vs a plain message'))
       .addBooleanOption((o) => o.setName('case_sensitive').setDescription('Match the exact case (default off)'))
       .addBooleanOption((o) => o.setName('delete_trigger').setDescription('Delete the message that triggered it'))
@@ -68,7 +69,7 @@ async function autocomplete(interaction) {
 }
 
 const describe = (t) =>
-  `\`${t.id}\` ${t.enabled ? '🟢' : '⚪'} **${t.name}** — ${t.match} · [${t.keywords.join(', ')}]` +
+  `\`${t.id}\` ${t.enabled ? '🟢' : '⚪'} **${t.name}** — ${t.match}${t.requireAll ? ' (all)' : ''} · [${t.keywords.join(', ')}]` +
   `${t.ignoreChannelIds.length ? ` · skips ${t.ignoreChannelIds.map((c) => `<#${c}>`).join(' ')}` : ''}` +
   `${t.ignoreRoleIds.length ? ` · not ${t.ignoreRoleIds.map((r) => `<@&${r}>`).join(' ')}` : ''}`;
 
@@ -87,6 +88,7 @@ async function execute(interaction) {
       reply: o.getBoolean('as_reply') ?? true,
       caseSensitive: o.getBoolean('case_sensitive') ?? false,
       deleteTrigger: o.getBoolean('delete_trigger') ?? false,
+      requireAll: o.getBoolean('require_all') ?? false,
       ignoreChannelIds: o.getChannel('ignore_channel') ? [o.getChannel('ignore_channel').id] : [],
       ignoreRoleIds: o.getRole('ignore_role') ? [o.getRole('ignore_role').id] : []
     });
