@@ -39,6 +39,7 @@ router.post('/:guildId/autoreplies/save', requireAuth, requireGuildAccess, requi
     reply: t.reply !== false,
     caseSensitive: !!t.caseSensitive,
     deleteTrigger: !!t.deleteTrigger,
+    requireAll: !!t.requireAll,
     ignoreChannelIds: Array.isArray(t.ignoreChannelIds) ? t.ignoreChannelIds : [],
     ignoreRoleIds: Array.isArray(t.ignoreRoleIds) ? t.ignoreRoleIds : [],
     enabled: t.enabled !== false

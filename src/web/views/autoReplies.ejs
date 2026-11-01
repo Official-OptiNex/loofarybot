@@ -60,6 +60,7 @@
       </details>
 
       <div style="display:flex; gap:1rem; flex-wrap:wrap; margin:0.5rem 0;">
+        <label class="chip" title="Fire only when every keyword appears — good for question phrasings"><input type="checkbox" id="requireAll"> Match ALL keywords</label>
         <label class="chip"><input type="checkbox" id="asReply" checked> Reply to the message</label>
         <label class="chip"><input type="checkbox" id="caseSensitive"> Case-sensitive</label>
         <label class="chip"><input type="checkbox" id="deleteTrigger"> Delete the triggering message</label>
@@ -102,8 +103,8 @@
           <button class="btn small danger" onclick="del('${esc(t.id)}','${esc(t.name).replace(/'/g,"\\'")}')">✕</button>
         </div>`).join('');
     }
-    function newTrigger(){ $('id').value=''; $('name').value=''; $('keywords').value=''; $('response').value=''; $('responseJson').value=''; $('match').value='word'; $('asReply').checked=true; $('caseSensitive').checked=false; $('deleteTrigger').checked=false; setMulti('exChannels',[]); setMulti('exRoles',[]); $('editorTitle').textContent='New auto-reply'; $('editorStatus').textContent=''; }
-    function edit(id){ const t=S.triggers.find((x)=>x.id===id); if(!t) return; $('id').value=t.id; $('name').value=t.name; $('keywords').value=(t.keywords||[]).join(', '); $('match').value=t.match; $('asReply').checked=t.reply!==false; $('caseSensitive').checked=!!t.caseSensitive; $('deleteTrigger').checked=!!t.deleteTrigger;
+    function newTrigger(){ $('id').value=''; $('name').value=''; $('keywords').value=''; $('response').value=''; $('responseJson').value=''; $('match').value='word'; $('requireAll').checked=false; $('asReply').checked=true; $('caseSensitive').checked=false; $('deleteTrigger').checked=false; setMulti('exChannels',[]); setMulti('exRoles',[]); $('editorTitle').textContent='New auto-reply'; $('editorStatus').textContent=''; }
+    function edit(id){ const t=S.triggers.find((x)=>x.id===id); if(!t) return; $('id').value=t.id; $('name').value=t.name; $('keywords').value=(t.keywords||[]).join(', '); $('match').value=t.match; $('requireAll').checked=!!t.requireAll; $('asReply').checked=t.reply!==false; $('caseSensitive').checked=!!t.caseSensitive; $('deleteTrigger').checked=!!t.deleteTrigger;
       if (t.response && typeof t.response==='object'){ $('response').value=t.response.content||''; $('responseJson').value=JSON.stringify(t.response,null,2); } else { $('response').value=t.response||''; $('responseJson').value=''; }
       setMulti('exChannels',t.ignoreChannelIds); setMulti('exRoles',t.ignoreRoleIds); $('editorTitle').textContent='Editing: '+t.name; $('editorStatus').textContent=''; window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); }
 
@@ -112,7 +113,7 @@
       const rj = $('responseJson').value.trim();
       if (rj) { try { response = JSON.parse(rj); } catch(e){ $('editorStatus').textContent='⚠️ Embed JSON invalid: '+e.message; return; } }
       const body = { id: $('id').value||undefined, name:$('name').value.trim(), match:$('match').value, keywords:$('keywords').value, response,
-        reply:$('asReply').checked, caseSensitive:$('caseSensitive').checked, deleteTrigger:$('deleteTrigger').checked,
+        reply:$('asReply').checked, caseSensitive:$('caseSensitive').checked, deleteTrigger:$('deleteTrigger').checked, requireAll:$('requireAll').checked,
         ignoreChannelIds:getMulti('exChannels'), ignoreRoleIds:getMulti('exRoles') };
       $('editorStatus').textContent='Saving…';
       const r = await post('save', body);

@@ -354,6 +354,8 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
 - [ ] `/autoreply add keywords:hi, hello response:Hey {user}!` → saying "well hello" in **any** channel
       gets a reply that pings you. Saying "shellout" does **not** (whole-word match by default).
 - [ ] `match:contains` catches a substring; `match:exact` only fires on the exact message; `regex` works.
+- [ ] **Match ALL keywords:** `/autoreply add keywords:codes, redeem require_all:true response:…` →
+      "what are the codes we can redeem?" and "redeem codes?" fire it; just "nice codes" does **not**.
 - [ ] Post the keyword twice quickly → the second is skipped (per-channel cooldown; tune it in
       `/autoreply settings cooldown:`).
 - [ ] `/autoreply exclude id:<id> channel:#spam` → the trigger no longer fires in #spam. `ignore_role`
