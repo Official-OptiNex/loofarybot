@@ -362,6 +362,8 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       (or `/autoreply exclude … role:@Muted`) → members with that role don't trigger it.
 - [ ] `delete_trigger:true` → the message that matched is deleted and the bot posts the response.
 - [ ] `/autoreply toggle` turns one off; `/autoreply settings enabled:false` turns the whole system off.
+- [ ] **Level limit:** `/autoreply settings maxlevel:3` → the trigger fires for a **level 0–2** member but
+      **not** for a level 3+ member. `maxlevel:0` goes back to replying to everyone.
 - [ ] Dashboard **💬 Auto-Replies**: add/edit a trigger with a **rich embed** response and multi-channel
       / multi-role exclusions; the on/off switches and list match what `/autoreply list` shows.
 - [ ] A response with `@everyone` in it does **not** ping everyone.

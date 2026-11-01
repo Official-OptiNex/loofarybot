@@ -222,7 +222,7 @@ module.exports = [
       { usage: '/autoreply add', perm: 'Manage Server', description: 'Add a keyword → response trigger (watches all channels). Match whole word / contains / exact / starts-with / regex; `require_all` fires only when every keyword is present (great for questions like “what are the codes to redeem?”); options for case, reply-vs-send, delete-the-message, and {user}/{server}/{channel} placeholders.' },
       { usage: '/autoreply exclude', perm: 'Manage Server', description: 'Add or remove a channel or role exclusion on a trigger (members with an excluded role, or messages in an excluded channel, don’t trigger it).' },
       { usage: '/autoreply list · toggle · remove', perm: 'Manage Server', description: 'See all triggers, turn one on/off, or delete it.' },
-      { usage: '/autoreply settings', perm: 'Manage Server', description: 'Master on/off switch and the per-channel anti-spam cooldown. Rich embed responses are edited on the dashboard Auto-Replies page.' }
+      { usage: '/autoreply settings', perm: 'Manage Server', description: 'Master on/off switch, the per-channel anti-spam cooldown, and a `maxlevel` so auto-replies only fire for members under that XP level (e.g. 3 = levels 0–2; 0 = everyone). Rich embed responses are edited on the dashboard Auto-Replies page.' }
     ]
   },
   {

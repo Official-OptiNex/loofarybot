@@ -52,9 +52,10 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) =>
     s
       .setName('settings')
-      .setDescription('Turn auto-replies on/off and set the anti-spam cooldown')
+      .setDescription('Turn auto-replies on/off, set the cooldown, and limit to newer members')
       .addBooleanOption((o) => o.setName('enabled').setDescription('Master switch for all auto-replies'))
       .addIntegerOption((o) => o.setName('cooldown').setDescription('Seconds before the same trigger fires again in a channel (default 3)').setMinValue(0).setMaxValue(3600))
+      .addIntegerOption((o) => o.setName('maxlevel').setDescription('Only reply to members UNDER this XP level (0 = everyone). e.g. 3 = levels 0–2 only').setMinValue(0).setMaxValue(1000))
   );
 
 async function autocomplete(interaction) {
@@ -103,7 +104,7 @@ async function execute(interaction) {
       .setColor(s.enabled ? '#57F287' : '#4E5058')
       .setTitle(`💬 Auto-replies — ${s.enabled ? 'on' : 'off'}`)
       .setDescription(s.triggers.map(describe).join('\n').slice(0, 4096))
-      .setFooter({ text: `${s.triggers.length} trigger(s) · cooldown ${s.cooldownSeconds}s · toggle the whole system with /autoreply settings` });
+      .setFooter({ text: `${s.triggers.length} trigger(s) · cooldown ${s.cooldownSeconds}s · ${s.maxLevel ? `under level ${s.maxLevel} only` : 'all members'} · /autoreply settings` });
     return interaction.reply({ embeds: [embed], ephemeral: true, allowedMentions: { parse: [] } });
   }
 
@@ -137,9 +138,14 @@ async function execute(interaction) {
   }
 
   // settings
-  const res = await autoReplies.saveSettings(guild, { enabled: o.getBoolean('enabled') ?? undefined, cooldownSeconds: o.getInteger('cooldown') ?? undefined });
+  const res = await autoReplies.saveSettings(guild, {
+    enabled: o.getBoolean('enabled') ?? undefined,
+    cooldownSeconds: o.getInteger('cooldown') ?? undefined,
+    maxLevel: o.getInteger('maxlevel') ?? undefined
+  });
   if (res.error) return reply(`❌ ${res.error}`);
-  return reply(`✅ Auto-replies are **${res.settings.enabled ? 'on' : 'off'}** · cooldown **${res.settings.cooldownSeconds}s**.`);
+  const lvl = res.settings.maxLevel ? `members **under level ${res.settings.maxLevel}**` : '**everyone**';
+  return reply(`✅ Auto-replies are **${res.settings.enabled ? 'on' : 'off'}** · cooldown **${res.settings.cooldownSeconds}s** · replies to ${lvl}.`);
 }
 
 module.exports = { data, execute, autocomplete };
