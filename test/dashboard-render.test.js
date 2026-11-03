@@ -45,11 +45,12 @@ const eb=ejs.render(fs.readFileSync(root+'src/web/views/embedBuilder.ejs','utf8'
 for (const m of eb.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Function(m[1]); console.log('embed builder ok');
 if (!/data-forum="1">💬 announcements&lt;\/script&gt;/.test(eb) || !/Forums \(creates a new post\)/.test(eb)) throw new Error('forum channels missing from the embed builder');
 JSON.parse(eb.match(/<script type="application\/json" id="forumData">([\s\S]*?)<\/script>/)[1]); console.log('embed builder lists forum channels (escaped)');
-// FAQ page: same editor shell. Render it, parse its inline script, and confirm the saved message is embedded (escaped).
-const fq=ejs.render(fs.readFileSync(root+'src/web/views/faq.ejs','utf8'),{guild,channels:base.channels,bot:base.bot,message:{content:'Hi</script>',embeds:[{title:'Q'}]},channelId:'c2',isAdmin:true,guidesOnly:false,...{botName:'LoofaryBot',user:null}},{filename:root+'src/web/views/faq.ejs'});
+// FAQ page: the Q&A visual editor. Render it, parse its inline script, and confirm the saved FAQ is embedded (escaped).
+const fq=ejs.render(fs.readFileSync(root+'src/web/views/faq.ejs','utf8'),{guild,channels:base.channels,bot:base.bot,faq:{title:'FAQ</script>',intro:'hi',color:'#abcdef',items:[{q:'Q1',a:'A1'}],channelId:'c2'},defaultTitle:'Frequently Asked Questions',editorData:{emojis:[],channels:[],roles:[]},isAdmin:true,guidesOnly:false,...{botName:'LoofaryBot',user:null}},{filename:root+'src/web/views/faq.ejs'});
 for (const m of fq.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Function(m[1]);
-if (!/id="embeds"/.test(fq) || !/id="pEmbeds"/.test(fq) || !/id="jsonEditor"/.test(fq)) throw new Error('FAQ editor shell missing');
-JSON.parse(fq.match(/<script id="faqData" type="application\/json">([\s\S]*?)<\/script>/)[1]); console.log('faq page ok (editor + preview + json, saved message escaped)');
+if (!/id="vItems"/.test(fq) || !/id="toolbar"/.test(fq) || !/id="jsonEditor"/.test(fq)) throw new Error('FAQ editor shell missing');
+if (!/value="#abcdef"/.test(fq)) throw new Error('FAQ colour not prefilled');
+JSON.parse(fq.match(/<script id="faqData" type="application\/json">([\s\S]*?)<\/script>/)[1]); console.log('faq page ok (visual Q&A editor + toolbar + json, saved FAQ escaped)');
 const S=require('os').tmpdir()+'/loofary-render-';
 const site={botName:'LoofaryBot',botAvatar:'https://cdn.discordapp.com/embed/avatars/0.png',inviteUrl:'https://discord.com/oauth2/authorize?x=1'};
 const { publicCommands } = require(root+'src/web/utils/site');

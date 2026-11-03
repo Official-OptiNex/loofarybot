@@ -213,10 +213,17 @@ const GuildConfigSchema = new mongoose.Schema(
       // How the pinned index post looks: { name, title, color, intro, footer } (see guides.cleanIndex).
       index: { type: mongoose.Schema.Types.Mixed, default: null }
     },
-    // FAQ (/faq, dashboard FAQ). Guide editors build one message (text + up to 10 embeds) in the same
-    // visual / markdown / JSON editor as the Embed Builder; /faq show posts it publicly. See faq.js.
+    // FAQ (/faq, dashboard FAQ). A list of question → answer entries the bot renders into an embed.
+    // Anyone can run /faq to post it; guide editors manage it (/faqedit …, or the dashboard's click-to-edit
+    // visual editor). See cogs/modules/faq.js.
     faq: {
-      message: { type: mongoose.Schema.Types.Mixed, default: null }, // Discord message JSON: { content, embeds: [...] }
+      title: { type: String, default: '' }, // embed title (default "Frequently Asked Questions")
+      intro: { type: String, default: '' }, // optional text shown above the questions (markdown)
+      color: { type: String, default: '#5865f2' },
+      items: {
+        type: [new mongoose.Schema({ q: { type: String, required: true }, a: { type: String, required: true } }, { _id: false })],
+        default: []
+      },
       channelId: { type: String, default: null }, // last channel it was posted to (a handy default for re-posting)
       updatedBy: { type: String, default: null },
       updatedAt: { type: Date, default: null }

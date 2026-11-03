@@ -1,126 +1,128 @@
-// FAQ: the saved message (text + up to 10 embeds), editor permission (shared with guides), and the
-// dashboard route (save / data / post). The editor UI itself is the Embed Builder's, tested elsewhere.
+// FAQ: the Q&A model (items → embed fields, chunked), add/remove/edit helpers, editor permission,
+// the /faq (public post) and /faqedit (editor) commands, and the dashboard save/data/post route.
 process.env.TOKEN = 'x';
 process.env.CLIENT_ID = '123';
 process.env.MONGODB_URI = 'mongodb://x';
 const root = require('path').join(__dirname, '..') + '/';
 const assert = require('assert');
-const { Collection, PermissionsBitField } = require(root + 'node_modules/discord.js');
+const { Collection, PermissionsBitField, PermissionFlagsBits, ChannelType } = require(root + 'node_modules/discord.js');
 const { store } = require('./helpers/memstore');
 const GuildConfig = require(root + 'src/database/models/GuildConfig');
 store(GuildConfig);
 const faq = require(root + 'src/bot/cogs/modules/faq');
 
-const member = (perms, roleIds = []) => ({
-  permissions: { has: (p) => perms.includes(p) },
-  roles: { cache: new Collection(roleIds.map((r) => [r, { id: r }])) }
-});
-const { PermissionFlagsBits } = require(root + 'node_modules/discord.js');
+const member = (perms, roleIds = []) => ({ permissions: { has: (p) => perms.includes(p) }, roles: { cache: new Collection(roleIds.map((r) => [r, { id: r }])) } });
 
 (async () => {
   await GuildConfig.create({ guildId: 'g', guides: { editorRoleIds: ['editor'] } });
+  const guild = { id: 'g' };
 
-  // ---- normalization helpers
-  assert.equal(faq.hasFaq({ content: '', embeds: [] }), false, 'empty is empty');
-  assert.equal(faq.hasFaq({ content: 'hi', embeds: [] }), true, 'text counts');
-  assert.equal(faq.hasFaq({ content: '', embeds: [{ title: 'Q' }] }), true, 'an embed counts');
-  const payload = faq.toPayload({ content: 'Read this', embeds: [{ title: 'Q1', description: 'A1', color: '#ff0000' }] });
-  assert.equal(payload.content, 'Read this');
-  assert.equal(payload.embeds.length, 1);
-  assert.equal(payload.embeds[0].color, 0xff0000, 'hex color normalized to int');
-  // Empty message → content becomes null (so Discord doesn't get an empty string).
-  assert.equal(faq.toPayload({ embeds: [{ title: 'x' }] }).content, null);
-  console.log('✓ hasFaq / toPayload normalize the message the way Discord expects');
+  // ---- render: items become embed fields under a title
+  const r1 = faq.renderEmbeds({ title: '', intro: 'Read me', color: '#5865f2', items: [{ q: 'Codes?', a: 'Yes, in #redeem' }] });
+  assert.equal(r1.length, 1, 'one embed');
+  assert.equal(r1[0].title, faq.DEFAULT_TITLE, 'falls back to the default title');
+  assert.equal(r1[0].description, 'Read me', 'intro becomes the description');
+  assert.equal(r1[0].fields[0].name, 'Codes?');
+  assert.equal(r1[0].fields[0].value, 'Yes, in #redeem');
+  console.log('✓ renderEmbeds: title + intro + a field per question');
 
-  // ---- permission mirrors guide editors (editor role, or Manage Server / Admin)
-  assert.equal(await faq.isEditor(member([], ['editor']), 'g'), true, 'editor role → yes');
-  assert.equal(await faq.isEditor(member([PermissionFlagsBits.ManageGuild]), 'g'), true, 'Manage Server → yes');
-  assert.equal(await faq.isEditor(member([PermissionFlagsBits.Administrator]), 'g'), true, 'Admin → yes');
-  assert.equal(await faq.isEditor(member([], ['random']), 'g'), false, 'a random role → no');
-  assert.equal(await faq.isEditor(null, 'g'), false, 'no member → no');
+  // chunking: >25 questions spill into a second embed (25 fields max per embed)
+  const many = Array.from({ length: 30 }, (_, i) => ({ q: `Q${i}`, a: `A${i}` }));
+  const r2 = faq.renderEmbeds({ items: many });
+  assert.equal(r2.length, 2, 'splits into two embeds');
+  assert.equal(r2[0].fields.length, 25, 'first embed holds 25');
+  assert.equal(r2[1].fields.length, 5, 'rest go to the next');
+  console.log('✓ renderEmbeds chunks past 25 questions into more embeds');
+
+  assert.equal(faq.hasFaq({ items: [] }), false, 'empty is empty');
+  assert.equal(faq.hasFaq({ items: [{ q: 'a', a: 'b' }] }), true, 'a question counts');
+  assert.equal(faq.hasFaq({ intro: 'hi', items: [] }), true, 'intro alone counts');
+
+  // ---- permission mirrors guide editors
+  assert.equal(await faq.isEditor(member([], ['editor']), 'g'), true);
+  assert.equal(await faq.isEditor(member([PermissionFlagsBits.ManageGuild]), 'g'), true);
+  assert.equal(await faq.isEditor(member([], ['nope']), 'g'), false);
   console.log('✓ FAQ editors are guide editors + Manage Server / Admins');
 
-  // ---- saveFaq validates then persists
-  const guild = { id: 'g' };
-  assert.ok((await faq.saveFaq(guild, { message: { content: '', embeds: [] } }, 'u1')).error, 'empty is rejected');
-  // Each field is capped at 1024 chars, so to exceed the 6000-per-embed total we need several fields.
-  const bigFields = Array.from({ length: 7 }, (_, i) => ({ name: `F${i}`, value: 'x'.repeat(1000) }));
-  assert.ok((await faq.saveFaq(guild, { message: { embeds: [{ description: 'hi', fields: bigFields }] } }, 'u1')).error, 'an over-6000 embed is rejected');
+  // ---- add / remove / edit
+  assert.ok((await faq.addItem(guild, '', 'x', 'u')).error, 'needs a question');
+  let res = await faq.addItem(guild, 'How do I rank up?', 'Chat to earn XP.', 'u');
+  assert.ok(!res.error && res.faq.items.length === 1, 'added one');
+  assert.ok((await faq.addItem(guild, 'how do i rank up?', 'dup', 'u')).error, 'rejects a duplicate question (case-insensitive)');
+  await faq.addItem(guild, 'Can I redeem codes?', 'Yes — in #redeem.', 'u');
+  assert.equal((await faq.getFaq('g')).items.length, 2, 'two now');
 
-  const ok = await faq.saveFaq(guild, { message: { content: 'Welcome!', embeds: [{ title: 'Can I redeem codes?', description: 'Yes — in #redeem.' }] } }, 'u1');
-  assert.ok(!ok.error, 'a valid FAQ saves');
-  const loaded = await faq.getFaq('g');
-  assert.equal(loaded.message.content, 'Welcome!');
-  assert.equal(loaded.message.embeds[0].title, 'Can I redeem codes?');
-  assert.equal(loaded.updatedBy, 'u1', 'remembers who saved it');
-  console.log('✓ saveFaq rejects empty / oversized and persists a valid FAQ; getFaq reads it back');
+  res = await faq.editItem(guild, 'can i redeem codes?', { answer: 'Yes, post them in #redeem.' }, 'u');
+  assert.ok(!res.error);
+  assert.equal((await faq.getFaq('g')).items.find((it) => it.q === 'Can I redeem codes?').a, 'Yes, post them in #redeem.', 'answer updated');
+  res = await faq.editItem(guild, 'how do i rank up?', { newQuestion: 'How do I level up?' }, 'u');
+  assert.ok((await faq.getFaq('g')).items.some((it) => it.q === 'How do I level up?'), 'question reworded');
+  assert.ok((await faq.editItem(guild, 'nope', { answer: 'x' }, 'u')).error, 'editing a missing question errors');
 
-  // rememberChannel updates only the channel, not the message or editor
-  await faq.rememberChannel('g', 'c2');
-  const after = await faq.getFaq('g');
-  assert.equal(after.channelId, 'c2');
-  assert.equal(after.message.content, 'Welcome!', 'rememberChannel leaves the message alone');
-  console.log('✓ rememberChannel stores the last channel without touching the message');
+  const rem = await faq.removeItem(guild, 'How do I level up?', 'u');
+  assert.ok(!rem.error && rem.removed === 1 && rem.faq.items.length === 1, 'removed one');
+  assert.ok((await faq.removeItem(guild, 'ghost', 'u')).error, 'removing a missing question errors');
+  console.log('✓ add / remove / edit manage entries (dup + missing guarded)');
 
-  // ---- dashboard route: save / data / post
+  // ---- /faq (public) and /faqedit (editor) commands
+  const { commands } = require(root + 'src/bot/commands/faq');
+  const faqCmd = commands.find((c) => c.data.name === 'faq');
+  const faqEditCmd = commands.find((c) => c.data.name === 'faqedit');
+  assert.ok(faqCmd && faqEditCmd, 'both commands exist');
+  assert.equal(faqEditCmd.data.toJSON().options.length, 4, 'faqedit has dashboard/add/remove/edit');
+
+  // /faq posts publicly (not ephemeral) with embeds
+  let posted = null;
+  await faqCmd.execute({ guildId: 'g', reply: async (o) => { posted = o; } });
+  assert.ok(posted && posted.embeds && posted.embeds.length && !posted.ephemeral, '/faq replies publicly with embeds');
+
+  // /faq on an empty FAQ is a gentle ephemeral note
+  await GuildConfig.updateOne({ guildId: 'g2' }, { $set: { guildId: 'g2' } }, { upsert: true });
+  let note = null;
+  await faqCmd.execute({ guildId: 'g2', reply: async (o) => { note = o; } });
+  assert.ok(note.ephemeral && /set up/i.test(note.content), 'empty FAQ → ephemeral hint');
+
+  // /faqedit is gated to editors
+  const base = { guildId: 'g', guild, user: { id: 'u' }, options: { getSubcommand: () => 'add', getString: (n) => ({ question: 'New Q', answer: 'New A' }[n]) } };
+  let denied = null;
+  await faqEditCmd.execute({ ...base, member: member([], ['nope']), reply: async (o) => { denied = o; } });
+  assert.ok(/Only guide editors/.test(denied.content), 'non-editor denied');
+  let okReply = null;
+  await faqEditCmd.execute({ ...base, member: member([], ['editor']), reply: async (o) => { okReply = o; } });
+  assert.ok(/Added/.test(okReply.content), 'editor can add via /faqedit');
+  console.log('✓ /faq posts publicly; empty is handled; /faqedit gated to editors');
+
+  // ---- dashboard route
   const auth = require(root + 'src/web/utils/authMiddleware');
   auth.requireAuth = (q, s, n) => { q.session = { user: { id: 'u9' } }; n(); };
-  let currentAccess = { level: 'mod', pages: new Set(['faq']) };
-  auth.requireGuildAccess = (q, s, n) => { q.guild = routeGuild; q.access = currentAccess; n(); };
+  auth.requireGuildAccess = (q, s, n) => { q.guild = routeGuild; q.access = { level: 'mod', pages: new Set(['faq']) }; n(); };
   auth.requirePage = () => (q, s, n) => n();
-  const audit = require(root + 'src/web/utils/audit');
-  audit.auditTrail = (q, s, n) => n();
+  require(root + 'src/web/utils/audit').auditTrail = (q, s, n) => n();
 
-  const posted = [];
-  const chan = (type) => ({
-    id: 'c1',
-    type,
-    isTextBased: () => true,
-    permissionsFor: () => new PermissionsBitField(PermissionsBitField.All),
-    send: async (p) => { posted.push(p); return { id: 'm1', url: 'https://discord/x/m1' }; }
-  });
-  const { ChannelType } = require(root + 'node_modules/discord.js');
-  const routeGuild = { id: 'g', members: { me: { id: 'bot' } }, channels: { cache: new Collection([['c1', chan(ChannelType.GuildText)]]) } };
+  const sent = [];
+  const chan = { id: 'c1', type: ChannelType.GuildText, isTextBased: () => true, permissionsFor: () => new PermissionsBitField(PermissionsBitField.All), send: async (p) => { sent.push(p); return { id: 'm1', url: 'https://discord/x/m1' }; } };
+  const routeGuild = { id: 'g', members: { me: { id: 'bot' } }, channels: { cache: new Collection([['c1', chan]]) } };
 
   const express = require(root + 'node_modules/express');
   const app = express();
   app.use(express.json());
   app.use('/dashboard', require(root + 'src/web/routes/faq'));
   const srv = app.listen(0);
-  const base = `http://127.0.0.1:${srv.address().port}/dashboard/g/faq`;
-  const call = async (method, path, body) => {
-    const r = await fetch(base + path, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
-    return { status: r.status, ...(await r.json()) };
-  };
+  const baseUrl = `http://127.0.0.1:${srv.address().port}/dashboard/g/faq`;
+  const call = async (method, path, body) => { const r = await fetch(baseUrl + path, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, ...(await r.json()) }; };
 
-  // GET data returns what we saved earlier
   const data = await call('GET', '/data');
-  assert.ok(data.ok && data.message.content === 'Welcome!', 'GET data returns the saved FAQ');
+  assert.ok(data.ok && Array.isArray(data.faq.items), 'GET data returns the FAQ');
 
-  // POST save stores a new message
-  const saveRes = await call('POST', '/save', { message: { content: 'Edited FAQ', embeds: [] } });
-  assert.ok(saveRes.ok, 'save ok');
-  assert.equal((await faq.getFaq('g')).message.content, 'Edited FAQ', 'save persisted');
+  const save = await call('POST', '/save', { faq: { title: 'Help', intro: '', color: '#ff0000', items: [{ q: 'Q1', a: 'A1' }] } });
+  assert.ok(save.ok && save.faq.items.length === 1 && save.faq.color === '#ff0000', 'save persisted');
+  assert.equal((await call('POST', '/save', { faq: { items: [] } })).status, 400, 'empty save rejected');
 
-  // POST save rejects an empty message
-  const bad = await call('POST', '/save', { message: { content: '', embeds: [] } });
-  assert.equal(bad.status, 400, 'empty save rejected');
-
-  // POST post sends to the channel and saves
-  const postRes = await call('POST', '/post', { message: { content: 'Posted FAQ', embeds: [{ title: 'Hi' }] }, channelId: 'c1' });
-  assert.ok(postRes.ok && postRes.url, 'post ok with a url');
-  assert.equal(posted.length, 1, 'the bot sent one message');
-  assert.equal(posted[0].content, 'Posted FAQ');
-  assert.equal((await faq.getFaq('g')).message.content, 'Posted FAQ', 'posting also saved');
-
-  // POST post without a channel is a clear error
-  const noChan = await call('POST', '/post', { message: { content: 'x' }, channelId: '' });
-  assert.equal(noChan.status, 400, 'post needs a channel');
-  console.log('✓ route: GET data, POST save (with validation) and POST post (sends + saves) all work');
+  const post = await call('POST', '/post', { faq: { title: 'Help', items: [{ q: 'Q1', a: 'A1' }] }, channelId: 'c1' });
+  assert.ok(post.ok && post.url && sent.length === 1 && sent[0].embeds.length, 'post sent an embed');
+  assert.equal((await call('POST', '/post', { faq: { items: [{ q: 'Q', a: 'A' }] }, channelId: '' })).status, 400, 'post needs a channel');
+  console.log('✓ route: data / save (validated) / post (sends embed)');
 
   srv.close();
   process.exit(0);
-})().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+})().catch((e) => { console.error(e); process.exit(1); });

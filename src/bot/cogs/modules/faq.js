@@ -1,27 +1,73 @@
-// FAQ: one saved message (text + up to 10 embeds) per server, built on the dashboard in the same
-// visual / markdown / JSON editor as the Embed Builder (with #channel, @user and :emoji: autocomplete).
-// `/faq show` posts it publicly; `/faq edit` opens the dashboard. It deliberately has none of the
-// guides machinery (no forum, index, categories or approvals) — it's just a message you can post.
-// Who may manage it: guide editors (the same editor roles as /guide) plus Manage Server / Admins.
+// FAQ: a list of question → answer entries, rendered into an embed. Anyone can run /faq to post it in
+// the current channel; guide editors manage it with /faqedit … or the dashboard's click-to-edit editor.
+// Entries become embed fields (question = field name, answer = field value), chunked across embeds so a
+// long FAQ still fits Discord's limits (25 fields and 6,000 characters per embed).
 const GuildConfig = require('../../../database/models/GuildConfig');
 const EmbedJson = require('../../../web/static/js/embed-json');
 const guides = require('./guides');
 
-/** Normalized FAQ settings from a config doc: { message: { content, embeds }, channelId, updatedBy, updatedAt }. */
+const DEFAULT_TITLE = 'Frequently Asked Questions';
+const LIMITS = { title: 256, intro: 4096, question: 256, answer: 1024, items: 100, embeds: 10, fieldsPerEmbed: 25, perEmbed: 5800 };
+
+const str = (v, max) => (typeof v === 'string' ? v : v == null ? '' : String(v)).slice(0, max);
+
+/** Normalized FAQ settings: { title, intro, color, items:[{q,a}], channelId, updatedBy, updatedAt }. */
 function faqSettings(config) {
   const f = (config && config.faq) || {};
+  const items = (Array.isArray(f.items) ? f.items : [])
+    .map((it) => ({ q: str(it?.q, LIMITS.question).trim(), a: str(it?.a, LIMITS.answer) }))
+    .filter((it) => it.q && it.a.trim())
+    .slice(0, LIMITS.items);
   return {
-    message: EmbedJson.normalizeMessage(f.message || { content: '', embeds: [] }),
+    title: str(f.title, LIMITS.title),
+    intro: str(f.intro, LIMITS.intro),
+    color: f.color || '#5865f2',
+    items,
     channelId: f.channelId || null,
     updatedBy: f.updatedBy || null,
     updatedAt: f.updatedAt || null
   };
 }
 
-/** True when there's something worth posting (text or at least one embed). */
-function hasFaq(message) {
-  const m = message || {};
-  return !!((typeof m.content === 'string' && m.content.trim()) || (Array.isArray(m.embeds) && m.embeds.length));
+/** Something worth posting? (at least one Q&A, or an intro.) */
+function hasFaq(f) {
+  return !!(f && ((Array.isArray(f.items) && f.items.length) || (f.intro && f.intro.trim())));
+}
+
+/** Render the FAQ into one or more Discord embeds (questions become fields, chunked to fit the limits). */
+function renderEmbeds(f) {
+  const s = f.items ? f : faqSettings({ faq: f });
+  const title = (s.title && s.title.trim() ? s.title : DEFAULT_TITLE).slice(0, LIMITS.title);
+  const color = EmbedJson.colorToInt(s.color);
+  const embeds = [];
+  let cur = null;
+  let len = 0;
+  const open = (header) => {
+    cur = { color: color == null ? undefined : color, fields: [] };
+    if (header) {
+      cur.title = title;
+      if (s.intro && s.intro.trim()) cur.description = s.intro.slice(0, LIMITS.intro);
+    }
+    len = (cur.title || '').length + (cur.description || '').length;
+    embeds.push(cur);
+  };
+  open(true);
+  for (const it of s.items) {
+    const name = str(it.q, LIMITS.question) || '​';
+    const value = str(it.a, LIMITS.answer) || '​';
+    if (cur.fields.length >= LIMITS.fieldsPerEmbed || len + name.length + value.length > LIMITS.perEmbed) {
+      if (embeds.length >= LIMITS.embeds) break;
+      open(false);
+    }
+    cur.fields.push({ name, value });
+    len += name.length + value.length;
+  }
+  return embeds.map((e) => EmbedJson.normalizeEmbed(e)).filter(Boolean);
+}
+
+/** The payload to hand to channel.send() / interaction.reply() — embeds only, no pings. */
+function toPayload(f) {
+  return { embeds: renderEmbeds(f) };
 }
 
 /** Load the saved FAQ for a guild. */
@@ -36,27 +82,65 @@ async function isEditor(member, guildId) {
   return guides.isEditor(member, s);
 }
 
-/** Validate a message (Discord's limits) and persist it. Returns { error } or { message }. */
-async function saveFaq(guild, { message, channelId }, userId) {
-  const normalized = EmbedJson.normalizeMessage(message || { content: '', embeds: [] });
-  const errors = EmbedJson.validateMessage(normalized);
-  if (errors.length) return { error: errors[0] };
-  if (!hasFaq(normalized)) return { error: 'Add some text or at least one embed before saving the FAQ.' };
-  const set = { 'faq.message': normalized, 'faq.updatedBy': userId || null, 'faq.updatedAt': new Date() };
-  if (channelId !== undefined) set['faq.channelId'] = channelId || null;
+/** Validate the whole FAQ (title/intro/color/items) and persist it. Returns { error } or { faq }. */
+async function saveFaq(guild, input = {}, userId) {
+  const items = (Array.isArray(input.items) ? input.items : [])
+    .map((it) => ({ q: str(it?.q, LIMITS.question).trim(), a: str(it?.a, LIMITS.answer) }))
+    .filter((it) => it.q && it.a.trim());
+  if (items.length > LIMITS.items) return { error: `Up to ${LIMITS.items} questions.` };
+  const faqDoc = {
+    title: str(input.title, LIMITS.title),
+    intro: str(input.intro, LIMITS.intro),
+    color: EmbedJson.intToHex(EmbedJson.colorToInt(input.color)) || '#5865f2',
+    items
+  };
+  if (!hasFaq(faqDoc)) return { error: 'Add at least one question (or some intro text) before saving.' };
+  const set = { 'faq.title': faqDoc.title, 'faq.intro': faqDoc.intro, 'faq.color': faqDoc.color, 'faq.items': faqDoc.items, 'faq.updatedBy': userId || null, 'faq.updatedAt': new Date() };
   await GuildConfig.updateOne({ guildId: guild.id }, { $set: set }, { upsert: true });
-  return { message: normalized };
+  return { faq: faqSettings({ faq: faqDoc }) };
 }
 
-/** Remember the last channel the FAQ was posted to (without touching the message or its edit stamp). */
+/** Add a Q&A entry. Returns { error } or { faq }. */
+async function addItem(guild, question, answer, userId) {
+  const q = str(question, LIMITS.question).trim();
+  const a = str(answer, LIMITS.answer).trim();
+  if (!q || !a) return { error: 'Give both a question and an answer.' };
+  const cur = await getFaq(guild.id);
+  if (cur.items.length >= LIMITS.items) return { error: `The FAQ already has the maximum ${LIMITS.items} questions.` };
+  if (cur.items.some((it) => it.q.toLowerCase() === q.toLowerCase())) return { error: 'There is already a question with that exact text — edit it instead.' };
+  return saveFaq(guild, { ...cur, items: [...cur.items, { q, a }] }, userId);
+}
+
+/** Remove a Q&A entry by its exact question text. Returns { error } or { faq, removed }. */
+async function removeItem(guild, question, userId) {
+  const cur = await getFaq(guild.id);
+  const q = str(question, LIMITS.question).trim().toLowerCase();
+  const kept = cur.items.filter((it) => it.q.toLowerCase() !== q);
+  if (kept.length === cur.items.length) return { error: 'No question matched that — pick one from the list.' };
+  const res = await saveFaq(guild, { ...cur, items: kept }, userId);
+  return res.error ? res : { ...res, removed: cur.items.length - kept.length };
+}
+
+/** Edit an entry found by its current question text: change its answer and/or question. */
+async function editItem(guild, question, { newQuestion, answer }, userId) {
+  const cur = await getFaq(guild.id);
+  const q = str(question, LIMITS.question).trim().toLowerCase();
+  const idx = cur.items.findIndex((it) => it.q.toLowerCase() === q);
+  if (idx < 0) return { error: 'No question matched that — pick one from the list.' };
+  const items = cur.items.map((it, i) =>
+    i === idx
+      ? {
+          q: newQuestion != null && String(newQuestion).trim() ? str(newQuestion, LIMITS.question).trim() : it.q,
+          a: answer != null && String(answer).trim() ? str(answer, LIMITS.answer) : it.a
+        }
+      : it
+  );
+  return saveFaq(guild, { ...cur, items }, userId);
+}
+
+/** Remember the last channel the FAQ was posted to (without touching the content). */
 async function rememberChannel(guildId, channelId) {
   await GuildConfig.updateOne({ guildId }, { $set: { 'faq.channelId': channelId || null } }, { upsert: true }).catch(() => null);
 }
 
-/** The payload to hand to channel.send() — content pings normally, embeds never do. */
-function toPayload(message) {
-  const m = EmbedJson.normalizeMessage(message || { content: '', embeds: [] });
-  return { content: m.content || null, embeds: m.embeds || [] };
-}
-
-module.exports = { faqSettings, hasFaq, getFaq, isEditor, saveFaq, rememberChannel, toPayload };
+module.exports = { DEFAULT_TITLE, LIMITS, faqSettings, hasFaq, renderEmbeds, toPayload, getFaq, isEditor, saveFaq, addItem, removeItem, editItem, rememberChannel };

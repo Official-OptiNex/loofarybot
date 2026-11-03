@@ -216,11 +216,12 @@ module.exports = [
     id: 'faq',
     group: 'FAQ',
     icon: '❓',
-    blurb: 'One editable FAQ message — text plus up to 10 embeds — built in the same visual / markdown / JSON editor as the Embed Builder.',
+    blurb: 'A list of question → answer entries the bot renders into an embed. Anyone can post it; editors manage it with a click-to-edit visual editor.',
     page: 'faq',
     commands: [
-      { usage: '/faq show', perm: 'Guide editor', description: 'Post the server FAQ publicly (in this channel, or a channel you pick). Guide editors and admins only.' },
-      { usage: '/faq edit', perm: 'Guide editor', description: 'Open the dashboard FAQ editor — design the message visually, in markdown, or paste Discord / Discohook JSON, with @user, #channel and :emoji: autocomplete.' }
+      { usage: '/faq', perm: null, description: 'Post the server FAQ in this channel — anyone can use it.' },
+      { usage: '/faqedit dashboard', perm: 'Guide editor', description: 'Open the dashboard FAQ editor: click-to-edit the live Discord preview, set the title / intro / colour, reorder questions, with markdown and @/#/: autocomplete, plus JSON import / export.' },
+      { usage: '/faqedit add · remove · edit', perm: 'Guide editor', description: 'Quickly manage questions from Discord: add a question + answer, remove one, or edit a question or its answer (question name autocompletes).' }
     ]
   },
   {

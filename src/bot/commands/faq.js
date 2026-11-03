@@ -1,7 +1,7 @@
-// /faq — post the server's FAQ publicly (guide editors), or open the dashboard editor for it.
-// The FAQ is one message (text + up to 10 embeds) edited on the dashboard in the same visual /
-// markdown / JSON embed editor as the Embed Builder. See cogs/modules/faq.js.
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
+// /faq — anyone can post the server FAQ in the current channel.
+// /faqedit — guide editors manage it: open the dashboard, or add / remove / edit a question quickly.
+// The FAQ is a list of question → answer entries rendered into an embed. See cogs/modules/faq.js.
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const faq = require('../cogs/modules/faq');
 const { REDIRECT_URI } = require('../../config');
 
@@ -17,59 +17,86 @@ const editorLink = (guildId) => {
   return base ? `${base}/dashboard/${guildId}/faq` : null;
 };
 
-const data = new SlashCommandBuilder()
-  .setName('faq')
-  .setDescription('Post the server FAQ, or edit it')
+/* --------------------------------------------------------------- /faq (everyone) */
+
+const faqData = new SlashCommandBuilder().setName('faq').setDescription('Post the server FAQ in this channel').setDMPermission(false);
+
+async function faqExecute(interaction) {
+  const f = await faq.getFaq(interaction.guildId);
+  if (!faq.hasFaq(f)) {
+    const link = editorLink(interaction.guildId);
+    return interaction.reply({ content: `❌ The FAQ hasn't been set up yet. ${link ? `An editor can add questions here: ${link}` : 'An editor can set it up on the dashboard.'}`, ephemeral: true });
+  }
+  // Public reply: it posts in this channel for everyone to see. Embed text never pings.
+  return interaction.reply({ embeds: faq.toPayload(f).embeds, allowedMentions: { parse: [] } });
+}
+
+/* --------------------------------------------------------------- /faqedit (editors) */
+
+const faqEditData = new SlashCommandBuilder()
+  .setName('faqedit')
+  .setDescription('Manage the server FAQ (guide editors)')
   .setDMPermission(false)
+  .addSubcommand((s) => s.setName('dashboard').setDescription('Open the FAQ editor on the dashboard'))
   .addSubcommand((s) =>
     s
-      .setName('show')
-      .setDescription('Post the FAQ in this channel (guide editors)')
-      .addChannelOption((o) =>
-        o
-          .setName('channel')
-          .setDescription('Post it here instead of the current channel')
-          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-      )
+      .setName('add')
+      .setDescription('Add a question and answer')
+      .addStringOption((o) => o.setName('question').setDescription('The question').setRequired(true).setMaxLength(faq.LIMITS.question))
+      .addStringOption((o) => o.setName('answer').setDescription('The answer (markdown allowed)').setRequired(true).setMaxLength(faq.LIMITS.answer))
   )
-  .addSubcommand((s) => s.setName('edit').setDescription('Open the FAQ editor on the dashboard (guide editors)'));
+  .addSubcommand((s) =>
+    s
+      .setName('remove')
+      .setDescription('Remove a question')
+      .addStringOption((o) => o.setName('question').setDescription('Which question').setRequired(true).setAutocomplete(true))
+  )
+  .addSubcommand((s) =>
+    s
+      .setName('edit')
+      .setDescription('Edit a question or its answer')
+      .addStringOption((o) => o.setName('question').setDescription('Which question').setRequired(true).setAutocomplete(true))
+      .addStringOption((o) => o.setName('answer').setDescription('New answer').setMaxLength(faq.LIMITS.answer))
+      .addStringOption((o) => o.setName('new_question').setDescription('Reword the question').setMaxLength(faq.LIMITS.question))
+  );
 
-async function execute(interaction) {
-  const sub = interaction.options.getSubcommand();
+async function faqEditAutocomplete(interaction) {
+  const typed = (interaction.options.getFocused() || '').toLowerCase();
+  const { items } = await faq.getFaq(interaction.guildId);
+  const choices = items
+    .filter((it) => it.q.toLowerCase().includes(typed))
+    .slice(0, 25)
+    .map((it) => ({ name: it.q.slice(0, 100), value: it.q.slice(0, 100) }));
+  return interaction.respond(choices);
+}
+
+async function faqEditExecute(interaction) {
   const reply = (content) => interaction.reply({ content, ephemeral: true, allowedMentions: { parse: [] } });
-
   if (!(await faq.isEditor(interaction.member, interaction.guildId))) {
-    return reply('🔒 Only guide editors (or admins) can use `/faq`.');
+    return reply('🔒 Only guide editors (or admins) can manage the FAQ.');
   }
+  const sub = interaction.options.getSubcommand();
+  const o = interaction.options;
 
-  if (sub === 'edit') {
+  if (sub === 'dashboard') {
     const link = editorLink(interaction.guildId);
     return reply(link ? `✍️ Edit the FAQ here: ${link}` : 'Open the dashboard’s **FAQ** page to edit it.');
   }
 
-  // show → post the saved FAQ publicly
-  const { message } = await faq.getFaq(interaction.guildId);
-  if (!faq.hasFaq(message)) {
-    const link = editorLink(interaction.guildId);
-    return reply(`❌ The FAQ is empty. ${link ? `Set it up here: ${link}` : 'Set it up on the dashboard’s FAQ page.'}`);
-  }
+  let res;
+  if (sub === 'add') res = await faq.addItem(interaction.guild, o.getString('question'), o.getString('answer'), interaction.user.id);
+  else if (sub === 'remove') res = await faq.removeItem(interaction.guild, o.getString('question'), interaction.user.id);
+  else if (sub === 'edit') res = await faq.editItem(interaction.guild, o.getString('question'), { newQuestion: o.getString('new_question'), answer: o.getString('answer') }, interaction.user.id);
 
-  const target = interaction.options.getChannel('channel') || interaction.channel;
-  if (!target || !target.isTextBased?.()) return reply('❌ Pick a text channel to post the FAQ in.');
-
-  const me = interaction.guild.members.me;
-  if (!me || !target.permissionsFor(me)?.has([PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
-    return reply(`❌ I need **Send Messages** and **Embed Links** in ${target}.`);
-  }
-
-  try {
-    const sent = await target.send(faq.toPayload(message));
-    // Remember where it was posted (a handy default for the dashboard's "Post to channel").
-    await faq.rememberChannel(interaction.guildId, target.id);
-    return reply(`✅ Posted the FAQ in ${target}. ${sent.url}`);
-  } catch (err) {
-    return reply(`❌ Discord rejected the FAQ message — check the image/link URLs. (${err.message})`);
-  }
+  if (!res || res.error) return reply(`❌ ${res ? res.error : 'Unknown action.'}`);
+  const count = res.faq.items.length;
+  const verb = sub === 'add' ? 'Added' : sub === 'remove' ? 'Removed' : 'Updated';
+  return reply(`✅ ${verb}. The FAQ now has **${count}** question${count === 1 ? '' : 's'}. Run **/faq** to post it.`);
 }
 
-module.exports = { data, execute };
+module.exports = {
+  commands: [
+    { data: faqData, execute: faqExecute },
+    { data: faqEditData, execute: faqEditExecute, autocomplete: faqEditAutocomplete }
+  ]
+};

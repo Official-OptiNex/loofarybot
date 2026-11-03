@@ -131,7 +131,7 @@ No manual schema setup needed — Mongoose creates collections automatically on 
 | ✨ Engagement | Birthdays, counting (full maths, grief protection, **secret XP goals**), starboard |
 | 🧮 Calculator | `/calculate` pets / guns / fish upgrade costs — every number configurable per server |
 | 📖 Guides | Forum guide library, visual editor, index post, multi-message guides, guide links, admin approvals |
-| ❓ FAQ | One editable FAQ message (text + up to 10 embeds), posted with `/faq show` — same visual / markdown / JSON editor as the Embed Builder |
+| ❓ FAQ | A question → answer list rendered into an embed; anyone posts it with `/faq`, editors manage it with a click-to-edit visual editor or `/faqedit` |
 | 🗂️ Applications | Apply-for-a-role forms with requirements and a review channel |
 | 👋 Welcome | Welcome / goodbye messages, **"New here?" private intro button** |
 | 🎫 Tickets | Panel button, private channels, claim, transcripts, DM on close |
@@ -745,20 +745,27 @@ editor can update it later and the live post edits itself in place — no deleti
   page**.
 - `/guide editor_add`/`editor_remove` manage editor roles; `/guide legend` rebuilds the index.
 
-### FAQ (`/faq …` or the dashboard's **❓ FAQ** page)
-A single, server-wide FAQ **message** — plain text plus up to **10 embeds in one response** — that editors
-design on the dashboard and post on demand. It has none of the guides machinery (no forum, index,
-categories or approvals); it's just one message you can post.
-- **Edit:** `/faq edit` (or the dashboard's **❓ FAQ** page) opens the **same editor as the Embed Builder**:
-  a **visual builder** with a live Discord-accurate preview, **markdown** in every text field, and a **raw
-  JSON** panel for importing / exporting (paste from Discohook or an AI). Autocomplete for `@users`,
-  `#channels` and `:server emojis:` works throughout. Add, reorder, duplicate and remove embeds and fields;
-  pick colours, images, thumbnails, author and footer.
-- **Post:** `/faq show` posts the saved FAQ **publicly** in the current channel (or `/faq show channel:#faq`
-  to post it elsewhere). The dashboard also has a **🚀 Post it** button with a channel picker, which saves and
-  posts in one go so the posted message and `/faq show` stay in sync.
-- **Who:** `/faq` and the FAQ page are for **guide editors** (the same editor roles as `/guide`) and admins.
-  Guide-editor roles can reach the FAQ page straight from the Guides page (**❓ Edit the FAQ →**).
+### FAQ (`/faq`, `/faqedit …`, or the dashboard's **❓ FAQ** page)
+A server-wide FAQ built from **question → answer entries**. The bot renders them into an embed (each
+question is a field, chunked across embeds so a long FAQ still fits Discord's limits). No forum, index,
+categories or approvals — just a list you post.
+- **Post (anyone):** `/faq` posts the FAQ in the current channel. It's open to everyone, so a helper can pull
+  it up for someone who asks.
+- **Manage (editors):** `/faqedit add question: answer:`, `/faqedit remove question:` and
+  `/faqedit edit question: [answer:] [new_question:]` manage entries right from Discord (the question name
+  autocompletes). `/faqedit dashboard` opens the web editor.
+- **Visual editor:** the dashboard's **❓ FAQ** page is a **click-to-edit** editor — you edit the FAQ right on
+  a live Discord-style preview. Click the title, intro or any question / answer to change it; pick the embed
+  colour; reorder, duplicate or remove questions. A sticky toolbar formats the selected text (bold, italic,
+  underline, strike, headings, lists, quote, code, spoiler, link) and there's an emoji picker; `@users`,
+  `#channels` and `:server emojis:` autocomplete as you type. Answers support full markdown.
+- **JSON:** a **📝 JSON** mode edits the whole FAQ as JSON and imports a file — handy for pasting a list in or
+  moving it between servers (`{ "title": "…", "intro": "…", "color": "#5865f2", "items": [ { "q": "…", "a": "…" } ] }`).
+- **Post from the dashboard:** a channel picker + **🚀 Post** saves and posts in one go, so the posted embed
+  and `/faq` stay in sync.
+- **Who:** posting is open to everyone; managing (the `/faqedit` commands and the dashboard page) is for
+  **guide editors** (the same editor roles as `/guide`) and admins, who can reach the page from the Guides
+  page too (**❓ Edit the FAQ →**).
 
 ### Applications (dashboard **🗂️ Applications** page)
 Apply-for-a-role forms — e.g. "Apply for Guide Editor" — similar to tickets but fully customizable.
