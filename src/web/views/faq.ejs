@@ -5,12 +5,89 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FAQ | <%= guild.name %></title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .faq-head-actions{display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;}
+    .gd-modes{display:inline-flex;border:1px solid var(--border-card,#26293a);border-radius:8px;overflow:hidden;}
+    .gd-modes button{background:transparent;border:0;color:var(--text-muted,#9aa0b4);padding:0.4rem 0.7rem;font-size:0.82rem;cursor:pointer;font-weight:600;}
+    .gd-modes button.on{background:var(--accent-blue,#4f7cff);color:#fff;}
+    .gd-toolbar{position:sticky;top:var(--gd-top,68px);z-index:15;display:flex;flex-wrap:wrap;gap:2px;align-items:center;padding:0.35rem;margin:0.7rem 0 0.4rem;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-card,#26293a);border-radius:8px;}
+    .gd-toolbar button{background:transparent;border:1px solid transparent;color:var(--text-main,#e6e8ef);border-radius:6px;padding:0.3rem 0.5rem;font-size:0.8rem;cursor:pointer;min-width:2rem;}
+    .gd-toolbar button:hover{background:var(--bg-card-hover,#22263a);border-color:var(--border-strong,#353950);}
+    .gd-toolbar .sep{width:1px;align-self:stretch;background:var(--border-card,#26293a);margin:0 0.25rem;}
+    .gd-emoji-pop{position:relative;z-index:30;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-strong,#353950);border-radius:10px;padding:0.5rem;margin-bottom:0.5rem;box-shadow:0 10px 30px rgba(0,0,0,.35);}
+    .gd-emoji-pop input{width:100%;margin-bottom:0.4rem;}
+    .gd-emoji-grid{display:flex;flex-wrap:wrap;gap:2px;max-height:220px;overflow:auto;}
+    .gd-emoji-grid button{background:transparent;border:0;border-radius:6px;width:2.2rem;height:2.2rem;font-size:1.25rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+    .gd-emoji-grid button:hover{background:var(--bg-card-hover,#22263a);}
+    .gd-emoji-grid img{width:1.6rem;height:1.6rem;object-fit:contain;}
+    .gd-emoji-head{width:100%;font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--text-muted,#9aa0b4);margin:0.3rem 0 0.1rem;}
+    .gd-canvas{background:#313338!important;color:#dbdee1;border-radius:10px;padding:0.9rem 1rem;font-size:0.95rem;line-height:1.375;}
+    .gd-bot{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;}
+    .gd-bot-av{width:2rem;height:2rem;border-radius:50%;background:#5865f2;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;}
+    .gd-bot-av img{width:100%;height:100%;object-fit:cover;}
+    .gd-bot-name{font-weight:600;color:#f2f3f5;}
+    .gd-app{background:#5865f2;color:#fff;font-size:0.62rem;padding:1px 4px;border-radius:3px;vertical-align:middle;}
+    .gd-canvas .p-embed{background:#2b2d31;border-radius:4px;padding:0.5rem 1rem 0.75rem 0.75rem;margin:0.4rem 0;max-width:640px;position:relative;border-left:4px solid #5865f2;}
+    .gd-canvas .p-title{font-weight:700;font-size:1.05rem;color:#f2f3f5;margin-top:0.35rem;}
+    .gd-canvas .p-desc{margin-top:0.35rem;font-size:0.875rem;}
+    .gd-canvas a{color:#00a8fc;}
+    .gd-fields{display:flex;flex-direction:column;gap:0.55rem;margin-top:0.6rem;}
+    .p-field-name{font-weight:600;color:#f2f3f5;font-size:0.9rem;}
+    .v-ed{outline:none;border-radius:4px;white-space:pre-wrap;word-wrap:break-word;min-height:1.3em;position:relative;transition:box-shadow .12s;}
+    .v-ed:hover{box-shadow:0 0 0 1px rgba(255,255,255,.12);}
+    .v-ed:focus{box-shadow:0 0 0 2px #5865f2;background:rgba(0,0,0,.12);}
+    .v-ed.is-empty::before{content:attr(data-placeholder);color:#80848e;position:absolute;left:0;top:0;pointer-events:none;font-weight:400;font-size:0.875rem;}
+    .vb{min-height:1.375em;}
+    .vb-h1{font-size:1.5rem;font-weight:700;line-height:1.3;margin:0.3rem 0 0.1rem;color:#f2f3f5;}
+    .vb-h2{font-size:1.25rem;font-weight:700;line-height:1.3;margin:0.3rem 0 0.1rem;color:#f2f3f5;}
+    .vb-h3{font-size:1rem;font-weight:700;line-height:1.3;margin:0.3rem 0 0.1rem;color:#f2f3f5;}
+    .vb-sub{font-size:0.75rem;color:#949ba4;}
+    .vb-li{padding-left:1.1em;position:relative;}
+    .vb-li::before{content:'•';position:absolute;left:0.25em;}
+    .vb-ol{padding-left:1.6em;position:relative;}
+    .vb-ol::before{content:attr(data-n) '.';position:absolute;left:0;min-width:1.3em;text-align:right;}
+    .vb-quote{border-left:4px solid #4e5058;padding-left:0.6em;}
+    .vb-code,.gd-canvas code{background:#1e1f22;border-radius:4px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.82rem;}
+    .vb-code{display:block;padding:0.5em;margin:0.2em 0;white-space:pre-wrap;}
+    .gd-canvas code{padding:0 0.2em;}
+    .v-spoiler{background:#1e1f22;border-radius:3px;padding:0 2px;}
+    .v-emoji{height:1.375em;width:auto;vertical-align:-0.3em;margin:0 0.05em;}
+    .v-atom.mention-pill{background:rgba(88,101,242,.3);color:#c9cdfb;border-radius:3px;padding:0 2px;}
+    .v-emoji-missing{color:#949ba4;}
+    .v-tools{display:flex;flex-wrap:wrap;gap:0.25rem;align-items:center;font-size:0.75rem;margin:-0.1rem 0 0.3rem;padding-bottom:0.35rem;border-bottom:1px dashed #3f4147;}
+    .v-tools-label{color:#949ba4;font-weight:700;margin-right:auto;}
+    .gd-tbtn{background:#383a40;border:0;color:#dbdee1;border-radius:4px;padding:0.15rem 0.45rem;font-size:0.75rem;cursor:pointer;}
+    .gd-tbtn:hover:not(:disabled){background:#4e5058;}
+    .gd-tbtn:disabled{opacity:.4;cursor:default;}
+    .gd-color{display:inline-flex;align-items:center;gap:2px;color:#949ba4;cursor:pointer;}
+    .gd-color input{width:1.6rem;height:1.3rem;padding:0;border:0;background:none;cursor:pointer;}
+    .v-field{background:rgba(0,0,0,.12);border-radius:4px;padding:0.4rem 0.5rem;}
+    .v-field-ctl{display:flex;justify-content:flex-end;gap:0.3rem;align-items:center;font-size:0.72rem;color:#949ba4;margin-top:0.25rem;}
+    .faq-q-label,.faq-a-label{font-size:0.66rem;text-transform:uppercase;letter-spacing:.04em;color:#949ba4;font-weight:700;}
+    .gd-ac{position:fixed;z-index:60;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-strong,#353950);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:4px;max-height:260px;overflow:auto;}
+    .gd-ac-item{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.55rem;border-radius:6px;cursor:pointer;font-size:0.86rem;color:var(--text-main,#e6e8ef);}
+    .gd-ac-item.on,.gd-ac-item:hover{background:var(--accent-blue,#4f7cff);color:#fff;}
+    .gd-ac-item img{width:22px;height:22px;object-fit:contain;}
+    .gd-ac-item small{margin-left:auto;opacity:.7;font-size:0.74rem;}
+    .gd-count{font-size:0.78rem;color:var(--text-muted,#9aa0b4);}
+    .gd-count.over{color:var(--accent-red,#ff5c6c);font-weight:700;}
+    #jsonWrap textarea{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.8rem;white-space:pre;}
+    @media (max-width:600px){
+      .gd-toolbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+      .gd-toolbar::-webkit-scrollbar{display:none;}
+      .gd-toolbar button{flex:0 0 auto;min-height:2.4rem;min-width:2.4rem;font-size:0.85rem;}
+      .gd-canvas .p-desc,.v-ed{font-size:16px;}
+      .v-ed.is-empty::before{font-size:15px;}
+      input,textarea,select,.gd-mini{font-size:16px!important;}
+    }
+    #editorCard{scroll-margin-top:calc(var(--gd-top,68px) + 8px);}
+  </style>
   <script src="/js/theme.js"></script>
 </head>
 <body class="site">
   <%- include('partials/site-bar') %>
 
-  <main class="site-main eb-main">
+  <main class="site-main" style="max-width:860px; margin:0 auto; padding:1.2rem 16px;">
     <div class="page-heading">
       <div>
         <% if (guidesOnly) { %>
@@ -18,104 +95,101 @@
         <% } else { %>
           <a class="muted" href="/dashboard/<%= guild.id %>" style="font-size:0.85rem;">← <%= guild.name %></a>
         <% } %>
-        <h1 style="font-size:1.45rem; margin-top:0.2rem;">FAQ</h1>
-        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">One message — text plus up to 10 embeds — posted by <code>/faq show</code>. Same editor as the Embed Builder: type <code>@</code>, <code>#</code> or <code>:</code> for autocomplete, or paste Discord / Discohook JSON.</p>
+        <h1 style="font-size:1.45rem; margin-top:0.2rem;">❓ FAQ</h1>
+        <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">A list of question → answer entries. Click any text below to edit it right on the Discord preview. Anyone can run <code>/faq</code> to post it. Type <code>@</code>, <code>#</code> or <code>:</code> for autocomplete.</p>
       </div>
-      <div class="eb-top-actions">
-        <button class="btn secondary" type="button" onclick="openImport()">📥 Import</button>
-        <div class="menu-wrap">
-          <button class="btn secondary" type="button" onclick="toggleMenu('exportMenu')" aria-haspopup="true">📤 Export ▾</button>
-          <div class="menu" id="exportMenu" role="menu">
-            <button type="button" onclick="exportCurrent()">Download this message (.json)</button>
-            <button type="button" onclick="copyJson()">Copy this message's JSON</button>
-          </div>
+      <div class="faq-head-actions">
+        <div class="gd-modes" role="group" aria-label="Editor mode">
+          <button type="button" id="modeVisual" class="on" onclick="setMode('visual')">✏️ Visual</button>
+          <button type="button" id="modeJson" onclick="setMode('json')">📝 JSON</button>
         </div>
       </div>
     </div>
 
-    <div class="split eb-split">
-      <div>
-        <div class="card eb-card">
-          <div class="eb-label-row"><label for="content" style="margin:0;">Message text</label><span class="counter" id="contentCount"></span></div>
-          <textarea id="content" maxlength="2000" rows="3" placeholder="Optional text above the embeds. Mentions here are the only ones that actually ping."></textarea>
-        </div>
-
-        <div id="embeds"></div>
-        <button class="btn secondary" type="button" id="addEmbedBtn" onclick="addEmbed()">+ Add embed</button>
-
-        <div class="savebar eb-savebar">
-          <span class="hint" id="totalHint"></span>
-          <button class="btn" type="button" id="saveBtn" onclick="saveFaq()">💾 Save FAQ</button>
-        </div>
-        <p class="muted" style="font-size:0.78rem;">Saving stores the FAQ so <code>/faq show</code> posts it. To push it out now, pick a channel and post it below.</p>
-
-        <div class="card eb-card">
-          <label for="postChannel">Post to a channel now</label>
-          <div class="field-row" style="margin:0;">
-            <select id="postChannel">
-              <option value="">— Select a channel —</option>
-              <% channels.forEach(c => { %><option value="<%= c.id %>" <%= c.id === channelId ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
-            </select>
-            <button class="btn secondary" type="button" id="postBtn" onclick="postFaq()">🚀 Post it</button>
-          </div>
-          <p class="muted" style="font-size:0.78rem; margin:0.4rem 0 0;">Posting also saves the FAQ, so the posted message and <code>/faq show</code> stay in sync.</p>
-        </div>
-
-        <details class="card eb-card eb-json" id="jsonPanel">
-          <summary>📝 JSON editor <span class="muted" style="font-weight:400;">· edit the raw message (Discord / Discohook format)</span></summary>
-          <p class="muted" style="font-size:0.78rem; margin:0.5rem 0;">This stays in sync with the builder above. Edit it and press <strong>Apply</strong> to update the builder, or paste JSON from Discohook. <code>{ "content": …, "embeds": [ … ] }</code>.</p>
-          <textarea id="jsonEditor" rows="12" spellcheck="false" autocomplete="off" autocapitalize="off" style="width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.8rem; white-space:pre;"></textarea>
-          <div class="field-row" style="margin:0.5rem 0 0; align-items:center;">
-            <button class="btn small" type="button" onclick="applyJson()">Apply to builder</button>
-            <button class="btn secondary small" type="button" onclick="formatJson()">Format</button>
-            <button class="btn secondary small" type="button" onclick="copyJson()">Copy</button>
-            <span class="muted" id="jsonStatus" style="font-size:0.78rem; margin-left:auto;"></span>
-          </div>
-        </details>
+    <div class="card" id="editorCard">
+      <!-- format toolbar (visual mode) -->
+      <div class="gd-toolbar" id="toolbar" data-vmd-keep>
+        <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+        <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+        <span class="sep"></span>
+        <button type="button" data-block="h1" title="Big heading">H1</button>
+        <button type="button" data-block="h2" title="Medium heading">H2</button>
+        <button type="button" data-block="h3" title="Small heading">H3</button>
+        <button type="button" data-block="sub" title="Small grey text">ᵃ small</button>
+        <span class="sep"></span>
+        <button type="button" data-block="li" title="Bullet list">• List</button>
+        <button type="button" data-block="ol" title="Numbered list">1. List</button>
+        <button type="button" data-block="quote" title="Quote">❝ Quote</button>
+        <span class="sep"></span>
+        <button type="button" data-cmd="link" title="Link">🔗 Link</button>
+        <button type="button" data-cmd="code" title="Inline code">&lt;/&gt;</button>
+        <button type="button" data-cmd="spoiler" title="Spoiler">▒ Spoiler</button>
+        <span class="sep"></span>
+        <button type="button" id="emojiBtn" title="Insert emoji">😀 Emoji</button>
+        <button type="button" data-cmd="removeFormat" title="Clear formatting">⌫ Clear</button>
+      </div>
+      <div class="gd-emoji-pop" id="emojiPop" style="display:none;" data-vmd-keep>
+        <input id="emojiSearch" placeholder="Search emojis…" oninput="renderEmojiPicker()">
+        <div class="gd-emoji-grid" id="emojiGrid"></div>
       </div>
 
-      <div class="sticky-preview">
-        <div class="card" style="margin-bottom:0;">
-          <h3 style="margin-top:0;">Live preview</h3>
-          <div class="discord-chat eb-preview">
-            <div class="discord-message-preview">
-              <img class="discord-avatar" src="<%= bot.avatarUrl %>" alt="">
-              <div class="discord-message-body">
-                <div class="discord-message-header"><span class="discord-bot-name"><%= bot.name %></span><span class="discord-bot-badge">BOT</span><span class="discord-message-time">Today at 12:00 PM</span></div>
-                <div class="desc md" id="pContent"></div>
-                <div id="pEmbeds"></div>
-              </div>
+      <!-- VISUAL editor: the Discord-looking FAQ, edited in place -->
+      <div id="visualWrap">
+        <div class="discord-chat gd-canvas">
+          <div class="gd-bot"><span class="gd-bot-av"><img src="<%= bot.avatarUrl %>" alt=""></span><span class="gd-bot-name"><%= bot.name %> <span class="gd-app">APP</span></span></div>
+          <div class="p-embed" id="faqEmbed">
+            <div class="v-tools">
+              <span class="v-tools-label">FAQ embed</span>
+              <label class="gd-color">🎨 <input type="color" id="faqColor" title="Embed colour" value="<%= /^#[0-9a-fA-F]{6}$/.test(faq.color) ? faq.color : '#5865f2' %>"></label>
             </div>
+            <div id="vTitle"></div>
+            <div id="vIntro"></div>
+            <div class="gd-fields" id="vItems"></div>
+            <button class="btn secondary small" type="button" id="vAddItem" onclick="addItem()" style="margin-top:0.6rem;">+ Add question</button>
           </div>
         </div>
+        <p class="muted" style="font-size:0.78rem; margin:0.5rem 0 0;">Tip: click a question or answer to edit it. Select text, then use the toolbar. Each answer can use markdown.</p>
+      </div>
+
+      <!-- JSON editor -->
+      <div id="jsonWrap" style="display:none;">
+        <p class="muted" style="font-size:0.82rem;">Edit the FAQ as JSON, or paste it in and press <strong>Apply</strong>. Shape: <code>{ "title": "…", "intro": "…", "color": "#5865f2", "items": [ { "q": "…", "a": "…" } ] }</code>.</p>
+        <textarea id="jsonEditor" rows="16" spellcheck="false" autocomplete="off"></textarea>
+        <div class="field-row" style="margin:0.5rem 0 0; align-items:center; flex-wrap:wrap;">
+          <button class="btn small" type="button" onclick="applyJson()">Apply</button>
+          <button class="btn secondary small" type="button" onclick="formatJson()">Format</button>
+          <button class="btn secondary small" type="button" onclick="copyJson()">Copy</button>
+          <label class="btn secondary small" style="cursor:pointer;">Import file…<input type="file" id="jsonFile" accept=".json,application/json" style="display:none;"></label>
+          <span class="muted" id="jsonStatus" style="font-size:0.78rem; margin-left:auto;"></span>
+        </div>
+      </div>
+
+      <div class="savebar" style="margin-top:1rem; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+        <span class="gd-count" id="sizeCount"></span>
+        <span id="editorStatus" class="muted" style="font-size:0.8rem;"></span>
+        <div style="flex:1;"></div>
+        <select id="postChannel" style="max-width:220px;">
+          <option value="">— Post to channel… —</option>
+          <% channels.forEach(c => { %><option value="<%= c.id %>" <%= c.id === faq.channelId ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
+        </select>
+        <button class="btn secondary" type="button" id="postBtn" onclick="postFaq()">🚀 Post</button>
+        <button class="btn" type="button" id="saveBtn" onclick="saveFaq()">💾 Save</button>
       </div>
     </div>
   </main>
 
-  <dialog id="importDialog" class="eb-dialog">
-    <form method="dialog" class="eb-dialog-inner" onsubmit="return false;">
-      <h3 style="margin-top:0;">Import a message</h3>
-      <p class="muted" style="font-size:0.84rem; margin-top:0;">Paste JSON from Discohook's JSON editor, a webhook payload, a single embed, or choose a file. The first message found is opened in the editor.</p>
-      <textarea id="importText" rows="8" placeholder='{"content": "Hello", "embeds": [{"title": "FAQ", "color": 5793266}]}'></textarea>
-      <div class="field-row" style="margin-top:0.6rem; align-items:center;">
-        <input type="file" id="importFile" accept=".json,application/json">
-        <button class="btn secondary small" type="button" onclick="parseImportInput()">Read</button>
-      </div>
-      <div id="importResults"></div>
-      <div class="eb-dialog-actions">
-        <button class="btn secondary" type="button" onclick="document.getElementById('importDialog').close()">Cancel</button>
-        <button class="btn" type="button" id="importOpenBtn" onclick="openImported()" disabled>Open in editor</button>
-      </div>
-    </form>
-  </dialog>
-
   <div class="toast" id="toast"></div>
 
-  <script src="/js/mentions.js"></script>
   <script src="/js/embed-json.js"></script>
-  <script id="faqData" type="application/json"><%- JSON.stringify(message).replace(/</g, '\\u003c') %></script>
+  <script src="/js/visual-md.js"></script>
+  <script src="/js/autofill.js"></script>
+  <script id="faqData" type="application/json"><%- JSON.stringify(faq).replace(/</g, '\\u003c') %></script>
+  <script id="editorData" type="application/json"><%- JSON.stringify(editorData).replace(/</g, '\\u003c') %></script>
   <script>
-    window.FAQ_CONFIG = { guildId: '<%= guild.id %>' };
+    window.FAQ_CONFIG = { guildId: '<%= guild.id %>', defaultTitle: <%- JSON.stringify(defaultTitle).replace(/</g, '\\u003c') %> };
+    window.addEventListener('error', (e) => { const b = document.getElementById('editorStatus'); if (b) b.textContent = '⚠️ The editor hit an error: ' + (e.message || 'unknown') + ' — try a hard refresh.'; });
   </script>
   <script src="/js/faq.js"></script>
 </body>
