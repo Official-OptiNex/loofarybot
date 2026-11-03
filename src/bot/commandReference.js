@@ -16,7 +16,7 @@ module.exports = [
       { usage: '/loof start', perm: 'Admin', description: 'Start a timed giveaway or a drop right away — requirements and role bonus entries included.' },
       { usage: '/loof drop', perm: 'Admin', description: 'First-to-click drop — the first N people to press Claim win instantly.' },
       { usage: '/loof edit', perm: 'Admin', description: 'Change the prize, winners, end time, description, color or emoji of a running giveaway.' },
-      { usage: '/loof requirements', perm: 'Admin', description: 'Require a role, days in the server, or an XP level to enter.' },
+      { usage: '/loof requirements', perm: 'Admin', description: 'Restrict entry by roles (any-of, all-of or blocked), days in the server, or an XP level.' },
       { usage: '/loof end', perm: 'Admin', description: 'End a giveaway early and draw winners now.' },
       { usage: '/loof reroll', perm: 'Admin', description: 'Draw a new winner for an ended giveaway.' },
       { usage: '/loof delete', perm: 'Admin', description: 'Delete a giveaway and its message.' },

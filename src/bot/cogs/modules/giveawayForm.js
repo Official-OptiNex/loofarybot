@@ -52,7 +52,7 @@ function newDraft(interaction, { channelId, pingRoleId, type } = {}) {
     emoji: '🎉',
     ping: '', // '' | 'everyone' | 'here'
     pingRoleId: pingRoleId || null,
-    reqRoleId: null,
+    reqRoleIds: [],
     minDays: null,
     minLevel: null,
     bonusRoleId: null,
@@ -134,8 +134,8 @@ function requirementsModal(d) {
     .setCustomId(`gwd:${d.id}:req`)
     .setTitle('Requirements & bonus entries')
     .addLabelComponents(
-      label('Required role', 'Leave empty for none.').setRoleSelectMenuComponent(
-        new RoleSelectMenuBuilder().setCustomId('role').setRequired(false).setMinValues(0).setMaxValues(1).setDefaultRoles(d.reqRoleId ? [d.reqRoleId] : [])
+      label('Allowed roles', 'Members need ANY one of these (leave empty for none).').setRoleSelectMenuComponent(
+        new RoleSelectMenuBuilder().setCustomId('role').setRequired(false).setMinValues(0).setMaxValues(25).setDefaultRoles(d.reqRoleIds || [])
       ),
       label('Minimum days in the server', 'Leave empty for none.').setTextInputComponent(text('days', TextInputStyle.Short, d.minDays, { max: 4, placeholder: 'e.g. 7' })),
       label('Minimum XP level', 'Leave empty for none.').setTextInputComponent(text('level', TextInputStyle.Short, d.minLevel, { max: 4, placeholder: 'e.g. 5' })),
@@ -184,7 +184,7 @@ function draftToGiveaway(d) {
     hostId: d.userId,
     entries: [],
     type: d.type,
-    requirements: { roleId: d.reqRoleId, minDaysInServer: d.minDays, minLevel: d.minLevel },
+    requirements: { roleIdsAny: d.reqRoleIds || [], minDaysInServer: d.minDays, minLevel: d.minLevel },
     bonusEntries: d.type !== 'drop' && d.bonusRoleId ? [{ roleId: d.bonusRoleId, extra: d.bonusExtra || 1 }] : []
   };
 }
@@ -322,7 +322,7 @@ async function handleDraftModal(interaction) {
     d.color = readText(f, 'color');
     d.emoji = readText(f, 'emoji') || '🎉';
   } else if (step === 'req') {
-    d.reqRoleId = f.getSelectedRoles('role')?.first()?.id || null;
+    d.reqRoleIds = f.getSelectedRoles('role')?.map((r) => r.id) || [];
     const days = parseInt(readText(f, 'days'), 10);
     const level = parseInt(readText(f, 'level'), 10);
     d.minDays = days > 0 ? Math.min(days, 3650) : null;

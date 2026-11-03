@@ -67,14 +67,17 @@ const messageUrl = (guildId, channelId, messageId) => `https://discord.com/chann
 // ---------------------------------------------------------------- Giveaways
 
 function readRequirements(guild, raw = {}) {
-  const roleId = raw.roleId && guild.roles.cache.has(String(raw.roleId)) ? String(raw.roleId) : null;
-  const minDays = int(raw.minDaysInServer);
-  const minLevel = int(raw.minLevel);
-  return {
-    roleId,
-    minDaysInServer: minDays > 0 ? Math.min(minDays, 3650) : null,
-    minLevel: minLevel > 0 ? Math.min(minLevel, 1000) : null
-  };
+  return giveaways.cleanRequirements(
+    {
+      roleId: raw.roleId,
+      roleIdsAny: raw.roleIdsAny,
+      roleIdsAll: raw.roleIdsAll,
+      blockedRoleIds: raw.blockedRoleIds,
+      minDaysInServer: raw.minDaysInServer,
+      minLevel: raw.minLevel
+    },
+    guild
+  );
 }
 
 // Bonus entry roles that still exist (max 5, +1 to +10 each).
@@ -109,7 +112,10 @@ function serializeGiveaway(g, guild) {
     customDesc: g.customDesc || (type === 'drop' ? 'Be quick — first come, first served!' : 'Click the button below to enter!'),
     hostId: g.hostId,
     hostName: host ? host.displayName : null,
-    requirements: { roleId: req.roleId || null, minDaysInServer: req.minDaysInServer || null, minLevel: req.minLevel || null },
+    requirements: (() => {
+      const r = giveaways.reqRoleLists(req);
+      return { roleIdsAny: r.any, roleIdsAll: r.all, blockedRoleIds: r.blocked, minDaysInServer: req.minDaysInServer || null, minLevel: req.minLevel || null };
+    })(),
     bonusEntries: (g.bonusEntries || []).map((b) => ({ roleId: b.roleId, extra: b.extra })),
     boosterEntries: typeof g.boosterEntries === 'number' ? g.boosterEntries : null,
     winners: (g.winners || []).map((id) => ({ id, name: guild.members.cache.get(id)?.displayName || null })),

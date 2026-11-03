@@ -17,7 +17,7 @@ for (const [config, welcome] of [[{}, new WelcomeConfig({guildId:'1'}).toObject(
   console.log('guild ok', html.includes('</textarea><script>') ? 'UNESCAPED' : 'escaped', /id="tab-welcome"/.test(html), /chart\.umd/.test(html));
   const opts=(id)=>{ const m=html.match(new RegExp('id="'+id+'"[\\s\\S]*?</select>')); return m?m[0]:''; };
   if (!/id="tab-engagement"/.test(html) || !/data-sub="en-starboard"/.test(html)) throw new Error('engagement tab missing');
-  if (!/Server Booster/.test(opts('gwReqRole'))) throw new Error('booster role missing from giveaway requirement picker');
+  for (const id of ['gwReqAny','gwReqAll','gwReqBlocked']) if (!/Server Booster/.test(opts(id))) throw new Error('booster role missing from giveaway requirement picker '+id);
   for (const id of ['arRole','bdRole']) if (/Server Booster/.test(opts(id))) throw new Error('managed role offered in '+id);
   console.log('engagement tab rendered; booster role pickable for requirements but not for roles the bot hands out');
   fs.writeFileSync(require('os').tmpdir()+'/loofary-render-guild'+scripts.push(1)+'.html', html);

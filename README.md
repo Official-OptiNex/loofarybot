@@ -356,7 +356,14 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
 ### Giveaways: requirements & drops
 - Every way of starting one offers the same options: **type** (timed giveaway or first-to-click
   drop), channel, duration, winners, ping (@everyone, @here and/or a role), color, button emoji,
-  description, and entry requirements (role, days in the server, XP level).
+  description, and entry requirements (roles, days in the server, XP level).
+- **Role requirements** come in three flavours that can be combined:
+  - **Any of** — members need at least one of the listed roles (e.g. a USA **or** Russia giveaway).
+  - **All of** — members need every listed role (e.g. must be **USA and Android**).
+  - **Blocked** — members with any listed role are kept out (e.g. a USD-Amazon giveaway that
+    excludes the Russia role).
+  `/loof start`/`requirements` take `role` (any-of), `must_have_role` (all-of) and `blocked_role`;
+  the `/loof create` form and the dashboard let you pick several roles for each list at once.
   - `/loof start` takes them all inline (`type:` picks timed or drop).
   - `/loof create` opens a form (type, channel, prize, duration, winners), then a private setup
     panel with a live preview and buttons for **Description & look**, **Requirements** and **Ping**.

@@ -29,6 +29,11 @@ entries** at 2.
       isn't one everybody has (e.g. a "Member" role).
 - [ ] Requirements: add "Level 5+". A 👤 member below level 5 clicks Enter → private ✅/❌ checklist,
       not entered.
+- [ ] Role requirements (`/loof requirements` or the dashboard's three role pickers):
+      - **Any of** USA/Russia → a member with either enters; a member with neither sees the ❌ list.
+      - **All of** USA + Android → only a member with both enters.
+      - **Blocked** Russia → a member with the Russia role is kept out even if they meet everything else.
+      - The ✅/❌ checklist names each role rule ("Have **any** of: …", "**Not** have: …").
 
 ## 2. Server Booster role on the dashboard
 - [ ] Giveaways → bonus entries / requirement role: **Server Booster** is in the list.
