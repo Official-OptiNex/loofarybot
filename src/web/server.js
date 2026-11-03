@@ -12,6 +12,7 @@ const manageRoutes = require('./routes/manage');
 const embedBuilderRoutes = require('./routes/embedBuilder');
 const botChatRoutes = require('./routes/botChat');
 const guidesRoutes = require('./routes/guides');
+const faqRoutes = require('./routes/faq');
 const autoRepliesRoutes = require('./routes/autoReplies');
 const applicationsRoutes = require('./routes/applications');
 const { siteLocals, botStats, publicCommands } = require('./utils/site');
@@ -65,6 +66,7 @@ function startWebServer(client) {
   app.use('/dashboard', embedBuilderRoutes);
   app.use('/dashboard', botChatRoutes);
   app.use('/dashboard', guidesRoutes);
+  app.use('/dashboard', faqRoutes);
   app.use('/dashboard', autoRepliesRoutes);
   app.use('/dashboard', applicationsRoutes);
   app.use('/api', apiRoutes);

@@ -16,7 +16,7 @@ module.exports = [
       { usage: '/loof start', perm: 'Admin', description: 'Start a timed giveaway or a drop right away — requirements and role bonus entries included.' },
       { usage: '/loof drop', perm: 'Admin', description: 'First-to-click drop — the first N people to press Claim win instantly.' },
       { usage: '/loof edit', perm: 'Admin', description: 'Change the prize, winners, end time, description, color or emoji of a running giveaway.' },
-      { usage: '/loof requirements', perm: 'Admin', description: 'Require a role, days in the server, or an XP level to enter.' },
+      { usage: '/loof requirements', perm: 'Admin', description: 'Restrict entry by roles (any-of, all-of or blocked), days in the server, or an XP level.' },
       { usage: '/loof end', perm: 'Admin', description: 'End a giveaway early and draw winners now.' },
       { usage: '/loof reroll', perm: 'Admin', description: 'Draw a new winner for an ended giveaway.' },
       { usage: '/loof delete', perm: 'Admin', description: 'Delete a giveaway and its message.' },
@@ -210,6 +210,17 @@ module.exports = [
       { usage: '/guide setup', perm: 'Manage Server', description: 'Pick the forum channel, add an editor role, and auto-create a private #guide-editors channel. Also sets up the pinned 📖 Guides Index.' },
       { usage: '/guide editor_add · editor_remove · legend', perm: 'Manage Server', description: 'Add/remove guide-editor roles (they get dashboard access to the Guides page only), or rebuild the index. Admins can bulk-import guides from JSON on the dashboard.' },
       { usage: 'Approve · Reject buttons', perm: 'Manage Server', description: 'Guide editors’ new guides and deletions (and edits, if switched on) wait for an admin: requests post in the guide editors channel with Approve / Reject (with a note), and the editor is DMed the decision. Choose what needs approval on the dashboard Guides page.' }
+    ]
+  },
+  {
+    id: 'faq',
+    group: 'FAQ',
+    icon: '❓',
+    blurb: 'One editable FAQ message — text plus up to 10 embeds — built in the same visual / markdown / JSON editor as the Embed Builder.',
+    page: 'faq',
+    commands: [
+      { usage: '/faq show', perm: 'Guide editor', description: 'Post the server FAQ publicly (in this channel, or a channel you pick). Guide editors and admins only.' },
+      { usage: '/faq edit', perm: 'Guide editor', description: 'Open the dashboard FAQ editor — design the message visually, in markdown, or paste Discord / Discohook JSON, with @user, #channel and :emoji: autocomplete.' }
     ]
   },
   {

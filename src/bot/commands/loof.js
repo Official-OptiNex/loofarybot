@@ -35,7 +35,9 @@ const addLookOptions = (sub, { emoji = true } = {}) => {
     .addStringOption((opt) => opt.setName('description').setDescription('Custom description text').setMaxLength(1000));
   if (emoji) sub.addStringOption((opt) => opt.setName('button_emoji').setDescription('Emoji on the Enter button (default 🎉)'));
   return sub
-    .addRoleOption((opt) => opt.setName('required_role').setDescription('Only members with this role can enter'))
+    .addRoleOption((opt) => opt.setName('required_role').setDescription('Only members with this role can enter (for OR-of-many roles use /loof create or the dashboard)'))
+    .addRoleOption((opt) => opt.setName('must_have_role').setDescription('Also require this role — combined with required_role it means BOTH (AND)'))
+    .addRoleOption((opt) => opt.setName('blocked_role').setDescription('Members with this role CANNOT enter'))
     .addIntegerOption((opt) => opt.setName('min_days').setDescription('Minimum days in the server to enter').setMinValue(1))
     .addIntegerOption((opt) => opt.setName('min_level').setDescription('Minimum XP level to enter').setMinValue(1));
 };
@@ -114,7 +116,9 @@ const data = new SlashCommandBuilder()
       .setName('requirements')
       .setDescription('Set or clear entry requirements on a running giveaway or drop')
       .addStringOption((opt) => messageIdOption(opt))
-      .addRoleOption((opt) => opt.setName('role').setDescription('Required role'))
+      .addRoleOption((opt) => opt.setName('role').setDescription('Required role (OR, if combined with a multi-role set on the dashboard)'))
+      .addRoleOption((opt) => opt.setName('must_have_role').setDescription('Also require this role (AND with "role")'))
+      .addRoleOption((opt) => opt.setName('blocked_role').setDescription('Members with this role cannot enter'))
       .addIntegerOption((opt) => opt.setName('min_days').setDescription('Minimum days in the server (0 = none)').setMinValue(0))
       .addIntegerOption((opt) => opt.setName('min_level').setDescription('Minimum XP level (0 = none)').setMinValue(0))
       .addBooleanOption((opt) => opt.setName('clear').setDescription('Remove all requirements'))
@@ -147,7 +151,9 @@ const DEFER_SUBCOMMANDS = ['start', 'drop', 'requirements', 'end', 'reroll', 'de
 
 function readRequirementOptions(interaction) {
   return {
-    roleId: interaction.options.getRole('required_role')?.id || null,
+    roleIdsAny: interaction.options.getRole('required_role') ? [interaction.options.getRole('required_role').id] : [],
+    roleIdsAll: interaction.options.getRole('must_have_role') ? [interaction.options.getRole('must_have_role').id] : [],
+    blockedRoleIds: interaction.options.getRole('blocked_role') ? [interaction.options.getRole('blocked_role').id] : [],
     minDaysInServer: interaction.options.getInteger('min_days') || null,
     minLevel: interaction.options.getInteger('min_level') || null
   };
@@ -317,18 +323,29 @@ async function execute(interaction, client) {
   if (sub === 'requirements') {
     if (!g || g.ended) return replyOrEdit(interaction, { content: '❌ Giveaway not found or already ended.' });
     const role = interaction.options.getRole('role');
+    const mustHave = interaction.options.getRole('must_have_role');
+    const blocked = interaction.options.getRole('blocked_role');
     const minDays = interaction.options.getInteger('min_days');
     const minLevel = interaction.options.getInteger('min_level');
     if (interaction.options.getBoolean('clear')) {
-      g.requirements = { roleId: null, minDaysInServer: null, minLevel: null };
+      g.requirements = require('../cogs/modules/giveaways').cleanRequirements({}, interaction.guild);
     } else {
-      if (!role && minDays === null && minLevel === null) {
-        return replyOrEdit(interaction, { content: '❌ Give at least one of `role`, `min_days`, `min_level` — or `clear`.' });
+      if (!role && !mustHave && !blocked && minDays === null && minLevel === null) {
+        return replyOrEdit(interaction, { content: '❌ Give at least one of `role`, `must_have_role`, `blocked_role`, `min_days`, `min_level` — or `clear`. (For OR-of-several roles, edit it on the dashboard.)' });
       }
-      if (role) g.requirements.roleId = role.id;
-      if (minDays !== null) g.requirements.minDaysInServer = minDays || null;
-      if (minLevel !== null) g.requirements.minLevel = minLevel || null;
+      const cur = require('../cogs/modules/giveaways').reqRoleLists(g.requirements || {});
+      g.requirements = require('../cogs/modules/giveaways').cleanRequirements(
+        {
+          roleIdsAny: role ? [...new Set([...cur.any, role.id])] : cur.any,
+          roleIdsAll: mustHave ? [...new Set([...cur.all, mustHave.id])] : cur.all,
+          blockedRoleIds: blocked ? [...new Set([...cur.blocked, blocked.id])] : cur.blocked,
+          minDaysInServer: minDays !== null ? minDays : g.requirements?.minDaysInServer,
+          minLevel: minLevel !== null ? minLevel : g.requirements?.minLevel
+        },
+        interaction.guild
+      );
     }
+    g.markModified('requirements');
     await g.save();
     await refreshGiveaway(client, g);
     const summary = describeRequirements(g.requirements) || '\n\nNo requirements — anyone can enter.';

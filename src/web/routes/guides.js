@@ -4,7 +4,7 @@ const guides = require('../../bot/cogs/modules/guides');
 const approvals = require('../../bot/cogs/modules/guideApprovals');
 const GuideModel = require('../../database/models/Guide');
 const GuildConfig = require('../../database/models/GuildConfig');
-const { requireAuth, requireGuildAccess, requirePage, guidesOnly } = require('../utils/authMiddleware');
+const { requireAuth, requireGuildAccess, requirePage, guidesOnly, canUse } = require('../utils/authMiddleware');
 const { auditTrail } = require('../utils/audit');
 
 const router = express.Router();
@@ -53,6 +53,7 @@ router.get('/:guildId/guides', requireAuth, requireGuildAccess, requirePage('gui
       guild,
       isAdmin: isAdmin(req),
       guidesOnly: guidesOnly(req.access),
+      canFaq: canUse(req.access, 'faq'),
       me: req.session.user.id,
       changes: changes.map(changeView),
       settings: s,

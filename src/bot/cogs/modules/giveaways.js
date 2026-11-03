@@ -35,17 +35,49 @@ function resolveColor(input) {
   return '#5865F2';
 }
 
+// Role requirement lists, with the legacy single `roleId` folded into the "any of" list.
+function reqRoleLists(req) {
+  const list = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
+  const any = [...new Set([...(req?.roleId ? [req.roleId] : []), ...list(req?.roleIdsAny)])];
+  return { any, all: list(req?.roleIdsAll), blocked: list(req?.blockedRoleIds) };
+}
+const rolesOf = (ids) => ids.map((id) => `<@&${id}>`).join(' ');
+
 function hasRequirements(req) {
-  return !!(req && (req.roleId || req.minDaysInServer || req.minLevel));
+  if (!req) return false;
+  const { any, all, blocked } = reqRoleLists(req);
+  return !!(any.length || all.length || blocked.length || req.minDaysInServer || req.minLevel);
 }
 
 function describeRequirements(req) {
   if (!hasRequirements(req)) return '';
+  const { any, all, blocked } = reqRoleLists(req);
   const parts = [];
-  if (req.roleId) parts.push(`• Have the <@&${req.roleId}> role`);
+  if (any.length) parts.push(any.length === 1 ? `• Have the ${rolesOf(any)} role` : `• Have **any** of: ${rolesOf(any)}`);
+  if (all.length) parts.push(all.length === 1 ? `• Have the ${rolesOf(all)} role` : `• Have **all** of: ${rolesOf(all)}`);
+  if (blocked.length) parts.push(`• **Not** have: ${rolesOf(blocked)}`);
   if (req.minDaysInServer) parts.push(`• Be in the server for **${req.minDaysInServer}+ day(s)**`);
   if (req.minLevel) parts.push(`• Be **Level ${req.minLevel}+**`);
   return `\n\n**Requirements:**\n${parts.join('\n')}`;
+}
+
+// Validates a requirements input (from the command / form / dashboard) into the stored shape.
+function cleanRequirements(input = {}, guild = null) {
+  const valid = (ids) =>
+    [...new Set((Array.isArray(ids) ? ids : ids ? [ids] : []).map(String).filter(Boolean))]
+      .filter((id) => !guild || guild.roles.cache.has(id))
+      .slice(0, 15);
+  const any = valid([...(input.roleId ? [input.roleId] : []), ...(input.roleIdsAny || [])]);
+  const minDays = Number.parseInt(input.minDaysInServer, 10);
+  const minLevel = Number.parseInt(input.minLevel, 10);
+  return {
+    roleId: null, // superseded by the lists below
+    roleIdsAny: any,
+    roleIdsAll: valid(input.roleIdsAll),
+    blockedRoleIds: valid(input.blockedRoleIds),
+    minDaysInServer: minDays > 0 ? Math.min(minDays, 3650) : null,
+    minLevel: minLevel > 0 ? Math.min(minLevel, 1000) : null
+  };
 }
 
 // "Bonus entries: @Booster +2 · @Supporter +1" — extra chances to win for members with those roles.
@@ -161,8 +193,16 @@ async function checkRequirements(member, g, levelsByUser = null) {
 
   // Check every requirement so the member sees the whole list at once, not one miss at a time.
   const checks = [];
-  if (req.roleId) {
-    checks.push({ ok: member.roles.cache.has(req.roleId), text: `Have the <@&${req.roleId}> role` });
+  const { any, all, blocked } = reqRoleLists(req);
+  if (any.length) {
+    checks.push({ ok: any.some((id) => member.roles.cache.has(id)), text: any.length === 1 ? `Have the ${rolesOf(any)} role` : `Have **any** of: ${rolesOf(any)}` });
+  }
+  if (all.length) {
+    checks.push({ ok: all.every((id) => member.roles.cache.has(id)), text: all.length === 1 ? `Have the ${rolesOf(all)} role` : `Have **all** of: ${rolesOf(all)}` });
+  }
+  if (blocked.length) {
+    const bad = blocked.filter((id) => member.roles.cache.has(id));
+    checks.push({ ok: bad.length === 0, text: `**Not** have: ${rolesOf(blocked)}` });
   }
   if (req.minDaysInServer) {
     const days = member.joinedTimestamp ? (Date.now() - member.joinedTimestamp) / 86400000 : 0;
@@ -228,11 +268,7 @@ async function postGiveaway(
     hostId,
     entries: [],
     type,
-    requirements: {
-      roleId: requirements.roleId || null,
-      minDaysInServer: requirements.minDaysInServer || null,
-      minLevel: requirements.minLevel || null
-    },
+    requirements: cleanRequirements(requirements, channel.guild),
     // Drops are first-come — bonus entries only apply to timed giveaways.
     bonusEntries: type === 'drop' ? [] : cleanBonus(bonusEntries),
     boosterEntries: perks?.enabled ? perks.giveawayEntries : 0
@@ -497,6 +533,8 @@ module.exports = {
   buildEntryRow,
   hasRequirements,
   describeRequirements,
+  cleanRequirements,
+  reqRoleLists,
   describeBonus,
   cleanBonus,
   entryWeights,

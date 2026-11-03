@@ -7,7 +7,7 @@ const loof=require(root+'src/bot/commands/loof');
 const sent=[];
 const ch={id:'c1',name:'general',type:ChannelType.GuildText,isTextBased:()=>true,toString:()=>'<#c1>',permissionsFor:()=>new PermissionsBitField(PermissionsBitField.All),
   send:async(o)=>{sent.push(o);return{id:'m'+sent.length,url:'https://discord/x/'+sent.length,edit:async()=>{}};},messages:{fetch:async()=>null}};
-const guild={id:'g1',channels:{cache:new Collection([['c1',ch]])},members:{me:{}},roles:{cache:new Collection()}};
+const guild={id:'g1',channels:{cache:new Collection([['c1',ch]])},members:{me:{}},roles:{cache:new Collection([['r9',{id:'r9'}],['r5',{id:'r5'}]])}};
 ch.guild=guild;
 const client={channels:{fetch:async()=>ch}};
 const user={id:'u1'};
@@ -44,7 +44,7 @@ function fields(map){return{getTextInputValue:(id)=>{if(!(id in map))throw new E
   // start
   let edited=null; await form.handleDraftButton({...baseI,customId:`gwd:${draftId}:start`,deferUpdate:async()=>{},editReply:async(o)=>{edited=o;}},client);
   assert.match(edited.content,/Giveaway started/); const g=rows[0];
-  assert.equal(g.prize,'Nitro'); assert.equal(g.winnerCount,3); assert.equal(g.colorHex,'#ED4245'); assert.equal(g.emoji,'🎁'); assert.equal(g.requirements.roleId,'r9'); assert.equal(g.requirements.minDaysInServer,7); assert.equal(g.requirements.minLevel,null);
+  assert.equal(g.prize,'Nitro'); assert.equal(g.winnerCount,3); assert.equal(g.colorHex,'#ED4245'); assert.equal(g.emoji,'🎁'); assert.deepEqual(g.requirements.roleIdsAny,['r9']); assert.equal(g.requirements.roleId,null); assert.equal(g.requirements.minDaysInServer,7); assert.equal(g.requirements.minLevel,null);
   assert.equal(sent.at(-1).content,'@here <@&r5>'); assert.ok(Math.abs(g.endTimestamp-(Date.now()+7200e3))<5000);
   console.log('✓ Start posts it with every option');
   // expired draft

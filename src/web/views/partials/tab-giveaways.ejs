@@ -73,13 +73,20 @@
             </div>
             <div class="setting-row">
               <div><div class="setting-title">Entry requirements</div><div class="setting-help">Optional. Entrants who stop qualifying are skipped at the draw.</div></div>
-              <div class="setting-control">
-                <select id="gwReqRole" aria-label="Required role">
-                  <option value="">Any role</option>
-                  <% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %>
-                </select>
-                <input type="number" id="gwReqDays" min="0" placeholder="Min days" style="flex:0 0 100px; min-width:100px;" aria-label="Minimum days in server">
-                <input type="number" id="gwReqLevel" min="0" placeholder="Min level" style="flex:0 0 100px; min-width:100px;" aria-label="Minimum level">
+              <div class="setting-control" style="flex-direction:column; align-items:stretch; gap:0.6rem;">
+                <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+                  <label style="flex:1; min-width:170px;"><div class="setting-help" style="margin-bottom:0.2rem;">Allowed — need <strong>any</strong></div>
+                    <select id="gwReqAny" multiple size="4" style="width:100%;" aria-label="Allowed roles (any of)"><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
+                  <label style="flex:1; min-width:170px;"><div class="setting-help" style="margin-bottom:0.2rem;">Required — need <strong>all</strong></div>
+                    <select id="gwReqAll" multiple size="4" style="width:100%;" aria-label="Required roles (all of)"><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
+                  <label style="flex:1; min-width:170px;"><div class="setting-help" style="margin-bottom:0.2rem;">Blocked — must <strong>not</strong> have</div>
+                    <select id="gwReqBlocked" multiple size="4" style="width:100%;" aria-label="Blocked roles"><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
+                </div>
+                <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+                  <input type="number" id="gwReqDays" min="0" placeholder="Min days" style="flex:0 0 110px; min-width:110px;" aria-label="Minimum days in server">
+                  <input type="number" id="gwReqLevel" min="0" placeholder="Min level" style="flex:0 0 110px; min-width:110px;" aria-label="Minimum level">
+                  <span class="setting-help">Hold Ctrl / ⌘ to pick more than one role.</span>
+                </div>
               </div>
             </div>
             <div class="setting-row stack" id="gwBonusRow">

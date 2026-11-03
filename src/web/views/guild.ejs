@@ -135,7 +135,7 @@
       </div>
     <% }) %>
 
-    <% const TOOL_PAGES = [['embed', 'brush', 'Embed Builder'], ['guides', 'file', 'Guides'], ['applications', 'userplus', 'Applications'], ['botchat', 'chat', 'Bot Chat']].filter(([p]) => can(p)); %>
+    <% const TOOL_PAGES = [['embed', 'brush', 'Embed Builder'], ['guides', 'file', 'Guides'], ['faq', 'message', 'FAQ'], ['applications', 'userplus', 'Applications'], ['botchat', 'chat', 'Bot Chat']].filter(([p]) => can(p)); %>
     <% if (TOOL_PAGES.length) { %>
       <div class="nav-section">
         <div class="nav-heading"><span class="ring-dot"></span>Tools</div>
@@ -172,6 +172,7 @@
       </div>
       <% if (can('embed')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/embed" title="Embed Builder" aria-label="Embed Builder"><%- icon('brush') %></a><% } %>
       <% if (can('guides')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/guides" title="Guides" aria-label="Guides">📖</a><% } %>
+      <% if (can('faq')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/faq" title="FAQ" aria-label="FAQ">❓</a><% } %>
       <% if (can('autoreplies')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/autoreplies" title="Auto-Replies" aria-label="Auto-Replies">💬</a><% } %>
       <% if (can('applications')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/applications" title="Applications — apply buttons & reviews" aria-label="Applications">🗂️</a><% } %>
       <% if (can('botchat')) { %><a class="appbar-icon" href="/dashboard/<%= guild.id %>/botchat" title="Bot Chat — talk through the bot" aria-label="Bot Chat"><%- icon('chat') %></a><% } %>
@@ -411,6 +412,7 @@
           <h3>🖌️ Quick Links</h3>
           <% if (can('embed')) { %><p class="muted"><a href="/dashboard/<%= guild.id %>/embed">🖌️ Open the Embed Builder →</a></p><% } %>
           <% if (can('guides')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/guides">📖 Open Guides →</a></p><% } %>
+          <% if (can('faq')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/faq">❓ Open FAQ →</a></p><% } %>
           <% if (can('autoreplies')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/autoreplies">💬 Open Auto-Replies →</a></p><% } %>
           <% if (can('applications')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/applications">🗂️ Open Applications (apply buttons & reviews) →</a></p><% } %>
           <% if (can('botchat')) { %><p class="muted" style="margin-top:0.4rem;"><a href="/dashboard/<%= guild.id %>/botchat">💬 Open Bot Chat (talk through the bot) →</a></p><% } %>

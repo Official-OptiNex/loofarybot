@@ -24,7 +24,10 @@ const GiveawaySchema = new mongoose.Schema(
     // 'drop' = first-to-click: the first `winnerCount` people to claim win instantly.
     type: { type: String, enum: ['timed', 'drop'], default: 'timed' },
     requirements: {
-      roleId: { type: String, default: null },
+      roleId: { type: String, default: null }, // legacy single "required role" (folded into roleIdsAny on read)
+      roleIdsAny: { type: [String], default: [] }, // must have AT LEAST ONE of these (e.g. USA or Russia)
+      roleIdsAll: { type: [String], default: [] }, // must have ALL of these (e.g. USA and Android)
+      blockedRoleIds: { type: [String], default: [] }, // must have NONE of these
       minDaysInServer: { type: Number, default: null },
       minLevel: { type: Number, default: null }
     }

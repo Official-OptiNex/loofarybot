@@ -185,9 +185,36 @@ async function loadGiveaways() {
   }
 }
 
+// Read/write a native <select multiple> as an array of option values.
+function getMultiSelect(id) {
+  const el = document.getElementById(id);
+  if (!el) return [];
+  return [...el.selectedOptions].map((o) => o.value).filter(Boolean);
+}
+function setMultiSelect(id, ids) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const want = new Set(ids || []);
+  [...el.options].forEach((o) => {
+    o.selected = want.has(o.value);
+  });
+}
+
+// Keep in sync with reqRoleLists() in the bot: fold the legacy single roleId into "any".
+function reqRoleLists(req) {
+  req = req || {};
+  const any = [...(req.roleIdsAny || [])];
+  if (req.roleId && !any.includes(req.roleId)) any.push(req.roleId);
+  return { any, all: req.roleIdsAll || [], blocked: req.blockedRoleIds || [] };
+}
+
 function requirementLines(req) {
   const lines = [];
-  if (req && req.roleId) lines.push(`• Have the <@&${req.roleId}> role`);
+  const { any, all, blocked } = reqRoleLists(req);
+  const mention = (ids) => ids.map((id) => `<@&${id}>`).join(', ');
+  if (any.length) lines.push(`• Have ${any.length > 1 ? 'any of' : 'the'} ${mention(any)} role${any.length > 1 ? 's' : ''}`);
+  if (all.length) lines.push(`• Have ${all.length > 1 ? 'all of' : 'the'} ${mention(all)} role${all.length > 1 ? 's' : ''}`);
+  if (blocked.length) lines.push(`• **Not** have ${blocked.length > 1 ? 'any of' : 'the'} ${mention(blocked)} role${blocked.length > 1 ? 's' : ''}`);
   if (req && req.minDaysInServer) lines.push(`• Be in the server for **${req.minDaysInServer}+ day(s)**`);
   if (req && req.minLevel) lines.push(`• Be **Level ${req.minLevel}+**`);
   return lines;
@@ -288,7 +315,11 @@ function openGiveawayEditor(messageId = null, { copy = false } = {}) {
   // Show the saved text unless it's just the default (the placeholder already shows that).
   document.getElementById('gwDesc').value = from && from.customDesc && from.customDesc !== GW_DEFAULT_DESC[type] ? from.customDesc : '';
   const req = (from && from.requirements) || {};
-  document.getElementById('gwReqRole').value = req.roleId && roles.some((r) => r.id === req.roleId) ? req.roleId : '';
+  const lists = reqRoleLists(req);
+  const known = (ids) => ids.filter((id) => roles.some((r) => r.id === id));
+  setMultiSelect('gwReqAny', known(lists.any));
+  setMultiSelect('gwReqAll', known(lists.all));
+  setMultiSelect('gwReqBlocked', known(lists.blocked));
   document.getElementById('gwReqDays').value = req.minDaysInServer || '';
   document.getElementById('gwReqLevel').value = req.minLevel || '';
   document.getElementById('gwBonusRows').innerHTML = '';
@@ -316,7 +347,9 @@ function readGiveawayForm() {
     emoji: document.getElementById('gwEmoji').value.trim(),
     description: document.getElementById('gwDesc').value.trim(),
     requirements: {
-      roleId: document.getElementById('gwReqRole').value || null,
+      roleIdsAny: getMultiSelect('gwReqAny'),
+      roleIdsAll: getMultiSelect('gwReqAll'),
+      blockedRoleIds: getMultiSelect('gwReqBlocked'),
       minDaysInServer: document.getElementById('gwReqDays').value,
       minLevel: document.getElementById('gwReqLevel').value
     },
@@ -355,7 +388,13 @@ function renderGiveawayPreview() {
   const ms = parseDurationInput(f.duration);
   const endTs = ms ? Date.now() + ms : editing ? editing.endTimestamp : Date.now() + 86400000;
   const prize = f.prize || 'Your prize';
-  const reqs = requirementLines({ roleId: f.requirements.roleId, minDaysInServer: Number(f.requirements.minDaysInServer) || 0, minLevel: Number(f.requirements.minLevel) || 0 });
+  const reqs = requirementLines({
+    roleIdsAny: f.requirements.roleIdsAny,
+    roleIdsAll: f.requirements.roleIdsAll,
+    blockedRoleIds: f.requirements.blockedRoleIds,
+    minDaysInServer: Number(f.requirements.minDaysInServer) || 0,
+    minLevel: Number(f.requirements.minLevel) || 0
+  });
   // Same as the real embed: role bonuses, plus the booster perk saved on the giveaway (or the server's current one for new giveaways).
   const boosterExtra = isDrop ? 0 : editing && typeof editing.boosterEntries === 'number' ? editing.boosterEntries : typeof boosterGiveawayEntries === 'number' ? boosterGiveawayEntries : 0;
   const bonusParts = [...(!isDrop ? f.bonusEntries.map((b) => `<@&${b.roleId}> +${Number(b.extra)}`) : []), ...(boosterExtra > 0 ? [`💎 Server boosters +${boosterExtra}`] : [])];
@@ -504,7 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
     })
   );
   document.getElementById('gwEntrantsSearch').addEventListener('input', renderEntrants);
-  ['gwChannel', 'gwPrize', 'gwDuration', 'gwWinners', 'gwPing', 'gwColor', 'gwEmoji', 'gwDesc', 'gwReqRole', 'gwReqDays', 'gwReqLevel'].forEach((id) => {
+  ['gwChannel', 'gwPrize', 'gwDuration', 'gwWinners', 'gwPing', 'gwColor', 'gwEmoji', 'gwDesc', 'gwReqAny', 'gwReqAll', 'gwReqBlocked', 'gwReqDays', 'gwReqLevel'].forEach((id) => {
     const el = document.getElementById(id);
     el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderGiveawayPreview);
   });

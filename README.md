@@ -131,6 +131,7 @@ No manual schema setup needed — Mongoose creates collections automatically on 
 | ✨ Engagement | Birthdays, counting (full maths, grief protection, **secret XP goals**), starboard |
 | 🧮 Calculator | `/calculate` pets / guns / fish upgrade costs — every number configurable per server |
 | 📖 Guides | Forum guide library, visual editor, index post, multi-message guides, guide links, admin approvals |
+| ❓ FAQ | One editable FAQ message (text + up to 10 embeds), posted with `/faq show` — same visual / markdown / JSON editor as the Embed Builder |
 | 🗂️ Applications | Apply-for-a-role forms with requirements and a review channel |
 | 👋 Welcome | Welcome / goodbye messages, **"New here?" private intro button** |
 | 🎫 Tickets | Panel button, private channels, claim, transcripts, DM on close |
@@ -356,7 +357,14 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
 ### Giveaways: requirements & drops
 - Every way of starting one offers the same options: **type** (timed giveaway or first-to-click
   drop), channel, duration, winners, ping (@everyone, @here and/or a role), color, button emoji,
-  description, and entry requirements (role, days in the server, XP level).
+  description, and entry requirements (roles, days in the server, XP level).
+- **Role requirements** come in three flavours that can be combined:
+  - **Any of** — members need at least one of the listed roles (e.g. a USA **or** Russia giveaway).
+  - **All of** — members need every listed role (e.g. must be **USA and Android**).
+  - **Blocked** — members with any listed role are kept out (e.g. a USD-Amazon giveaway that
+    excludes the Russia role).
+  `/loof start`/`requirements` take `role` (any-of), `must_have_role` (all-of) and `blocked_role`;
+  the `/loof create` form and the dashboard let you pick several roles for each list at once.
   - `/loof start` takes them all inline (`type:` picks timed or drop).
   - `/loof create` opens a form (type, channel, prize, duration, winners), then a private setup
     panel with a live preview and buttons for **Description & look**, **Requirements** and **Ping**.
@@ -736,6 +744,21 @@ editor can update it later and the live post edits itself in place — no deleti
   guide set (PureMiracle's guide + FAQs). Guide editors who open the dashboard go **straight to the Guides
   page**.
 - `/guide editor_add`/`editor_remove` manage editor roles; `/guide legend` rebuilds the index.
+
+### FAQ (`/faq …` or the dashboard's **❓ FAQ** page)
+A single, server-wide FAQ **message** — plain text plus up to **10 embeds in one response** — that editors
+design on the dashboard and post on demand. It has none of the guides machinery (no forum, index,
+categories or approvals); it's just one message you can post.
+- **Edit:** `/faq edit` (or the dashboard's **❓ FAQ** page) opens the **same editor as the Embed Builder**:
+  a **visual builder** with a live Discord-accurate preview, **markdown** in every text field, and a **raw
+  JSON** panel for importing / exporting (paste from Discohook or an AI). Autocomplete for `@users`,
+  `#channels` and `:server emojis:` works throughout. Add, reorder, duplicate and remove embeds and fields;
+  pick colours, images, thumbnails, author and footer.
+- **Post:** `/faq show` posts the saved FAQ **publicly** in the current channel (or `/faq show channel:#faq`
+  to post it elsewhere). The dashboard also has a **🚀 Post it** button with a channel picker, which saves and
+  posts in one go so the posted message and `/faq show` stay in sync.
+- **Who:** `/faq` and the FAQ page are for **guide editors** (the same editor roles as `/guide`) and admins.
+  Guide-editor roles can reach the FAQ page straight from the Guides page (**❓ Edit the FAQ →**).
 
 ### Applications (dashboard **🗂️ Applications** page)
 Apply-for-a-role forms — e.g. "Apply for Guide Editor" — similar to tickets but fully customizable.
