@@ -72,15 +72,48 @@
     .gd-count{font-size:0.78rem;color:var(--text-muted,#9aa0b4);}
     .gd-count.over{color:var(--accent-red,#ff5c6c);font-weight:700;}
     #jsonWrap textarea{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:0.8rem;white-space:pre;}
-    @media (max-width:600px){
-      .gd-toolbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+    /* save / post bar — inline on desktop */
+    .faq-savebar{margin-top:1rem;display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;}
+    .faq-savebar .faq-bar-status{font-size:0.78rem;}
+    .faq-savebar .faq-bar-note{font-size:0.8rem;}
+    .faq-savebar #postChannel{max-width:220px;margin-left:auto;}
+    #editorCard{scroll-margin-top:calc(var(--gd-top,68px) + 8px);}
+    /* ---- phones & small tablets */
+    @media (max-width:720px){
+      .site-main{padding-left:12px!important;padding-right:12px!important;}
+      #editorCard{padding:0.85rem;border-radius:12px;}
+      .faq-head-actions{width:100%;}
+      .gd-modes{flex:1;}
+      .gd-modes button{flex:1;min-height:2.3rem;}
+      /* toolbar scrolls sideways instead of wrapping into a tall block */
+      .gd-toolbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0.6rem -0.85rem 0.4rem;border-radius:0;border-left:0;border-right:0;padding:0.35rem 0.6rem;}
       .gd-toolbar::-webkit-scrollbar{display:none;}
-      .gd-toolbar button{flex:0 0 auto;min-height:2.4rem;min-width:2.4rem;font-size:0.85rem;}
-      .gd-canvas .p-desc,.v-ed{font-size:16px;}
+      .gd-toolbar button{flex:0 0 auto;min-height:2.5rem;min-width:2.5rem;font-size:0.9rem;}
+      .gd-canvas{margin:0 -0.85rem;border-radius:0;padding:0.75rem 0.7rem;}
+      .gd-canvas .p-embed{max-width:none;}
+      .gd-canvas .p-desc,.gd-canvas .p-title,.v-ed{font-size:16px;}
       .v-ed.is-empty::before{font-size:15px;}
       input,textarea,select,.gd-mini{font-size:16px!important;}
+      /* bigger tap targets on each question's controls */
+      .v-field{padding:0.6rem;}
+      .v-field-ctl{gap:0.5rem;margin-top:0.4rem;}
+      .v-field-ctl .gd-tbtn{min-height:2.2rem;min-width:2.4rem;padding:0.35rem 0.6rem;font-size:0.9rem;}
+      .gd-color input{width:2rem;height:1.8rem;}
+      #vAddItem{width:100%;}
+      /* the colour tool sits on its own line so the label doesn't crowd it */
+      .v-tools-label{width:100%;margin:0 0 0.2rem;}
+      /* emoji picker floats just above the fixed save bar, where a thumb can reach it */
+      .gd-emoji-pop{position:fixed;left:8px;right:8px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:45;margin:0;}
+      .gd-emoji-grid{max-height:40vh;}
+      .gd-emoji-grid button{width:2.6rem;height:2.6rem;}
+      /* save / post pinned to the bottom so it's always reachable */
+      .faq-savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;gap:0.5rem;flex-wrap:nowrap;align-items:center;padding:0.55rem 12px calc(0.55rem + env(safe-area-inset-bottom));background:var(--bg-elevated,#1a1d2b);border-top:1px solid var(--border-strong,#353950);box-shadow:0 -8px 24px rgba(0,0,0,.35);}
+      .faq-savebar .faq-bar-status{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .faq-savebar .faq-bar-note{display:none;}
+      .faq-savebar #postChannel{max-width:7rem;margin-left:0;padding:0.5rem;}
+      .faq-savebar .btn{padding:0.6rem 0.9rem;white-space:nowrap;}
+      body{padding-bottom:72px;}
     }
-    #editorCard{scroll-margin-top:calc(var(--gd-top,68px) + 8px);}
   </style>
   <script src="/js/theme.js"></script>
 </head>
@@ -166,16 +199,15 @@
         </div>
       </div>
 
-      <div class="savebar" style="margin-top:1rem; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-        <span class="gd-count" id="sizeCount"></span>
-        <span id="editorStatus" class="muted" style="font-size:0.8rem;"></span>
-        <div style="flex:1;"></div>
-        <select id="postChannel" style="max-width:220px;">
+      <div class="faq-savebar" id="faqSavebar">
+        <span class="gd-count faq-bar-status" id="sizeCount"></span>
+        <span id="editorStatus" class="muted faq-bar-note"></span>
+        <select id="postChannel" aria-label="Post to channel">
           <option value="">— Post to channel… —</option>
           <% channels.forEach(c => { %><option value="<%= c.id %>" <%= c.id === faq.channelId ? 'selected' : '' %>>#<%= c.name %></option><% }) %>
         </select>
-        <button class="btn secondary" type="button" id="postBtn" onclick="postFaq()">🚀 Post</button>
-        <button class="btn" type="button" id="saveBtn" onclick="saveFaq()">💾 Save</button>
+        <button class="btn secondary" type="button" id="postBtn" onclick="postFaq()">🚀&nbsp;Post</button>
+        <button class="btn" type="button" id="saveBtn" onclick="saveFaq()">💾&nbsp;Save</button>
       </div>
     </div>
   </main>
