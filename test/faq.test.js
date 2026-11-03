@@ -34,6 +34,17 @@ const member = (perms, roleIds = []) => ({ permissions: { has: (p) => perms.incl
   assert.equal(r2[1].fields.length, 5, 'rest go to the next');
   console.log('✓ renderEmbeds chunks past 25 questions into more embeds');
 
+  // dividers: a line is appended under every answer except the last (default on); off = none
+  const two = [{ q: 'Q1', a: 'A1' }, { q: 'Q2', a: 'A2' }];
+  const withDiv = faq.renderEmbeds({ items: two });
+  assert.ok(/─/.test(withDiv[0].fields[0].value) && !/─/.test(withDiv[0].fields[1].value), 'divider under every answer but the last');
+  const noDiv = faq.renderEmbeds({ divider: false, items: two });
+  assert.ok(!/─/.test(noDiv[0].fields[0].value), 'divider:false adds no lines');
+  // answer + divider still respects the 1024 field-value cap
+  const long = faq.renderEmbeds({ items: [{ q: 'Q', a: 'x'.repeat(1024) }, { q: 'Q2', a: 'y' }] });
+  assert.ok(long[0].fields[0].value.length <= 1024, 'answer + divider stays within 1024');
+  console.log('✓ renderEmbeds draws a divider between questions (toggle + length-safe)');
+
   assert.equal(faq.hasFaq({ items: [] }), false, 'empty is empty');
   assert.equal(faq.hasFaq({ items: [{ q: 'a', a: 'b' }] }), true, 'a question counts');
   assert.equal(faq.hasFaq({ intro: 'hi', items: [] }), true, 'intro alone counts');
@@ -71,15 +82,23 @@ const member = (perms, roleIds = []) => ({ permissions: { has: (p) => perms.incl
   assert.ok(faqCmd && faqEditCmd, 'both commands exist');
   assert.equal(faqEditCmd.data.toJSON().options.length, 4, 'faqedit has dashboard/add/remove/edit');
 
-  // /faq posts publicly (not ephemeral) with embeds
+  assert.ok(faqCmd.data.toJSON().options.some((o) => o.name === 'private'), '/faq has a private option');
+
+  // /faq posts publicly (not ephemeral) with embeds by default
+  const opts = (priv) => ({ getBoolean: (n) => (n === 'private' ? priv : null) });
   let posted = null;
-  await faqCmd.execute({ guildId: 'g', reply: async (o) => { posted = o; } });
+  await faqCmd.execute({ guildId: 'g', options: opts(null), reply: async (o) => { posted = o; } });
   assert.ok(posted && posted.embeds && posted.embeds.length && !posted.ephemeral, '/faq replies publicly with embeds');
+
+  // /faq private:true → invisible (ephemeral) reply
+  let secret = null;
+  await faqCmd.execute({ guildId: 'g', options: opts(true), reply: async (o) => { secret = o; } });
+  assert.ok(secret.ephemeral && secret.embeds.length, '/faq private:true is ephemeral');
 
   // /faq on an empty FAQ is a gentle ephemeral note
   await GuildConfig.updateOne({ guildId: 'g2' }, { $set: { guildId: 'g2' } }, { upsert: true });
   let note = null;
-  await faqCmd.execute({ guildId: 'g2', reply: async (o) => { note = o; } });
+  await faqCmd.execute({ guildId: 'g2', options: opts(null), reply: async (o) => { note = o; } });
   assert.ok(note.ephemeral && /set up/i.test(note.content), 'empty FAQ → ephemeral hint');
 
   // /faqedit is gated to editors
@@ -114,8 +133,10 @@ const member = (perms, roleIds = []) => ({ permissions: { has: (p) => perms.incl
   const data = await call('GET', '/data');
   assert.ok(data.ok && Array.isArray(data.faq.items), 'GET data returns the FAQ');
 
-  const save = await call('POST', '/save', { faq: { title: 'Help', intro: '', color: '#ff0000', items: [{ q: 'Q1', a: 'A1' }] } });
+  const save = await call('POST', '/save', { faq: { title: 'Help', intro: '', color: '#ff0000', divider: false, items: [{ q: 'Q1', a: 'A1' }] } });
   assert.ok(save.ok && save.faq.items.length === 1 && save.faq.color === '#ff0000', 'save persisted');
+  assert.equal(save.faq.divider, false, 'divider toggle persisted');
+  assert.equal((await call('GET', '/data')).faq.divider, false, 'divider read back');
   assert.equal((await call('POST', '/save', { faq: { items: [] } })).status, 400, 'empty save rejected');
 
   const post = await call('POST', '/post', { faq: { title: 'Help', items: [{ q: 'Q1', a: 'A1' }] }, channelId: 'c1' });

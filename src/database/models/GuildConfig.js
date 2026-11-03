@@ -220,6 +220,7 @@ const GuildConfigSchema = new mongoose.Schema(
       title: { type: String, default: '' }, // embed title (default "Frequently Asked Questions")
       intro: { type: String, default: '' }, // optional text shown above the questions (markdown)
       color: { type: String, default: '#5865f2' },
+      divider: { type: Boolean, default: true }, // draw a line between questions so they don't run together
       items: {
         type: [new mongoose.Schema({ q: { type: String, required: true }, a: { type: String, required: true } }, { _id: false })],
         default: []

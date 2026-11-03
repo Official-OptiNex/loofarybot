@@ -46,9 +46,9 @@ for (const m of eb.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Function(m[1])
 if (!/data-forum="1">💬 announcements&lt;\/script&gt;/.test(eb) || !/Forums \(creates a new post\)/.test(eb)) throw new Error('forum channels missing from the embed builder');
 JSON.parse(eb.match(/<script type="application\/json" id="forumData">([\s\S]*?)<\/script>/)[1]); console.log('embed builder lists forum channels (escaped)');
 // FAQ page: the Q&A visual editor. Render it, parse its inline script, and confirm the saved FAQ is embedded (escaped).
-const fq=ejs.render(fs.readFileSync(root+'src/web/views/faq.ejs','utf8'),{guild,channels:base.channels,bot:base.bot,faq:{title:'FAQ</script>',intro:'hi',color:'#abcdef',items:[{q:'Q1',a:'A1'}],channelId:'c2'},defaultTitle:'Frequently Asked Questions',editorData:{emojis:[],channels:[],roles:[]},isAdmin:true,guidesOnly:false,...{botName:'LoofaryBot',user:null}},{filename:root+'src/web/views/faq.ejs'});
+const fq=ejs.render(fs.readFileSync(root+'src/web/views/faq.ejs','utf8'),{guild,channels:base.channels,bot:base.bot,faq:{title:'FAQ</script>',intro:'hi',color:'#abcdef',divider:true,items:[{q:'Q1',a:'A1'}],channelId:'c2'},defaultTitle:'Frequently Asked Questions',editorData:{emojis:[],channels:[],roles:[]},isAdmin:true,guidesOnly:false,...{botName:'LoofaryBot',user:null}},{filename:root+'src/web/views/faq.ejs'});
 for (const m of fq.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Function(m[1]);
-if (!/id="vItems"/.test(fq) || !/id="toolbar"/.test(fq) || !/id="jsonEditor"/.test(fq)) throw new Error('FAQ editor shell missing');
+if (!/id="vItems"/.test(fq) || !/id="toolbar"/.test(fq) || !/id="jsonEditor"/.test(fq) || !/id="faqDivider"/.test(fq)) throw new Error('FAQ editor shell missing');
 if (!/value="#abcdef"/.test(fq)) throw new Error('FAQ colour not prefilled');
 JSON.parse(fq.match(/<script id="faqData" type="application\/json">([\s\S]*?)<\/script>/)[1]); console.log('faq page ok (visual Q&A editor + toolbar + json, saved FAQ escaped)');
 const S=require('os').tmpdir()+'/loofary-render-';

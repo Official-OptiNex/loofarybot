@@ -8,6 +8,8 @@ const guides = require('./guides');
 
 const DEFAULT_TITLE = 'Frequently Asked Questions';
 const LIMITS = { title: 256, intro: 4096, question: 256, answer: 1024, items: 100, embeds: 10, fieldsPerEmbed: 25, perEmbed: 5800 };
+// A thin rule appended under each answer (except the last) so questions don't run together.
+const DIVIDER = '────────────────────';
 
 const str = (v, max) => (typeof v === 'string' ? v : v == null ? '' : String(v)).slice(0, max);
 
@@ -22,6 +24,7 @@ function faqSettings(config) {
     title: str(f.title, LIMITS.title),
     intro: str(f.intro, LIMITS.intro),
     color: f.color || '#5865f2',
+    divider: f.divider !== false, // on by default
     items,
     channelId: f.channelId || null,
     updatedBy: f.updatedBy || null,
@@ -51,17 +54,21 @@ function renderEmbeds(f) {
     len = (cur.title || '').length + (cur.description || '').length;
     embeds.push(cur);
   };
+  const divider = s.divider !== false;
+  const foot = divider ? `\n${DIVIDER}` : '';
   open(true);
-  for (const it of s.items) {
+  s.items.forEach((it, i) => {
     const name = str(it.q, LIMITS.question) || '​';
-    const value = str(it.a, LIMITS.answer) || '​';
+    // Reserve room for the divider so a long answer + line still fits the 1024-char field limit.
+    const last = i === s.items.length - 1;
+    const value = (str(it.a, LIMITS.answer - (divider && !last ? foot.length : 0)) || '​') + (divider && !last ? foot : '');
     if (cur.fields.length >= LIMITS.fieldsPerEmbed || len + name.length + value.length > LIMITS.perEmbed) {
-      if (embeds.length >= LIMITS.embeds) break;
+      if (embeds.length >= LIMITS.embeds) return;
       open(false);
     }
     cur.fields.push({ name, value });
     len += name.length + value.length;
-  }
+  });
   return embeds.map((e) => EmbedJson.normalizeEmbed(e)).filter(Boolean);
 }
 
@@ -92,10 +99,11 @@ async function saveFaq(guild, input = {}, userId) {
     title: str(input.title, LIMITS.title),
     intro: str(input.intro, LIMITS.intro),
     color: EmbedJson.intToHex(EmbedJson.colorToInt(input.color)) || '#5865f2',
+    divider: input.divider !== false,
     items
   };
   if (!hasFaq(faqDoc)) return { error: 'Add at least one question (or some intro text) before saving.' };
-  const set = { 'faq.title': faqDoc.title, 'faq.intro': faqDoc.intro, 'faq.color': faqDoc.color, 'faq.items': faqDoc.items, 'faq.updatedBy': userId || null, 'faq.updatedAt': new Date() };
+  const set = { 'faq.title': faqDoc.title, 'faq.intro': faqDoc.intro, 'faq.color': faqDoc.color, 'faq.divider': faqDoc.divider, 'faq.items': faqDoc.items, 'faq.updatedBy': userId || null, 'faq.updatedAt': new Date() };
   await GuildConfig.updateOne({ guildId: guild.id }, { $set: set }, { upsert: true });
   return { faq: faqSettings({ faq: faqDoc }) };
 }
