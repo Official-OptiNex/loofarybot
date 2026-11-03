@@ -213,6 +213,17 @@ module.exports = [
     ]
   },
   {
+    id: 'faq',
+    group: 'FAQ',
+    icon: '❓',
+    blurb: 'One editable FAQ message — text plus up to 10 embeds — built in the same visual / markdown / JSON editor as the Embed Builder.',
+    page: 'faq',
+    commands: [
+      { usage: '/faq show', perm: 'Guide editor', description: 'Post the server FAQ publicly (in this channel, or a channel you pick). Guide editors and admins only.' },
+      { usage: '/faq edit', perm: 'Guide editor', description: 'Open the dashboard FAQ editor — design the message visually, in markdown, or paste Discord / Discohook JSON, with @user, #channel and :emoji: autocomplete.' }
+    ]
+  },
+  {
     id: 'autoreplies',
     group: 'Auto-Replies',
     icon: '💬',

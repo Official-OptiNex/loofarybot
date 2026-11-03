@@ -213,6 +213,14 @@ const GuildConfigSchema = new mongoose.Schema(
       // How the pinned index post looks: { name, title, color, intro, footer } (see guides.cleanIndex).
       index: { type: mongoose.Schema.Types.Mixed, default: null }
     },
+    // FAQ (/faq, dashboard FAQ). Guide editors build one message (text + up to 10 embeds) in the same
+    // visual / markdown / JSON editor as the Embed Builder; /faq show posts it publicly. See faq.js.
+    faq: {
+      message: { type: mongoose.Schema.Types.Mixed, default: null }, // Discord message JSON: { content, embeds: [...] }
+      channelId: { type: String, default: null }, // last channel it was posted to (a handy default for re-posting)
+      updatedBy: { type: String, default: null },
+      updatedAt: { type: Date, default: null }
+    },
     // Music / radio voice player (/music, dashboard Community → Music). Plays Lofi / chill internet
     // radio streams in a voice channel — light and ToS-safe for the free tier. See music.js.
     music: {

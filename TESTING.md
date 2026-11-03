@@ -344,6 +344,21 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       `[{"title":"FAQ","tags":["Guides"],"body":{"embeds":[{"description":"…"}]},"images":["https://…"]}]`
       → "Imported N" and each becomes a forum post; the index updates. Entries without a title are skipped.
 
+## 8b-4. FAQ (`/faq`, dashboard **❓ FAQ**)
+- [ ] **Edit:** `/faq edit` (editor/admin) replies with a link to the dashboard **❓ FAQ** page. The page is
+      the **same editor as the Embed Builder**: message text + up to 10 embeds, a live preview, `@`/`#`/`:`
+      autocomplete, and a **📝 JSON editor** (Apply / Format / Import / Export). Build a couple of embeds and
+      press **💾 Save FAQ** → "FAQ saved".
+- [ ] **Show:** `/faq show` posts the saved FAQ **publicly** in the current channel (embeds render, no pings
+      from embed text). `/faq show channel:#faq` posts it in that channel instead. Empty FAQ → a message
+      telling you to set it up first.
+- [ ] **Post from dashboard:** pick a channel and **🚀 Post it** → it saves and posts; the posted message
+      matches `/faq show`.
+- [ ] **Import JSON:** **📥 Import**, paste `{"content":"Read this","embeds":[{"title":"Codes?","description":"Yes"}]}`
+      → **Open in editor** fills the builder; Save, then `/faq show` posts it.
+- [ ] **Access:** a user with **only** the guide-editor role can open **❓ FAQ** (and reach it from the Guides
+      page's **❓ Edit the FAQ →** button); a member with no editor role gets "🔒 Only guide editors…" on `/faq`.
+
 ## 8c. Bot Chat (💬 top bar → talk through the bot)
 - [ ] Open **Bot Chat** and pick a channel → the last ~25 messages appear, newest at the bottom, and
       refresh on their own every few seconds. The bot's own messages are marked **BOT · you**.

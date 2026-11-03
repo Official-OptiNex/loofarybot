@@ -173,6 +173,7 @@
         <h1 style="font-size:1.45rem; margin-top:0.2rem;">📖 Guides</h1>
         <p class="muted" style="margin:0.2rem 0 0; font-size:0.86rem;">Each guide is a forum post the bot owns — edit here and the live post updates. The pinned <strong>📖 Guides Index</strong> follows your order automatically.</p>
       </div>
+      <% if (typeof canFaq !== 'undefined' && canFaq) { %><div><a class="btn secondary" href="/dashboard/<%= guild.id %>/faq">❓ Edit the FAQ →</a></div><% } %>
     </div>
 
     <% if (!settings.forumChannelId) { %>

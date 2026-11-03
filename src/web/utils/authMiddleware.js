@@ -26,6 +26,7 @@ const MOD_PAGES = {
   embed: 'Embed Builder',
   botchat: 'Bot Chat (speak as the bot)',
   guides: 'Guides',
+  faq: 'FAQ',
   autoreplies: 'Auto-Replies',
   applications: 'Applications'
 };
@@ -72,11 +73,14 @@ async function resolveAccess(guild, userId, userGuild) {
   const access = config?.dashboardAccess || {};
   const modRoles = access.modRoleIds || [];
   const isMod = modRoles.some((id) => member.roles.cache.has(id));
-  // Guide editors get the Guides page (and nothing else, unless they're also a dashboard moderator).
+  // Guide editors get the Guides and FAQ pages (and nothing else, unless they're also a moderator).
   const isGuideEditor = (config?.guides?.editorRoleIds || []).some((id) => member.roles.cache.has(id));
   if (!isMod && !isGuideEditor) return null;
   const pages = new Set(isMod ? access.modPages || DEFAULT_MOD_PAGES : []);
-  if (isGuideEditor) pages.add('guides');
+  if (isGuideEditor) {
+    pages.add('guides');
+    pages.add('faq');
+  }
   return { level: 'mod', pages };
 }
 
@@ -101,8 +105,11 @@ async function requireGuildAccess(req, res, next) {
   next();
 }
 
-// True when the Guides page is all this user can open (a guide editor who isn't a moderator/admin).
-const guidesOnly = (access) => !!access && access.level === 'mod' && access.pages?.size === 1 && access.pages.has('guides');
+// True when the editor pages (Guides / FAQ) are all this user can open — a guide editor who isn't a
+// moderator/admin. These users get a stripped-down dashboard that starts on the Guides page.
+const EDITOR_PAGES = new Set(['guides', 'faq']);
+const guidesOnly = (access) =>
+  !!access && access.level === 'mod' && !!access.pages?.size && [...access.pages].every((p) => EDITOR_PAGES.has(p));
 
 /** Where this user's dashboard for a guild starts: the Guides page for guide-only editors, else the overview. */
 const homeFor = (guildId, access) => (guidesOnly(access) ? `/dashboard/${guildId}/guides` : `/dashboard/${guildId}`);
