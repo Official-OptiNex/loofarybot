@@ -18,6 +18,7 @@
     title: saved.title || '',
     intro: saved.intro || '',
     color: /^#[0-9a-f]{6}$/i.test(saved.color) ? saved.color : DEFAULT_COLOR,
+    divider: saved.divider !== false,
     items: Array.isArray(saved.items) ? saved.items.map((it) => ({ q: it.q || '', a: it.a || '' })) : []
   };
   let mode = 'visual';
@@ -67,6 +68,8 @@
       toolBtn('🗑 Remove', 'Remove this question', () => { if (confirm('Remove this question?')) { state.items.splice(i, 1); renderVisual(); dirty(); } })
     );
     box.appendChild(ctl);
+    // Preview the divider that will show under this question in the posted embed.
+    if (state.divider && i < state.items.length - 1) box.appendChild(el('div', 'faq-divider', '────────────────────'));
     return box;
   }
 
@@ -74,6 +77,7 @@
   function moveItem(i, d) { const j = i + d; if (j < 0 || j >= state.items.length) return; [state.items[i], state.items[j]] = [state.items[j], state.items[i]]; renderVisual(); dirty(); }
 
   $('faqColor').addEventListener('input', () => { state.color = $('faqColor').value; $('faqEmbed').style.borderLeftColor = state.color; dirty(); });
+  $('faqDivider').addEventListener('change', () => { state.divider = $('faqDivider').checked; renderVisual(); dirty(); });
 
   /* ------------------------------------------------------------ size hint */
 
@@ -132,7 +136,7 @@
 
   /* ------------------------------------------------------------ JSON mode */
 
-  const cleanState = () => ({ title: state.title, intro: state.intro, color: state.color, items: state.items.filter((it) => it.q.trim() && it.a.trim()).map((it) => ({ q: it.q, a: it.a })) });
+  const cleanState = () => ({ title: state.title, intro: state.intro, color: state.color, divider: state.divider, items: state.items.filter((it) => it.q.trim() && it.a.trim()).map((it) => ({ q: it.q, a: it.a })) });
   function fillJson() { $('jsonEditor').value = JSON.stringify(cleanState(), null, 2); }
   function setJsonStatus(msg, ok) { const el2 = $('jsonStatus'); el2.textContent = msg || ''; el2.style.color = msg ? (ok ? 'var(--good,#3ba55d)' : 'var(--danger,#ed4245)') : ''; }
   window.applyJson = () => {
@@ -157,6 +161,7 @@
     state.intro = typeof o.intro === 'string' ? o.intro : state.intro;
     if (typeof o.color === 'string') { const hex = E.intToHex(E.colorToInt(o.color)); if (hex) state.color = hex; }
     else if (typeof o.color === 'number') { const hex = E.intToHex(o.color); if (hex) state.color = hex; }
+    if (typeof o.divider === 'boolean') { state.divider = o.divider; $('faqDivider').checked = o.divider; }
     if (Array.isArray(o.items)) state.items = o.items.map((it) => ({ q: String(it.q ?? it.question ?? it.name ?? '').slice(0, 256), a: String(it.a ?? it.answer ?? it.value ?? '').slice(0, 1024) }));
     dirty();
     if (mode === 'visual') renderVisual();

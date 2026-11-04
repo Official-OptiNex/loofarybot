@@ -349,8 +349,11 @@ Turn it on first (dashboard Leveling tab, or it's off by default).
       "Added. The FAQ now has 1 question." `/faqedit edit question:` (autocompletes) changes the answer or
       rewords it; `/faqedit remove question:` deletes one. A non-editor gets "🔒 Only guide editors…".
 - [ ] **Post (anyone):** `/faq` posts the FAQ embed in the current channel — each question is a bold field
-      with its answer below. A member **without** any editor role can run it. An empty FAQ → an ephemeral
-      "hasn't been set up yet" hint instead.
+      with its answer below, separated by a thin divider line. A member **without** any editor role can run it.
+      An empty FAQ → an ephemeral "hasn't been set up yet" hint instead.
+- [ ] **Invisible:** `/faq private:true` shows the FAQ **only to you** (ephemeral) — nobody else sees it.
+- [ ] **Divider toggle:** on the dashboard, turn **Divider lines** off → the `────` lines disappear from the
+      preview and from what `/faq` posts; on → they're back between questions.
 - [ ] **Visual editor (editor):** `/faqedit dashboard` (or Guides page → **❓ Edit the FAQ →**) opens the page.
       It's **click-to-edit**: click the title, intro or any question / answer on the live preview and type.
       Select text → the toolbar formats it (bold, headings, lists, link…); the 😀 picker inserts emojis; `@`,

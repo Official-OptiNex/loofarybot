@@ -19,16 +19,22 @@ const editorLink = (guildId) => {
 
 /* --------------------------------------------------------------- /faq (everyone) */
 
-const faqData = new SlashCommandBuilder().setName('faq').setDescription('Post the server FAQ in this channel').setDMPermission(false);
+const faqData = new SlashCommandBuilder()
+  .setName('faq')
+  .setDescription('Post the server FAQ in this channel')
+  .setDMPermission(false)
+  .addBooleanOption((o) => o.setName('private').setDescription('Show it only to you (invisible to everyone else)'));
 
 async function faqExecute(interaction) {
+  const invisible = interaction.options.getBoolean('private') ?? false;
   const f = await faq.getFaq(interaction.guildId);
   if (!faq.hasFaq(f)) {
     const link = editorLink(interaction.guildId);
     return interaction.reply({ content: `❌ The FAQ hasn't been set up yet. ${link ? `An editor can add questions here: ${link}` : 'An editor can set it up on the dashboard.'}`, ephemeral: true });
   }
-  // Public reply: it posts in this channel for everyone to see. Embed text never pings.
-  return interaction.reply({ embeds: faq.toPayload(f).embeds, allowedMentions: { parse: [] } });
+  // Public by default (everyone in the channel sees it); `private:true` makes it an ephemeral reply only
+  // the runner can see. Embed text never pings either way.
+  return interaction.reply({ embeds: faq.toPayload(f).embeds, ephemeral: invisible, allowedMentions: { parse: [] } });
 }
 
 /* --------------------------------------------------------------- /faqedit (editors) */

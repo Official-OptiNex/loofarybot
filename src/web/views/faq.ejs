@@ -63,6 +63,7 @@
     .gd-color input{width:1.6rem;height:1.3rem;padding:0;border:0;background:none;cursor:pointer;}
     .v-field{background:rgba(0,0,0,.12);border-radius:4px;padding:0.4rem 0.5rem;}
     .v-field-ctl{display:flex;justify-content:flex-end;gap:0.3rem;align-items:center;font-size:0.72rem;color:#949ba4;margin-top:0.25rem;}
+    .faq-divider{color:#4e5058;font-size:0.8rem;line-height:1;letter-spacing:1px;margin-top:0.5rem;overflow:hidden;white-space:nowrap;user-select:none;}
     .faq-q-label,.faq-a-label{font-size:0.66rem;text-transform:uppercase;letter-spacing:.04em;color:#949ba4;font-weight:700;}
     .gd-ac{position:fixed;z-index:60;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-strong,#353950);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:4px;max-height:260px;overflow:auto;}
     .gd-ac-item{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.55rem;border-radius:6px;cursor:pointer;font-size:0.86rem;color:var(--text-main,#e6e8ef);}
@@ -175,6 +176,7 @@
           <div class="p-embed" id="faqEmbed">
             <div class="v-tools">
               <span class="v-tools-label">FAQ embed</span>
+              <label class="gd-color" title="Draw a line between questions so they don't run together"><input type="checkbox" id="faqDivider" <%= faq.divider === false ? '' : 'checked' %>> Divider lines</label>
               <label class="gd-color">🎨 <input type="color" id="faqColor" title="Embed colour" value="<%= /^#[0-9a-fA-F]{6}$/.test(faq.color) ? faq.color : '#5865f2' %>"></label>
             </div>
             <div id="vTitle"></div>
