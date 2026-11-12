@@ -42,6 +42,8 @@ function reqRoleLists(req) {
   return { any, all: list(req?.roleIdsAll), blocked: list(req?.blockedRoleIds) };
 }
 const rolesOf = (ids) => ids.map((id) => `<@&${id}>`).join(' ');
+// A numbered winner list ("**Winner 1:** @a") so hosts can hand out a different prize per place.
+const numberedWinners = (ids) => (ids || []).map((id, i) => `**Winner ${i + 1}:** <@${id}>`).join('\n');
 
 function hasRequirements(req) {
   if (!req) return false;
@@ -401,12 +403,14 @@ async function finishGiveaway(client, g) {
     winners = weightedPick(pool, await entryWeights(channel.guild, g, pool), g.winnerCount);
   }
   await Giveaway.updateOne({ _id: g._id }, { $set: { winners } });
-  const winnerMentions = winners.length > 0 ? winners.map((id) => `<@${id}>`).join(', ') : 'No valid entries.';
+  // With 2+ winners, number them (Winner 1, Winner 2, …) so hosts can assign prizes per place.
+  const multi = winners.length > 1;
+  const winnersField = winners.length ? (multi ? `**Winners:**\n${numberedWinners(winners)}` : `**Winners:** <@${winners[0]}>`) : '**Winners:** No valid entries.';
 
   if (msg) {
     const endedEmbed = new EmbedBuilder()
       .setTitle(`${g.type === 'drop' ? '⚡ Drop' : '🎁 Giveaway'} Ended: ${g.prize}`)
-      .setDescription(`**Winners:** ${winnerMentions}\n**Hosted By:** <@${g.hostId}>`)
+      .setDescription(`${winnersField}\n**Hosted By:** <@${g.hostId}>`)
       .setColor('#2B2D31')
       .setTimestamp();
 
@@ -414,7 +418,10 @@ async function finishGiveaway(client, g) {
   }
 
   if (winners.length > 0) {
-    channel.send(`🎉 Congratulations ${winnerMentions}! You won **${g.prize}**!`).catch(() => null);
+    const congrats = multi
+      ? `🎉 Congratulations! You won **${g.prize}**:\n${numberedWinners(winners)}`
+      : `🎉 Congratulations <@${winners[0]}>! You won **${g.prize}**!`;
+    channel.send(congrats).catch(() => null);
   } else if (g.type === 'drop') {
     channel.send(`⚡ The drop for **${g.prize}** expired with no claims.`).catch(() => null);
   } else {

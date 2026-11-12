@@ -185,20 +185,57 @@ async function loadGiveaways() {
   }
 }
 
-// Read/write a native <select multiple> as an array of option values.
-function getMultiSelect(id) {
+// Searchable chip picker for the three giveaway role boxes — click to add, × to remove (touch-friendly,
+// unlike a native <select multiple> where removing meant Ctrl/⌘-clicking). Reads the page's `roles`/`esc`.
+const gwRolePickers = {};
+function makeRolePicker(id) {
+  if (gwRolePickers[id]) return gwRolePickers[id];
   const el = document.getElementById(id);
-  if (!el) return [];
-  return [...el.selectedOptions].map((o) => o.value).filter(Boolean);
-}
-function setMultiSelect(id, ids) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const want = new Set(ids || []);
-  [...el.options].forEach((o) => {
-    o.selected = want.has(o.value);
+  if (!el) return null;
+  let selected = [];
+  el.innerHTML = '<div class="tokens"></div><div class="drop"></div>';
+  const tokens = el.querySelector('.tokens');
+  const drop = el.querySelector('.drop');
+  const input = document.createElement('input');
+  input.className = 'search';
+  input.placeholder = el.dataset.ph || 'Add a role…';
+  input.setAttribute('aria-label', el.getAttribute('aria-label') || 'Add a role');
+  const nameOf = (rid) => { const r = roles.find((x) => x.id === rid); return r ? r.name : rid; };
+  function renderTokens() {
+    tokens.innerHTML = selected.map((rid) => `<span class="tok">@${esc(nameOf(rid))}<button type="button" data-id="${esc(rid)}" aria-label="Remove">×</button></span>`).join('');
+    tokens.appendChild(input);
+  }
+  function renderDrop() {
+    const q = input.value.trim().toLowerCase();
+    const opts = roles.filter((r) => !selected.includes(r.id) && (!q || r.name.toLowerCase().includes(q))).slice(0, 60);
+    drop.innerHTML = opts.length
+      ? opts.map((r, i) => `<div class="opt ${i === 0 ? 'active' : ''}" data-id="${esc(r.id)}">@${esc(r.name)}</div>`).join('')
+      : `<div class="opt none">${roles.length ? 'No matches' : 'No roles'}</div>`;
+  }
+  const open = () => { renderDrop(); drop.classList.add('open'); };
+  const close = () => drop.classList.remove('open');
+  const changed = () => { renderTokens(); renderDrop(); renderGiveawayPreview(); };
+  function add(rid) { if (rid && !selected.includes(rid)) { selected.push(rid); changed(); } input.value = ''; input.focus(); renderDrop(); }
+  tokens.addEventListener('mousedown', (e) => { if (e.target === tokens) { e.preventDefault(); input.focus(); open(); } });
+  tokens.addEventListener('click', (e) => { const b = e.target.closest('button[data-id]'); if (b) { selected = selected.filter((x) => x !== b.dataset.id); changed(); input.focus(); } });
+  input.addEventListener('focus', open);
+  input.addEventListener('input', open);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); const a = drop.querySelector('.opt[data-id]'); if (a) add(a.dataset.id); }
+    else if (e.key === 'Escape') { close(); }
+    else if (e.key === 'Backspace' && !input.value && selected.length) { selected.pop(); changed(); }
   });
+  drop.addEventListener('mousedown', (e) => { const o = e.target.closest('.opt[data-id]'); if (o) { e.preventDefault(); add(o.dataset.id); } });
+  document.addEventListener('click', (e) => { if (!el.contains(e.target)) close(); });
+  renderTokens();
+  gwRolePickers[id] = {
+    get: () => selected.slice(),
+    set: (ids) => { selected = (ids || []).filter((rid) => roles.some((r) => r.id === rid)); renderTokens(); renderDrop(); }
+  };
+  return gwRolePickers[id];
 }
+function getMultiSelect(id) { return gwRolePickers[id] ? gwRolePickers[id].get() : []; }
+function setMultiSelect(id, ids) { const p = makeRolePicker(id); if (p) p.set(ids); }
 
 // Keep in sync with reqRoleLists() in the bot: fold the legacy single roleId into "any".
 function reqRoleLists(req) {
@@ -543,7 +580,9 @@ document.addEventListener('DOMContentLoaded', () => {
     })
   );
   document.getElementById('gwEntrantsSearch').addEventListener('input', renderEntrants);
-  ['gwChannel', 'gwPrize', 'gwDuration', 'gwWinners', 'gwPing', 'gwColor', 'gwEmoji', 'gwDesc', 'gwReqAny', 'gwReqAll', 'gwReqBlocked', 'gwReqDays', 'gwReqLevel'].forEach((id) => {
+  // The role pickers update the preview themselves; the rest are plain inputs/selects.
+  ['gwReqAny', 'gwReqAll', 'gwReqBlocked'].forEach(makeRolePicker);
+  ['gwChannel', 'gwPrize', 'gwDuration', 'gwWinners', 'gwPing', 'gwColor', 'gwEmoji', 'gwDesc', 'gwReqDays', 'gwReqLevel'].forEach((id) => {
     const el = document.getElementById(id);
     el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', renderGiveawayPreview);
   });

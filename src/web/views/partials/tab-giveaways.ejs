@@ -1,4 +1,20 @@
     <!-- GIVEAWAYS (same options as /loof start · drop · edit · requirements · end · reroll · delete) -->
+    <style>
+      .gwrp{position:relative;}
+      .gwrp .tokens{display:flex;flex-wrap:wrap;gap:0.3rem;align-items:center;min-height:2.3rem;border:1px solid var(--border-color,#2a2d31);border-radius:8px;padding:0.3rem 0.4rem;background:var(--bg-elevated,#1a1d2b);cursor:text;}
+      .gwrp .tok{display:inline-flex;align-items:center;gap:0.3rem;background:#4e5d94;color:#fff;border-radius:12px;padding:0.14rem 0.55rem;font-size:0.78rem;line-height:1.4;}
+      .gwrp .tok button{background:none;border:0;color:#fff;cursor:pointer;font-size:0.95rem;line-height:1;padding:0;opacity:0.85;}
+      .gwrp .tok button:hover{opacity:1;}
+      .gwrp input.search{border:0;background:none;outline:none;flex:1;min-width:6rem;color:inherit;font:inherit;padding:0.2rem;}
+      .gwrp .drop{position:absolute;z-index:40;left:0;right:0;top:100%;margin-top:2px;background:var(--bg-elevated,#1a1d2b);border:1px solid var(--border-strong,#353950);border-radius:8px;max-height:220px;overflow:auto;display:none;box-shadow:0 10px 30px rgba(0,0,0,.35);}
+      .gwrp .drop.open{display:block;}
+      .gwrp .opt{padding:0.45rem 0.6rem;cursor:pointer;font-size:0.85rem;}
+      .gwrp .opt.active,.gwrp .opt:hover{background:var(--accent,#5865f2);color:#fff;}
+      .gwrp .opt.none{opacity:0.6;cursor:default;}
+      .gwrp.any .tok{background:#3ba55d;}
+      .gwrp.all .tok{background:#4e5d94;}
+      .gwrp.blocked .tok{background:#a3352f;}
+    </style>
     <div class="tab-panel hidden" id="tab-giveaways">
       <div class="module-hero">
         <div class="hero-icon">🎁</div>
@@ -75,17 +91,17 @@
               <div><div class="setting-title">Entry requirements</div><div class="setting-help">Optional. Entrants who stop qualifying are skipped at the draw.</div></div>
               <div class="setting-control" style="flex-direction:column; align-items:stretch; gap:0.6rem;">
                 <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
-                  <label style="flex:1; min-width:170px;"><div class="setting-help" style="margin-bottom:0.2rem;">Allowed — need <strong>any</strong></div>
-                    <select id="gwReqAny" multiple size="4" style="width:100%;" aria-label="Allowed roles (any of)"><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
-                  <label style="flex:1; min-width:170px;"><div class="setting-help" style="margin-bottom:0.2rem;">Required — need <strong>all</strong></div>
-                    <select id="gwReqAll" multiple size="4" style="width:100%;" aria-label="Required roles (all of)"><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
-                  <label style="flex:1; min-width:170px;"><div class="setting-help" style="margin-bottom:0.2rem;">Blocked — must <strong>not</strong> have</div>
-                    <select id="gwReqBlocked" multiple size="4" style="width:100%;" aria-label="Blocked roles"><% roles.forEach(r => { %><option value="<%= r.id %>">@<%= r.name %></option><% }) %></select></label>
+                  <label style="flex:1; min-width:180px;"><div class="setting-help" style="margin-bottom:0.2rem;">Allowed — need <strong>any</strong></div>
+                    <div id="gwReqAny" class="gwrp any" data-ph="Add a role…" aria-label="Allowed roles (any of)"></div></label>
+                  <label style="flex:1; min-width:180px;"><div class="setting-help" style="margin-bottom:0.2rem;">Required — need <strong>all</strong></div>
+                    <div id="gwReqAll" class="gwrp all" data-ph="Add a role…" aria-label="Required roles (all of)"></div></label>
+                  <label style="flex:1; min-width:180px;"><div class="setting-help" style="margin-bottom:0.2rem;">Blocked — must <strong>not</strong> have</div>
+                    <div id="gwReqBlocked" class="gwrp blocked" data-ph="Add a role…" aria-label="Blocked roles"></div></label>
                 </div>
                 <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
                   <input type="number" id="gwReqDays" min="0" placeholder="Min days" style="flex:0 0 110px; min-width:110px;" aria-label="Minimum days in server">
                   <input type="number" id="gwReqLevel" min="0" placeholder="Min level" style="flex:0 0 110px; min-width:110px;" aria-label="Minimum level">
-                  <span class="setting-help">Hold Ctrl / ⌘ to pick more than one role.</span>
+                  <span class="setting-help">Click a role to add it, × to remove. Type to search.</span>
                 </div>
               </div>
             </div>
