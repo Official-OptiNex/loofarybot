@@ -17,7 +17,10 @@ for (const [config, welcome] of [[{}, new WelcomeConfig({guildId:'1'}).toObject(
   console.log('guild ok', html.includes('</textarea><script>') ? 'UNESCAPED' : 'escaped', /id="tab-welcome"/.test(html), /chart\.umd/.test(html));
   const opts=(id)=>{ const m=html.match(new RegExp('id="'+id+'"[\\s\\S]*?</select>')); return m?m[0]:''; };
   if (!/id="tab-engagement"/.test(html) || !/data-sub="en-starboard"/.test(html)) throw new Error('engagement tab missing');
-  for (const id of ['gwReqAny','gwReqAll','gwReqBlocked']) if (!/Server Booster/.test(opts(id))) throw new Error('booster role missing from giveaway requirement picker '+id);
+  // The three giveaway requirement boxes are searchable chip pickers fed by the page's `roles` data
+  // (so managed roles like Server Booster are pickable), not server-rendered <select>s.
+  for (const id of ['gwReqAny','gwReqAll','gwReqBlocked']) if (!new RegExp('id="'+id+'" class="gwrp').test(html)) throw new Error('giveaway requirement picker missing: '+id);
+  if (!/const roles = \[[^\]]*Server Booster/.test(html)) throw new Error('booster role missing from the roles the giveaway pickers use');
   for (const id of ['arRole','bdRole']) if (/Server Booster/.test(opts(id))) throw new Error('managed role offered in '+id);
   console.log('engagement tab rendered; booster role pickable for requirements but not for roles the bot hands out');
   fs.writeFileSync(require('os').tmpdir()+'/loofary-render-guild'+scripts.push(1)+'.html', html);
