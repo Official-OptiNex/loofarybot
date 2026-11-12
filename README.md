@@ -386,6 +386,9 @@ and it stays separate (you can toggle gambling off and leave this on, or run bot
   Their best bonus counts. Set it with `bonus_role`/`bonus_entries` on `/loof start` and
   `/loof edit`, in the `/loof create` Requirements form, or on the dashboard. Draws are weighted
   and fair (cryptographic randomness), and rerolls prefer people who haven't won yet.
+- **Numbered winners:** with 2+ winners, the end message and the result embed number them
+  (**Winner 1:** @a, **Winner 2:** @b, …) so you can hand out a different prize per place
+  ("Winner 1 gets X, Winner 2 gets Y"). A single winner is announced plainly.
 - **Entrants:** `/loof entries` or the dashboard's **👥 Entrants** button lists who entered and
   their ticket counts. The dashboard can also remove an entrant.
 - Older giveaways created before the type/requirements options existed now open correctly in the
