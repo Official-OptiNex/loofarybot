@@ -62,6 +62,20 @@ assert.match(fishE,/best 204 · worst 813/,'free-draw days range'); assert.match
 assert.match(fishE,/saves ~500 Diamonds/); assert.doesNotMatch(fishE,/Pet Gems/);
 console.log('✓ result embed (pets, guns, fish)');
 
+// ---- fish go one set past ZZZ: Y, YY, YYY (pets/guns stay at ZZZ)
+assert.deepEqual(C.KINDS.fish.tiers.slice(-3), ['y', 'yy', 'yyy'], 'fish scale ends Y/YY/YYY');
+assert.equal(C.KINDS.fish.tiers.length, 16); assert.equal(C.KINDS.pets.tiers.length, 13, 'pets stop at ZZZ');
+const fishAt = (obj) => { const c = new Array(C.FISH_TIERS.length).fill(0); for (const [t, n] of Object.entries(obj)) c[C.FISH_TIERS.indexOf(t)] = n; return c; };
+assert.deepEqual(C.parseCounts('yyy 2, y 1', C.FISH_TIERS).counts, fishAt({ yyy: 2, y: 1 }), 'parses the new fish rarities');
+assert.deepEqual(C.parseCounts('yyy', C.BASE_TIERS).unknown, ['yyy'], 'the pets/guns scale does NOT know Y/YY/YYY');
+assert.equal(C.plan(fishAt({}), fishAt({ yyy: 1 })).buyD, 2 ** 15, 'YYY = 2^15 = 32,768 D');
+assert.equal(C.plan(fishAt({ zzz: 2 }), fishAt({ y: 1 })).buyD, 0, 'two ZZZ merge into one Y');
+const fishY = JSON.stringify(C.resultEmbed('fish', fishAt({}), fishAt({ yyy: 1 }), C.plan(fishAt({}), fishAt({ yyy: 1 }))).toJSON());
+assert.match(fishY, /YYY\*\* ×1/, 'YYY goal shown'); assert.match(fishY, /32,768\*\* D-worth of fish/, 'YYY worth 32,768 D');
+// fish draw odds can include the new tiers and still validate
+assert.ok(!C.cleanSettings({ fish: { enabled: true, freePerDay: 0, epicCost: 300, epicCurrency: 'P', freeOdds: new Array(16).fill(0).map((_, t) => (t === 0 ? 100 : 0)), epicOdds: new Array(16).fill(0).map((_, t) => (t === 15 ? 100 : 0)) } }).error, 'YYY-only epic odds accepted');
+console.log('✓ fish go to Y/YY/YYY (parse, merge, embed, odds); pets/guns stay at ZZZ');
+
 // ---- /calculate panel: menu → pets/guns → 13 rarity buttons for inventory + goal → calculate (+ DM)
 const mkUser=(dmOk=true)=>({id:'u1',dms:[],send:async function(p){ if(!dmOk) throw new Error('closed'); this.dms.push(p); }});
 const btn=(customId,u)=>{ const r={customId,user:u,out:null,modal:null,reply:async(o)=>{r.out=o;},update:async(o)=>{r.out=o;},showModal:async(m)=>{r.modal=m;}}; return r; };
@@ -100,6 +114,14 @@ const labels=(view)=>view.components.flatMap((row)=>row.toJSON().components.map(
   i=btn('calc:pets:reset:have',u); await cmd.handleCalcButton(i); assert.ok(!labels(i.out).some((l)=>/· [1-9]/.test(l)),'inventory cleared');
   const shy=mkUser(false); await cmd.handleCalcModal(sub('calcm:guns:want:12',shy,'1'));
   i=btn('calc:guns:calc',shy); await cmd.handleCalcButton(i); assert.match(i.out.content,/Couldn't DM you/); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/409,600\*\* Diamonds/);
+  // fish shows 16 rarity buttons (D…YYY) and stays within Discord's 5-row limit
+  i=btn('calc:fish:have',u); await cmd.handleCalcButton(i);
+  const fishTierIds=ids(i.out).filter((x)=>x.includes(':set:'));
+  assert.equal(fishTierIds.length,16,'fish has 16 rarity buttons'); assert.ok(ids(i.out).includes('calc:fish:set:have:15'),'YYY button present');
+  assert.ok(i.out.components.length<=5,'within the 5-row limit');
+  await cmd.handleCalcModal(sub('calcm:fish:want:15',u,'1')); // one YYY
+  i=btn('calc:fish:calc',u); await cmd.handleCalcButton(i); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/YYY\*\* ×1/,'YYY goal works through the panel');
+  await cmd.handleCalcModal(sub('calcm:fish:want:15',u,'0'));
   await cmd.handleCalcModal(sub('calcm:fish:want:12',u,'1'));
   i=btn('calc:fish:calc',u); await cmd.handleCalcButton(i); assert.match(JSON.stringify(i.out.embeds[0].toJSON()),/Average: \*\*1,280\*\* draws ≈ \*\*256,000\*\* Diamonds/,'fish calculator works through the panel');
   i=btn('calc:menu',u); await cmd.handleCalcButton(i); assert.deepEqual(ids(i.out),['calc:pets:have','calc:guns:have','calc:fish:have'],'back to the start');

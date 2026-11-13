@@ -3,17 +3,22 @@
 // want, works out how many D summons they still need and what that costs.
 const { EmbedBuilder } = require('discord.js');
 
-const TIERS = ['d', 'c', 'b', 'a', 's', 'ss', 'sss', 'x', 'xx', 'xxx', 'z', 'zz', 'zzz'];
-const label = (t) => TIERS[t].toUpperCase();
+// The rarity scale. Pets & guns stop at ZZZ; fish go one set further (Y, YY, YYY — the next set after
+// the Z series), so each kind carries its own `tiers`. 2 of a rarity merge into 1 of the next, and a
+// rarity is worth 2× the one below (index 0 = D). `TIERS` stays the base scale for backward-compat.
+const BASE_TIERS = ['d', 'c', 'b', 'a', 's', 'ss', 'sss', 'x', 'xx', 'xxx', 'z', 'zz', 'zzz'];
+const FISH_TIERS = [...BASE_TIERS, 'y', 'yy', 'yyy'];
+const TIERS = BASE_TIERS;
+const label = (t, tiers = TIERS) => tiers[t].toUpperCase();
 const MAX_COUNT = 1000; // per rarity, to keep typos from producing silly numbers
 
 // The default calculators — each server can change these on the dashboard (Engagement → Calculator).
 // Pets / guns: what one D summon costs. Fish come from random draws instead: odds per rarity (index 0 = D).
 const KINDS = {
-  pets: { enabled: true, name: 'Pet', plural: 'pets', emoji: '🐾', color: 0xf1c40f, costPerD: 100, currencies: ['Pet Gems', 'Diamonds'] },
-  guns: { enabled: true, name: 'Gun', plural: 'guns', emoji: '🔫', color: 0xed4245, costPerD: 100, currencies: ['Diamonds'] },
+  pets: { enabled: true, name: 'Pet', plural: 'pets', emoji: '🐾', color: 0xf1c40f, tiers: BASE_TIERS, costPerD: 100, currencies: ['Pet Gems', 'Diamonds'] },
+  guns: { enabled: true, name: 'Gun', plural: 'guns', emoji: '🔫', color: 0xed4245, tiers: BASE_TIERS, costPerD: 100, currencies: ['Diamonds'] },
   fish: {
-    enabled: true, name: 'Fish', plural: 'fish', emoji: '🐟', color: 0x1abc9c,
+    enabled: true, name: 'Fish', plural: 'fish', emoji: '🐟', color: 0x1abc9c, tiers: FISH_TIERS,
     draws: {
       free: { perDay: 5, odds: [0.6, 0.3, 0.1] },
       epic: { cost: 200, currency: 'Diamonds', odds: [0, 0.6, 0.3, 0.1] }
@@ -21,11 +26,12 @@ const KINDS = {
   }
 };
 const KIND_KEYS = Object.keys(KINDS);
+const tiersOf = (k) => (k && Array.isArray(k.tiers) ? k.tiers : TIERS);
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
-const padOdds = (odds) => Array.from({ length: TIERS.length }, (_, t) => Number(odds?.[t]) || 0);
+const padOdds = (odds, tiers = TIERS) => Array.from({ length: tiers.length }, (_, t) => Number(odds?.[t]) || 0);
 // "C 60% · B 30% · A 10%"
-const oddsText = (odds) => odds.map((p, t) => (p > 0 ? `${label(t)} ${+(p * 100).toFixed(2)}%` : null)).filter(Boolean).join(' · ');
+const oddsText = (odds, tiers = TIERS) => odds.map((p, t) => (p > 0 ? `${label(t, tiers)} ${+(p * 100).toFixed(2)}%` : null)).filter(Boolean).join(' · ');
 
 /** This server's calculators: the defaults with its dashboard overrides applied. */
 function kindsFor(config) {
@@ -39,10 +45,10 @@ function kindsFor(config) {
     if (v.emoji) k.emoji = v.emoji;
     if (k.draws) {
       if (Number.isFinite(v.freePerDay)) k.draws.free.perDay = v.freePerDay;
-      if (Array.isArray(v.freeOdds)) k.draws.free.odds = padOdds(v.freeOdds);
+      if (Array.isArray(v.freeOdds)) k.draws.free.odds = padOdds(v.freeOdds, k.tiers);
       if (Number.isFinite(v.epicCost)) k.draws.epic.cost = v.epicCost;
       if (v.epicCurrency) k.draws.epic.currency = v.epicCurrency;
-      if (Array.isArray(v.epicOdds)) k.draws.epic.odds = padOdds(v.epicOdds);
+      if (Array.isArray(v.epicOdds)) k.draws.epic.odds = padOdds(v.epicOdds, k.tiers);
     } else {
       if (Number.isFinite(v.costPerD)) k.costPerD = v.costPerD;
       if (Array.isArray(v.currencies) && v.currencies.length) k.currencies = v.currencies;
@@ -63,9 +69,9 @@ function cleanSettings(input) {
     if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${what} must be a number from ${min} to ${max.toLocaleString('en-US')}.`);
     return n;
   };
-  const odds = (arr, what) => {
+  const odds = (arr, what, tiers = TIERS) => {
     if (!Array.isArray(arr)) throw new Error(`${what}: missing odds.`);
-    const pct = padOdds(arr).map((p, t) => num(p, 0, 100, `${what} ${label(t)} chance`));
+    const pct = padOdds(arr, tiers).map((p, t) => num(p, 0, 100, `${what} ${label(t, tiers)} chance`));
     const sum = pct.reduce((a, b) => a + b, 0);
     if (Math.abs(sum - 100) > 0.01) throw new Error(`${what} chances add up to ${+sum.toFixed(2)}% — they need to total 100%.`);
     return pct.map((p) => p / 100);
@@ -81,10 +87,10 @@ function cleanSettings(input) {
       out.emoji = text(v.emoji, 64) || def.emoji;
       if (def.draws) {
         out.freePerDay = Math.floor(num(v.freePerDay, 0, 1000, 'Free draws per day'));
-        out.freeOdds = odds(v.freeOdds, 'Free draw');
+        out.freeOdds = odds(v.freeOdds, 'Free draw', def.tiers);
         out.epicCost = num(v.epicCost, 1, 1e9, 'Epic draw cost');
         out.epicCurrency = text(v.epicCurrency, 32) || def.draws.epic.currency;
-        out.epicOdds = odds(v.epicOdds, 'Epic draw');
+        out.epicOdds = odds(v.epicOdds, 'Epic draw', def.tiers);
       } else {
         out.costPerD = num(v.costPerD, 0, 1e9, `${out.name} cost per D`);
         const cur = (Array.isArray(v.currencies) ? v.currencies : String(v.currencies || '').split(/[,\n]/)).map((c) => text(c, 32)).filter(Boolean).slice(0, 5);
@@ -142,9 +148,9 @@ function drawPlan(kind, needD) {
 }
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
-const countsText = (counts) =>
+const countsText = (counts, tiers = TIERS) =>
   counts
-    .map((n, t) => (n ? `**${label(t)}** ×${fmt(n)}` : null))
+    .map((n, t) => (n ? `**${label(t, tiers)}** ×${fmt(n)}` : null))
     .filter(Boolean)
     .reverse()
     .join(' · ');
@@ -153,19 +159,19 @@ const countsText = (counts) =>
  * Reads a list like "b 2, sss 2", "2x B, 2x SSS", "b=2 sss=2" or "3x zzz\n2 xxx" into counts per rarity
  * (index 0 = D). A rarity with no number counts as 1. Returns { counts, unknown: [unreadable bits] }.
  */
-function parseCounts(text) {
-  const counts = new Array(TIERS.length).fill(0);
+function parseCounts(text, tiers = TIERS) {
+  const counts = new Array(tiers.length).fill(0);
   const unknown = [];
   const raw = String(text || '').toLowerCase().trim();
   if (!raw || /^(none|nothing|0|-)$/.test(raw)) return { counts, unknown };
-  const isTier = (w) => TIERS.includes(w);
+  const isTier = (w) => tiers.includes(w);
   const num = (w) => {
     const m = w.match(/^x?(\d+)x?$/);
     return m ? Number(m[1]) : null;
   };
   const add = (tier, n, src) => {
     if (n === null || !Number.isFinite(n)) return unknown.push(src);
-    counts[TIERS.indexOf(tier)] = Math.min(MAX_COUNT, counts[TIERS.indexOf(tier)] + n);
+    counts[tiers.indexOf(tier)] = Math.min(MAX_COUNT, counts[tiers.indexOf(tier)] + n);
   };
   // Entries split by commas / new lines / ";" / "and" / "+"; within an entry, pair a rarity with its number.
   const entries = raw.split(/\s*(?:[,;\n+&]|\band\b)\s*/).filter(Boolean);
@@ -200,9 +206,9 @@ function plan(have, want) {
   owned.forEach((n, t) => (left[t] -= n));
   const goals = [];
   let buyD = 0;
-  for (let t = TIERS.length - 1; t >= 0; t--) {
+  for (let t = have.length - 1; t >= 0; t--) {
     if (!want[t]) continue;
-    const g = { tier: t, count: want[t], owned: owned[t], upgraded: [], builds: 0, used: new Array(TIERS.length).fill(0), buyD: 0 };
+    const g = { tier: t, count: want[t], owned: owned[t], upgraded: [], builds: 0, used: new Array(have.length).fill(0), buyD: 0 };
     for (let k = owned[t]; k < want[t]; k++) {
       const higher = left.findIndex((n, i) => i > t && n > 0); // a spare better one already does the job
       if (higher !== -1) { left[higher]--; g.upgraded.push(higher); continue; }
@@ -226,25 +232,26 @@ function plan(have, want) {
 /** The result embed (sent as the reply and by DM). `kinds` = this server's calculators (kindsFor). */
 function resultEmbed(kindKey, have, want, result, user = null, kinds = KINDS) {
   const k = kinds[kindKey];
+  const tiers = tiersOf(k);
   const cost = result.buyD * k.costPerD;
   const embed = new EmbedBuilder()
     .setColor(k.color)
     .setTitle(`${k.emoji} ${k.name} Calculator`)
     .setDescription(user ? `Results for <@${user.id}>` : null)
     .addFields(
-      { name: `📦 Your ${k.plural}`, value: countsText(have) || `*No ${k.plural} yet*`, inline: false },
-      { name: '🎯 Goal', value: countsText(want) || '*Nothing*', inline: false }
+      { name: `📦 Your ${k.plural}`, value: countsText(have, tiers) || `*No ${k.plural} yet*`, inline: false },
+      { name: '🎯 Goal', value: countsText(want, tiers) || '*Nothing*', inline: false }
     );
   const newD = k.draws ? 'D-worth from draws' : 'new D';
   for (const g of result.goals) {
     const lines = [];
     if (g.owned) lines.push(`✅ ${fmt(g.owned)} already owned`);
-    if (g.upgraded.length) lines.push(`✅ ${g.upgraded.length} covered by your higher ${g.upgraded.map(label).join(', ')}`);
+    if (g.upgraded.length) lines.push(`✅ ${g.upgraded.length} covered by your higher ${g.upgraded.map((t) => label(t, tiers)).join(', ')}`);
     if (g.builds) {
-      const used = countsText(g.used);
+      const used = countsText(g.used, tiers);
       lines.push(`🔨 ${fmt(g.builds)} to make${used ? ` — merges your ${used}` : ''}${g.buyD ? ` + **${fmt(g.buyD)}** ${newD}` : ''}`);
     }
-    embed.addFields({ name: `${label(g.tier)} ×${fmt(g.count)}`, value: lines.join('\n') || '—', inline: false });
+    embed.addFields({ name: `${label(g.tier, tiers)} ×${fmt(g.count)}`, value: lines.join('\n') || '—', inline: false });
   }
   let total;
   if (!result.buyD) total = '🎉 **Nothing!** You already have everything you need.';
@@ -263,14 +270,14 @@ function resultEmbed(kindKey, have, want, result, user = null, kinds = KINDS) {
         : '');
   } else total = `Summon **${fmt(result.buyD)}** D ${k.plural}\n` + k.currencies.map((c) => `💎 **${fmt(cost)}** ${c}`).join('\n**or** ');
   embed.addFields({ name: '💰 You need', value: total, inline: false });
-  const spare = countsText(result.leftover);
+  const spare = countsText(result.leftover, tiers);
   if (spare && result.goals.length) embed.addFields({ name: `🧺 ${k.name}s left over`, value: spare, inline: false });
   embed.setFooter({
     text: k.draws
-      ? `Epic draw ${fmt(k.draws.epic.cost)} ${k.draws.epic.currency || 'Diamonds'}: ${oddsText(k.draws.epic.odds)} (avg ${+drawValue(k.draws.epic.odds).toFixed(2)} D) · ${k.draws.free.perDay ? `Free: ${k.draws.free.perDay}/day, ${oddsText(k.draws.free.odds)} (avg ${+drawValue(k.draws.free.odds).toFixed(2)} D) · ` : ''}Luck varies — these are averages`
-      : `1 D summon = ${k.costPerD} ${k.currencies.join(' / ')} · 2 of a rarity merge into 1 of the next (D → C → … → ZZZ)`
+      ? `Epic draw ${fmt(k.draws.epic.cost)} ${k.draws.epic.currency || 'Diamonds'}: ${oddsText(k.draws.epic.odds, tiers)} (avg ${+drawValue(k.draws.epic.odds).toFixed(2)} D) · ${k.draws.free.perDay ? `Free: ${k.draws.free.perDay}/day, ${oddsText(k.draws.free.odds, tiers)} (avg ${+drawValue(k.draws.free.odds).toFixed(2)} D) · ` : ''}Luck varies — these are averages`
+      : `1 D summon = ${k.costPerD} ${k.currencies.join(' / ')} · 2 of a rarity merge into 1 of the next (D → C → … → ${label(tiers.length - 1, tiers)})`
   });
   return embed;
 }
 
-module.exports = { TIERS, KINDS, KIND_KEYS, kindsFor, cleanSettings, saveSettings, oddsText, parseCounts, plan, resultEmbed, countsText, label, drawValue, drawMin, drawMax, drawPlan };
+module.exports = { TIERS, BASE_TIERS, FISH_TIERS, tiersOf, KINDS, KIND_KEYS, kindsFor, cleanSettings, saveSettings, oddsText, parseCounts, plan, resultEmbed, countsText, label, drawValue, drawMin, drawMax, drawPlan };

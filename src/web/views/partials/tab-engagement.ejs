@@ -264,14 +264,15 @@
             </div>
           </div>
           <div class="setting-row stack">
-            <div><div class="setting-title">Draw odds (%)</div><div class="setting-help">Chance of each rarity per draw. Each row must add up to 100%.</div></div>
+            <div><div class="setting-title">Draw odds (%)</div><div class="setting-help">Chance of each rarity per draw — fish go past ZZZ to Y, YY, YYY. Each row must add up to 100%.</div></div>
             <div style="overflow-x:auto;">
               <table class="calc-odds-table" style="border-collapse:collapse; font-size:0.82rem;">
-                <tr><th></th><% ['D','C','B','A','S','SS','SSS','X','XX','XXX','Z','ZZ','ZZZ'].forEach((t) => { %><th style="padding:0.2rem 0.3rem;"><%= t %></th><% }) %><th style="padding:0.2rem 0.5rem;">Total</th></tr>
+                <% const FISH_TIERS = typeof calcFishTiers !== 'undefined' ? calcFishTiers : ['D','C','B','A','S','SS','SSS','X','XX','XXX','Z','ZZ','ZZZ']; %>
+                <tr><th></th><% FISH_TIERS.forEach((t) => { %><th style="padding:0.2rem 0.3rem;"><%= t %></th><% }) %><th style="padding:0.2rem 0.5rem;">Total</th></tr>
                 <% [['free', '🎣 Free'], ['epic', '💎 Epic']].forEach(([draw, label]) => { %>
                 <tr>
                   <th style="text-align:left; padding-right:0.5rem; white-space:nowrap;"><%= label %></th>
-                  <% for (let t = 0; t < 13; t++) { %><td style="padding:0.15rem;"><input type="number" class="calc-odds" data-draw="<%= draw %>" data-t="<%= t %>" min="0" max="100" step="any" style="width:58px; min-width:58px; padding:0.3rem;"></td><% } %>
+                  <% for (let t = 0; t < FISH_TIERS.length; t++) { %><td style="padding:0.15rem;"><input type="number" class="calc-odds" data-draw="<%= draw %>" data-t="<%= t %>" min="0" max="100" step="any" style="width:58px; min-width:58px; padding:0.3rem;"></td><% } %>
                   <td style="padding:0.2rem 0.5rem; font-weight:600;" id="calc-<%= draw %>-total"></td>
                 </tr>
                 <% }) %>

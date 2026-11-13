@@ -12,6 +12,7 @@ const { LOG_EVENTS } = require('../../bot/cogs/modules/logging');
 const { DEFAULT_TRAP_EMBED } = require('../../bot/cogs/modules/honeypot');
 const commandReference = require('../../bot/commandReference');
 const NewMember = require('../../bot/cogs/modules/newMember');
+const calculator = require('../../bot/cogs/modules/calculator');
 const { XP_MIN, XP_MAX, XP_COOLDOWN_MS, LEVEL_XP_BASE } = require('../../config');
 
 const router = express.Router();
@@ -187,6 +188,7 @@ router.get('/:guildId', requireAuth, requireGuildAccess, async (req, res) => {
     logEvents: LOG_EVENTS,
     defaultTrapEmbed: DEFAULT_TRAP_EMBED,
     commandReference,
+    calcFishTiers: calculator.KINDS.fish.tiers.map((t) => t.toUpperCase()),
     stats
   });
 });

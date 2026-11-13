@@ -1866,7 +1866,6 @@ async function saveEngagement(section) {
 }
 
 // ---- /calculate settings (Engagement → Calculator). Odds are fractions in the API, % in the form.
-const CALC_TIERS = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS', 'X', 'XX', 'XXX', 'Z', 'ZZ', 'ZZZ'];
 const pctOf = (p) => +(p * 100).toFixed(4);
 function fillCalculator(k) {
   if (!document.getElementById('calc-pets-enabled')) return;
@@ -1888,8 +1887,11 @@ function fillCalculator(k) {
   });
   renderCalcOdds();
 }
+// Read each rarity column in order — however many the fish table renders (D…ZZZ, then Y/YY/YYY).
 function readCalcOdds(draw) {
-  return CALC_TIERS.map((_, t) => Number(document.querySelector(`.calc-odds[data-draw="${draw}"][data-t="${t}"]`).value) || 0);
+  return [...document.querySelectorAll(`.calc-odds[data-draw="${draw}"]`)]
+    .sort((a, b) => Number(a.dataset.t) - Number(b.dataset.t))
+    .map((el) => Number(el.value) || 0);
 }
 function renderCalcOdds() {
   const avg = {};
