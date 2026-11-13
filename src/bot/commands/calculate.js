@@ -1,24 +1,24 @@
 // /calculate — upgrade calculator for pets, guns and fish (names, costs and odds set per server on the
 // dashboard), all in one private message:
 //   1. pick 🐾 Pets, 🔫 Guns or 🐟 Fish;
-//   2. 📦 inventory panel: a button per rarity (D → ZZZ) opens a box to type how many you own;
-//   3. 🎯 goal panel: the same 13 buttons for how many you want;
+//   2. 📦 inventory panel: a button per rarity (pets/guns D → ZZZ; fish go further, to YYY) opens a box;
+//   3. 🎯 goal panel: the same rarity buttons for how many you want;
 //   4. 🧮 Calculate: the D summons and gems / diamonds needed (counting what you own), also DMed to you.
 // Numbers save as you go, so it reopens where you left off.
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, LabelBuilder, ModalBuilder, SlashCommandBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const calc = require('../cogs/modules/calculator');
 const CalcProfile = require('../../database/models/CalcProfile');
 
-const N = calc.TIERS.length;
 const MAX = 1000;
 const data = new SlashCommandBuilder().setName('calculate').setDescription('Pet, gun & fish upgrade calculator — what you need to reach your goal');
 
 // ---------------------------------------------------------------- saved numbers
 
-const counts = (arr) => Array.from({ length: N }, (_, i) => Math.max(0, Math.min(MAX, Math.floor(Number(arr?.[i]) || 0))));
-async function load(userId, kind) {
+// `n` is the kind's rarity count (fish go further than pets/guns), so arrays are sized per calculator.
+const counts = (arr, n = calc.TIERS.length) => Array.from({ length: n }, (_, i) => Math.max(0, Math.min(MAX, Math.floor(Number(arr?.[i]) || 0))));
+async function load(userId, kind, n = calc.TIERS.length) {
   const p = await CalcProfile.findOne({ userId, kind }).lean().catch(() => null);
-  return { have: counts(p?.haveCounts), want: counts(p?.wantCounts) };
+  return { have: counts(p?.haveCounts, n), want: counts(p?.wantCounts, n) };
 }
 // This server's calculators (names, costs, odds and which are on — dashboard Engagement → Calculator).
 async function kindsOf(interaction) {
@@ -62,6 +62,7 @@ function menuView(note = null, kinds = calc.KINDS) {
 /** The inventory ('have') or goal ('want') panel: the two lists + a button per rarity. */
 function panelView(kind, view, s, note = null, kinds = calc.KINDS) {
   const k = kinds[kind];
+  const tiers = calc.tiersOf(k);
   const editing = view === 'have';
   const embed = new EmbedBuilder()
     .setColor(k.color)
@@ -73,15 +74,16 @@ function panelView(kind, view, s, note = null, kinds = calc.KINDS) {
         `📦 **Inventory** · 🎯 **Goal** switch lists · 🧮 **Calculate** works out the cost.\n*Saved automatically.*`
     )
     .addFields(
-      { name: `📦 Your ${k.plural}${editing ? ' ✏️' : ''}`, value: calc.countsText(s.have) || '*None — all 0*' },
-      { name: `🎯 You want${editing ? '' : ' ✏️'}`, value: calc.countsText(s.want) || '*Nothing yet*' }
+      { name: `📦 Your ${k.plural}${editing ? ' ✏️' : ''}`, value: calc.countsText(s.have, tiers) || '*None — all 0*' },
+      { name: `🎯 You want${editing ? '' : ' ✏️'}`, value: calc.countsText(s.want, tiers) || '*Nothing yet*' }
     );
   const list = editing ? s.have : s.want;
-  const tierButton = (t) => button(`calc:${kind}:set:${view}:${t}`, `${calc.label(t)} · ${list[t]}`, list[t] ? ButtonStyle.Primary : ButtonStyle.Secondary);
+  const tierButton = (t) => button(`calc:${kind}:set:${view}:${t}`, `${calc.label(t, tiers)} · ${list[t]}`, list[t] ? ButtonStyle.Primary : ButtonStyle.Secondary);
+  // One button per rarity, 5 per row (fish fills 4 rows; pets/guns 3), then the nav row — within Discord's 5-row cap.
+  const tierRows = [];
+  for (let i = 0; i < tiers.length; i += 5) tierRows.push(new ActionRowBuilder().addComponents(Array.from({ length: Math.min(5, tiers.length - i) }, (_, j) => tierButton(i + j))));
   const rows = [
-    new ActionRowBuilder().addComponents([0, 1, 2, 3, 4].map(tierButton)),
-    new ActionRowBuilder().addComponents([5, 6, 7, 8, 9].map(tierButton)),
-    new ActionRowBuilder().addComponents([10, 11, 12].map(tierButton)),
+    ...tierRows,
     new ActionRowBuilder().addComponents(
       button(`calc:${kind}:have`, 'Inventory', editing ? ButtonStyle.Success : ButtonStyle.Secondary, '📦').setDisabled(editing),
       button(`calc:${kind}:want`, 'Goal', editing ? ButtonStyle.Secondary : ButtonStyle.Success, '🎯').setDisabled(!editing),
@@ -120,25 +122,26 @@ async function handleCalcButton(interaction) {
   if (kind === 'menu') return interaction.update(menuView(null, kinds));
   if (!calc.KIND_KEYS.includes(kind)) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
   if (kinds[kind].enabled === false) return interaction.update(menuView(`🚫 The ${kinds[kind].name} calculator is switched off.`, kinds));
-  const s = await load(interaction.user.id, kind);
+  const k = kinds[kind];
+  const tiers = calc.tiersOf(k);
+  const s = await load(interaction.user.id, kind, tiers.length);
 
   if (action === 'have' || action === 'want') return interaction.update(panelView(kind, action, s, null, kinds));
   if (action === 'reset') {
-    s[view === 'want' ? 'want' : 'have'] = counts([]);
+    s[view === 'want' ? 'want' : 'have'] = counts([], tiers.length);
     await save(interaction.user.id, kind, s);
     return interaction.update(panelView(kind, view === 'want' ? 'want' : 'have', s, view === 'want' ? '🗑️ Goal cleared.' : '🗑️ Inventory cleared.', kinds));
   }
   if (action === 'set') {
     const t = Number(tier);
     const list = view === 'want' ? s.want : s.have;
-    const k = kinds[kind];
     const input = new TextInputBuilder().setCustomId('n').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(4).setPlaceholder('0');
     if (list[t]) input.setValue(String(list[t]));
     return interaction.showModal(
       new ModalBuilder()
         .setCustomId(`calcm:${kind}:${view}:${t}`)
-        .setTitle(`${calc.label(t)} ${k.plural}`)
-        .addLabelComponents(new LabelBuilder().setLabel(view === 'want' ? `How many ${calc.label(t)} ${k.plural} do you want?` : `How many ${calc.label(t)} ${k.plural} do you own?`).setDescription(`A number from 0 to ${MAX}.`).setTextInputComponent(input))
+        .setTitle(`${calc.label(t, tiers)} ${k.plural}`)
+        .addLabelComponents(new LabelBuilder().setLabel(view === 'want' ? `How many ${calc.label(t, tiers)} ${k.plural} do you want?` : `How many ${calc.label(t, tiers)} ${k.plural} do you own?`).setDescription(`A number from 0 to ${MAX}.`).setTextInputComponent(input))
     );
   }
   if (action === 'calc') {
@@ -154,18 +157,20 @@ async function handleCalcButton(interaction) {
 async function handleCalcModal(interaction) {
   const [, kind, view, tier] = interaction.customId.split(':');
   if (!calc.KIND_KEYS.includes(kind) || !['have', 'want'].includes(view)) return interaction.reply({ content: '❌ Unknown calculator.', ephemeral: true });
+  const kinds = await kindsOf(interaction);
+  const tiers = calc.tiersOf(kinds[kind]);
   const t = Number(tier);
   const raw = (interaction.fields.getTextInputValue('n') || '').trim().replace(/[x,\s]/gi, '');
-  const s = await load(interaction.user.id, kind);
+  const s = await load(interaction.user.id, kind, tiers.length);
   let note = null;
-  if (raw && !/^\d+$/.test(raw)) note = `⚠️ “${raw.slice(0, 20)}” isn't a number — ${calc.label(t)} wasn't changed.`;
+  if (raw && !/^\d+$/.test(raw)) note = `⚠️ “${raw.slice(0, 20)}” isn't a number — ${calc.label(t, tiers)} wasn't changed.`;
   else {
     const n = Math.min(MAX, Number(raw || 0));
     s[view][t] = n;
     await save(interaction.user.id, kind, s);
-    note = `✅ ${calc.label(t)}: **${n}**${Number(raw) > MAX ? ` (max ${MAX})` : ''}`;
+    note = `✅ ${calc.label(t, tiers)}: **${n}**${Number(raw) > MAX ? ` (max ${MAX})` : ''}`;
   }
-  const view2 = panelView(kind, view, s, note, await kindsOf(interaction));
+  const view2 = panelView(kind, view, s, note, kinds);
   return interaction.isFromMessage?.() ? interaction.update(view2) : interaction.reply({ ...view2, ephemeral: true });
 }
 
