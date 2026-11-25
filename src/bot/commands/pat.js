@@ -173,6 +173,52 @@ const PARTS = {
       '*pats {p} tail* wagwagwag 🌀 someone’s happy and it’s adorable and embarrassing',
       'tail = patted 🐺 danger noodle status: **content** 😌'
     ]
+  },
+  neck: {
+    emoji: '🦒',
+    responses: [
+      '*pats {p} neck* long neck? short neck? perfect neck 🦒 *pat pat*',
+      'scritch scritch down the neck 🐈 you’re basically a cat now, accept your fate',
+      '*gentle neck pat* support your local spine 🦴 it carries your giant head all day',
+      'nape scritches 🫳 *involuntary shiver detected* 📳 caught you lacking'
+    ]
+  },
+  boop: {
+    emoji: '👉',
+    responses: [
+      '*boops you on the nearest available surface* 👉😳 BOOP. no take-backs.',
+      'surprise boop! 🫵 you have been booped by forces beyond your control 🌌',
+      '*boop* 🔴 *boop* 🔵 *boop* 🟢 congratulations you are a traffic light now 🚦',
+      'incoming boop in 3… 2… *BOOP* 💥 (there was no 1. the boop was early. chaos reigns.)',
+      'boop’d 📮 consider this your daily serotonin delivery, no refunds, no returns 🫶'
+    ]
+  },
+  fluff: {
+    emoji: '🌸',
+    responses: [
+      '*floofs you up into a big poof* 🌸 you are now 3× fluffier and 0% more useful',
+      'sfffff *fluff fluff* static electricity +1000 ⚡ you are a balloon now, float away',
+      '*buries hands in the floof and vanishes* 🫥 send help, the floof has won',
+      'fluff status: **maximum** 🧸 you have achieved Plushie. good job little one 🫶'
+    ]
+  },
+  horns: {
+    emoji: '😈',
+    responses: [
+      '*pats between {p} horns* lil menace 😈 pointy on top, soft on the inside 🫶',
+      'honk the horns? 📯 *honk* ok that felt wrong but i would absolutely do it again',
+      '*polishes {p} horns* ✨ now they are SHINY, go forth and be dramatic 🐉',
+      'horn pat 🔱 danger level: **terrifying** 💀 cuddliness level: also terrifying'
+    ]
+  },
+  wings: {
+    emoji: '🪽',
+    responses: [
+      '*gently pats {p} wings* 🪽 flappy flappy, little airplane 🛫',
+      'preen preen 🐦 there — one feather was crooked and it was personally offending me',
+      '*boops the wing joint* 🪽 do NOT take off indoors, we talked about this 😤',
+      'wing pat ✨ certified flight-worthy 🛬 (please do not actually fly, liability reasons)'
+    ]
   }
 };
 
