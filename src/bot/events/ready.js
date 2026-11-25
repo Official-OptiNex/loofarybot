@@ -55,6 +55,7 @@ const serverstatsCommand = require('../commands/serverstats');
 const musicCommand = require('../commands/music');
 const guideCommand = require('../commands/guide');
 const { commands: faqCommands } = require('../commands/faq');
+const patCommand = require('../commands/pat');
 const calculateCommand = require('../commands/calculate');
 const autoreplyCommand = require('../commands/autoreply');
 
@@ -94,6 +95,7 @@ const ALL_COMMANDS = [
   musicCommand,
   guideCommand,
   ...faqCommands,
+  patCommand,
   autoreplyCommand,
   calculateCommand
 ];
