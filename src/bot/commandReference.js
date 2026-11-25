@@ -305,7 +305,8 @@ module.exports = [
       { usage: '/serverinfo', perm: null, description: 'Server stats: members, boosts, channels and more.' },
       { usage: '/serverstats setup · stat · refresh · remove · status', perm: 'Manage Server', description: 'View-only channels pinned at the top of the server showing live counts (members, online, boosts, total server XP, roles, channels), refreshed every ~30 min.' },
       { usage: '/userinfo', perm: null, description: "A member's account age, join date and roles." },
-      { usage: '/avatar', perm: null, description: "Someone's full-size avatar." }
+      { usage: '/avatar', perm: null, description: "Someone's full-size avatar." },
+      { usage: '/pat head · ears · paws · snoot · … (20 options)', perm: null, description: 'Pat a body part — or someone, with an optional @user — for a random cringy/cute reaction. 🫳🐾' }
     ]
   }
 ];
